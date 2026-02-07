@@ -1,0 +1,981 @@
+ECOLEARN: AN INTERACTIVE WASTE SEGREGATION INSTRUCTIONAL TOOL
+USING HYBRID ORB-KNN ALGORITHM FOR PRESCHOOLERS
+Undergraduate Thesis
+Proposal Submitted to the Faculty of the
+Department of Industrial and Information Technology
+Cavite State University – Carmona Campus
+Carmona, Cavite
+In partial fulfilment
+of the requirements for the degree
+Bachelor of Science in Computer Science
+JUAN CARLOS D. GARCIA
+TRICIA DANICA Z. ONIDO
+JOHN CHRISTIAN T. TORIALES
+JOSHUA G. TORNO
+January 2026
+ii
+APPROVAL SHEET
+iii
+BIOGRAPHICAL DATA
+Juan Carlos Dela Cruz Garcia was born on June 26, 2004 in Santa Rosa
+Laguna. He is the youngest among five children of Mr. Noel B. Garcia, a company
+driver and Ms. Lina D. Garcia, a housewife. He is currently residing at GK SMDC Blk
+18 Lot 12, Brgy. Sampaloc 3, Dasmariñas City Cavite.
+He obtained his primary education at San Jose Elementary School, GMA
+Cavite in 2016 and his secondary education at San Jose Community High School,
+GMA Cavite in 2022.
+In the following year he enrolled at Cavite State University – Carmona Campus
+for his college education in the Bachelor of Science in Computer Science program.
+During his college days, he was a member of Young Programmers and Developers
+Society and currently at his fourth year in the university.
+John Christian Torrente Toriales was born on April 15, 2002, in San Pedro,
+Laguna. He is the third of four children of Mr. Renato Toriales, a company driver, and
+Ms. Julieta Toriales, an OFW. He currently resides in Brgy. Marinig, Cabuyao, Laguna.
+He completed his primary education at Chrysanthemum Village Elementary
+School (2009–2014) and his secondary education at Sampaguita Village National High
+School (2014–2018), both in Cabuyao, Laguna. He then pursued senior high school at
+Lyceum of Alabang, Muntinlupa City (2018–2020).
+In 2022, he enrolled at Cavite State University – Carmona Campus, taking up
+a Bachelor of Science in Computer Science. He became an active member of YPADS
+(Young Programmers and Developers’ Society). He is currently in his fourth year,
+pursuing his degree.
+Joshua Garganera Torno was born on February 8, 2004, in Canlalay, Biñan
+City, Laguna. He is the youngest of three children of Mr. Joseph S. Torno, an
+accountant turned tricycle driver, and Ms. Liza M. Garganera, a housewife. He also
+iv
+has one half-sister and currently resides at Phase 3, Lot 109, Sitio Pagkakaisa,
+Canlalay, Biñan City, Laguna.
+He completed his primary education at Canlalay Elementary School in 2016
+and finished both his junior and senior high school at Biñan Integrated National High
+School, graduating in 2022.
+In 2023, Joshua briefly enrolled at SPACBA for a degree in Computer
+Engineering but later transferred to Cavite State University – Carmona Campus to
+pursue a Bachelor of Science in Computer Science. He is an active member of the
+Young Programmers and Developers’ Society (YPADS) and is now in his fourth year,
+continuing his studies.
+Tricia Danica Zamora Onido was born on August 25, 2003, in San Jose,
+Occidental Mindoro. She is the second of five children of Mr. Galicano Onido, a
+livestock dealer, and Mrs. Babylyn Onido, an OFW. She now resides in Barangay 8,
+Carmona, Cavite.
+She completed her elementary education at Naitan Elementary School in 2016,
+graduating as Second Honorable Mention and Girl Scout of the Year. She finished her
+junior and senior high school at The Sisters of Mary of Banneux, Inc., Silang, Cavite,
+in 2021, earning a National Certificate II (NC II) in Dressmaking.
+In 2022, she enrolled at Cavite State University – Carmona Campus to pursue a
+Bachelor of Science in Computer Science. Now in her fourth year, she continues to
+excel in her studies and actively hones her skills in programming and technology.
+v
+ACKNOWLEDGEMENT
+The proponents would like to express their heartfelt gratitude and appreciation
+to all the individuals and institutions who have contributed to the successful completion
+of this thesis.
+First and foremost, the group offers their deepest thanks to Almighty God for
+His divine guidance, wisdom, and strength that sustained them throughout this
+academic journey.
+The proponents sincerely extend their gratitude to their thesis adviser, Mr.
+Jhumel C. Ignas, for his unwavering support, patience, and valuable insights that
+guided the group from the beginning to the completion of this study. Special thanks are
+also given to their technical critic, Mr. Nathanael F. Bueno, for his helpful feedback and
+recommendations that greatly improved the quality of this work.
+The group expresses their appreciation to Ms. Janine B. Bacosmo, Department
+Research Coordinator; Dr. Regene G. Hernandez, Department Chair; Dr. Carlo Emil
+B. Mañabo, Campus Research Coordinator; and Dr. Jenny Beb F. Espineli, Campus
+Administrator, for their guidance, encouragement, and administrative support
+throughout the conduct of this research.
+The proponents also extend their gratitude to all individuals and organizations
+outside the university who generously shared their time, resources, and expertise in
+support of this study.
+Heartfelt thanks are given to their friends and classmates for their constant
+encouragement, assistance, and companionship during the course of their research.
+Lastly, the group conveys their deepest appreciation to their families and relatives for
+their unconditional love, moral support, and understanding, which served as their
+source of strength and motivation.
+vi
+TABLE OF CONTENTS
+ Page
+APPROVAL SHEET...................................................................................................ii
+BIOGRAPHICAL DATA ............................................................................................iii
+ACKNOWLEDGEMENT............................................................................................ v
+TABLE OF CONTENTS ............................................................................................vi
+LIST OF FIGURES...................................................................................................vii
+LIST OF APPENDICES........................................................................................... viii
+INTRODUCTION....................................................................................................... 1
+Objective of the Study............................................................................................ 3
+Significance of the Study ....................................................................................... 5
+Time and Place of the Study.................................................................................. 6
+Scope and Limitation of the Study ......................................................................... 7
+Definition of Terms................................................................................................. 9
+Technical Terms................................................................................................. 9
+Operational Terms ........................................................................................... 10
+REVIEW OF RELATED LITERATURE.................................................................... 12
+METHODOLOGY.................................................................................................... 20
+Material................................................................................................................ 20
+Methods............................................................................................................... 20
+Requirements Gathering.................................................................................. 21
+Quick Design ................................................................................................... 21
+Build Prototype ................................................................................................ 27
+Customer Evaluation ....................................................................................... 28
+Final Product ................................................................................................... 28
+REFERENCES........................................................................................................ 31
+APPENDICES......................................................................................................... 34
+vii
+LIST OF FIGURES
+Figure Page
+1 Evolutionary Prototyping Model (Pressman & Maxim, 2020)........................ 20
+2 Input-Process-Output (IPO) Model of EcoLearn........................................... 23
+3 System Architecture Diagram of EcoLearn................................................... 24
+4 Use Case Diagram of EcoLearn................................................................... 25
+5 Entity Relationship Diagram of EcoLearn..................................................... 26
+6 Structural Process Flow of the Hybrid ORB-KNN Algorithm ......................... 30
+viii
+LIST OF APPENDICES
+Appendix Page
+1. Unit Testing.................................................................................................. 34
+2. System Testing............................................................................................. 39
+3. Acceptance Testing...................................................................................... 43
+1
+ECOLEARN: AN INTERACTIVE WASTE SEGREGATION INSTRUCTIONAL TOOL
+USING HYBRID ORB-KNN ALGORITHM FOR PRESCHOOLERS
+Juan Carlos D. Garcia
+Tricia Danica Z. Onido
+John Christian T. Toriales
+Joshua G. Torno
+An undergraduate thesis proposal submitted to the faculty of the Department of
+Industrial and Information Technology, Cavite State University – Carmona Campus,
+Carmona, Cavite in partial fulfillment of the requirements for the degree of Bachelor
+of Science in Computer Science. Prepared under the supervision of Mr. Jhumel C.
+Ignas
+INTRODUCTION
+Effective solid waste management remains one of the most critical
+environmental challenges in the Philippines, exacerbated by rapid urbanization and
+population growth. According to the National Solid Waste Management Commission
+(NSWMC), the country generates approximately 40,000 tons of waste daily, a figure
+projected to rise significantly by 2030 (DENR, 2021). To address this, Republic Act No.
+9003, also known as the Ecological Solid Waste Management Act of 2000, mandates
+compulsory segregation at the source.
+While this national mandate exists, successful implementation relies on strict
+local enforcement and education. The Municipality of Carmona, Cavite, serves as a
+prime model for environmental compliance, having been inducted into the DENR
+Environmental Management Bureau’s Hall of Fame for its consistent implementation
+of solid waste programs (DENR-EMB, 2019). The local government adheres to a strict
+"No Segregation, No Collection" policy under Municipal Ordinance No. 007-06.
+Specifically, Section 66 of the ordinance establishes a rigorous classification system,
+mandating strict segregation into four distinct categories: compostable, recyclable,
+2
+non-recyclable, and special waste. This study adopts this specific legal framework as
+the standardized compliance benchmark for developing educational tools, ensuring
+that the instructional content aligns with the highest levels of municipal waste
+governance.
+Research in developmental psychology suggests that the concepts of
+environmental responsibility are most effectively introduced during early childhood,
+specifically between the ages of 3 and 6. This period is critical for cognitive
+development, where children are most receptive to visual cues and habit formation
+(Otto & Pensini, 2017). However, traditional educational methods in preschools, such
+as static posters and passive lectures, often fail to capture the attention of digital-native
+students. Furthermore, Section 145 of Carmona's Municipal Ordinance explicitly
+mandates the implementation of an active Information, Education, and Communication
+(IEC) Program. Crucially, this drive for environmental discipline is not merely a local
+municipal policy but is reinforced nationally by the Department of Education’s
+MATATAG Kindergarten Curriculum. Under the learning area "Makabansa," waste
+segregation is formally imposed within the curricular themes "Exploring Our
+Community" and "Caring for Our World," which mandate that 5-year-old learners must
+demonstrate "proper ways of caring for and protecting one's community" and "show
+ways of caring for and protecting our environment" (DepEd, 2024). This creates a clear
+necessity for technological interventions that can translate both these abstract legal
+mandates and national curriculum standards into concrete, age-appropriate
+instructional experiences.
+To bridge this gap, this study proposes "EcoLearn," an interactive waste
+segregation instructional tool designed for preschoolers. Unlike industrial waste
+management systems that rely on heavy computational resources like Convolutional
+Neural Networks (CNN) to detect physical trash, EcoLearn utilizes a Hybrid ORB-KNN
+algorithm optimized for educational deployment. This approach allows for lightweight,
+explainable, and real-time recognition of Standardized Printable Eco-Cards. By
+3
+processing these symbolic representations of waste rather than unsanitary 3D objects,
+the system establishes a hygienic and controlled learning environment where students
+can safely practice and master the logic of segregation.
+By integrating computer vision with interactive instructional design, the system
+aims to transform the complex task of waste classification into an engaging digital
+learning experience. The tool features real-time accuracy tracking and audio-visual
+reinforcement to provide immediate feedback, ensuring that students correctly
+associate waste items with their corresponding disposal categories. This study moves
+beyond simple waste detection; it seeks to facilitate cognitive mastery of environmental
+discipline in the next generation, using the rigorous standards of Carmona’s ordinance
+as a model for sustainable early childhood education.
+Objective of the Study
+The main objective of the study is to design, develop, and evaluate "EcoLearn,"
+an interactive waste segregation instructional and assessment tool for preschoolers.
+The system utilizes the Hybrid ORB-KNN algorithm to facilitate cognitive mastery of
+waste classification through digital interaction guided by the system’s official mascot,
+"Bin-Bin”.
+Specifically, it aims to:
+1. design ECOLEARN: An Interactive Waste Segregation Teaching Tool
+that:
+a. captures images of standardized, printable waste flashcards
+(Eco-Cards) placed by students on a designated scanning mat
+through an external overhead web camera;
+b. extracts unique image features using the ORB algorithm and
+categorizes them into four (4) distinct streams: compostable,
+recyclable, non-recyclable, and special waste;
+c. provides immediate audio-visual instructional feedback
+featuring the "Bin-Bin" mascot, who delivers positive
+4
+reinforcement or corrective guidance based on the classification
+result;
+d. features a "Knowledge Assessment Mode" where students scan
+cards independently to evaluate their retention and mastery of
+waste classification without real-time corrective feedback; and
+e. Displays a "Comparative Performance Dashboard" that ranks
+student proficiency based on assessment scores using
+pseudonyms (nicknames) to track class progress.
+2. develop the system using the following:
+a. Python, OpenCV, and Flask for the core computer vision
+microservice, which maintains a persistent state to enable realtime ORB-KNN classification;
+b. PHP for server-side scripting, acting as the client that sends
+asynchronous API requests to the Python engine and logs
+assessment data to the backend database;
+c. MySQL for storing the "Universal Golden Dataset," along with
+student nicknames, proficiency records, and assessment logs;
+d. HTML, CSS, and JavaScript for designing the interactive
+instructional interface and handling real-time "Bin-Bin" mascot
+animations;
+e. XAMPP for providing the local web server environment
+(Apache) and managing the MySQL database services,
+ensuring the system runs offline as a standalone tool;
+f. Web Camera for real-time capturing of flashcards to be
+processed by the recognition model; and
+g. Laptop for hosting and deploying the application as a
+standalone educational station.
+3. test the system in terms of unit, integration, and system testing;
+5
+4. evaluate the system using the adopted International Organization for
+Standardization 25010 evaluation instrument; and
+5. prepare an implementation plan.
+Significance of the Study
+By utilizing the Hybrid ORB-KNN algorithm, this study aims to modernize
+environmental education, facilitate cognitive mastery of waste classification, and
+provide a standardized, technology-driven approach to early childhood environmental
+instruction.
+Preschoolers. As the primary beneficiaries, will become active participants in
+environmental protection through an interactive, mascot-guided learning system that
+simplifies waste segregation into an engaging multisensory experience, fostering early
+ecological awareness and classification skills among children aged 3–6.
+Preschool Teachers and School Administrators. They benefit from a
+standardized, ready-to-deploy teaching aid that automates feedback and generates
+student proficiency records. Since the system is aligned with the MATATAG
+Kindergarten Curriculum themes of "Caring for Our World" and "Exploring Our
+Community," it serves as a compliant instructional tool that directly supports the
+"Makabansa" learning competencies, providing objective performance data to identify
+learning gaps and simplify curriculum delivery.
+Parents and the Community. Through the concept of "Reverse Socialization,"
+children who achieve mastery of segregation at school often transfer this knowledge
+to household practices. By ensuring students strictly understand the difference
+between waste categories, this study aims to create a ripple effect that improves
+household awareness, indirectly supporting the community’s waste reduction goals.
+Future Researchers. They often lack practical references for lightweight,
+reproducible AI-based waste recognition systems; this study addresses this gap by
+presenting an offline Hybrid ORB-KNN model and introducing Standardized Printable
+6
+Eco-Cards as a replicable, low-cost dataset methodology for educational technologies
+in resource-constrained settings.
+Carmona City CENRO. They will benefit from EcoLearn’s pilot implementation
+at Carmona Elementary School by obtaining site-specific, data-driven insights into
+preschoolers’ environmental literacy. Because the system is calibrated to Municipal
+Ordinance No. 007-06, the study also functions as a compliance audit on how
+effectively mandated waste categories are taught, providing CENRO with a validated
+basis for enhancing its IEC campaigns without developing proprietary software.
+The Environment. This study contributes to long-term sustainability.
+Cultivating a generation of environmentally conscious citizens significantly reduces the
+contamination of recyclable materials and lowers the volume of residual waste
+destined for landfills.
+SDGs. This study supports the UN 2030 Agenda by aligning with SDG 4
+through innovative digital learning tools, SDG 11 by promoting data-driven educational
+governance, and SDG 12 by fostering early awareness of responsible waste
+segregation and environmental stewardship.
+Time and Place of the Study
+The study will be conducted at Carmona Elementary School in Carmona,
+Cavite, which was strategically selected as the pilot site due to its strict implementation
+of Municipal Ordinance No. 007-06. Since the EcoLearn system is algorithmically
+calibrated to the waste classification categories defined in Section 66 of this ordinance,
+the school provides an ideal real-world setting to validate the tool’s instructional
+accuracy and legal relevance. Although pilot testing is centralized at this institution for
+consistent evaluation, the system features a generic, standalone design that allows
+easy deployment along with its Standardized Printable Eco-Cards to other public and
+private preschools without site-specific calibration. Development and pilot
+implementation are scheduled to begin in January 2026.
+7
+Scope and Limitation of the Study
+Scope of the Study This study focuses on the design, development, and
+technical evaluation of "EcoLearn," an interactive waste segregation instructional and
+assessment tool designed for preschoolers (aged 3 to 6 years old). The study is strictly
+a software-based pilot implementation conducted at Carmona Elementary School in
+Carmona, Cavite. The system utilizes the Hybrid ORB-KNN (Oriented FAST and
+Rotated BRIEF - K-Nearest Neighbors) algorithm to facilitate cognitive mastery of
+waste classification through digital instruction and automated knowledge assessment.
+System Capabilities and Generic Deployment. The scope is limited to the
+development of a standalone software application deployed on a standard consumergrade laptop. Unlike client-based systems that require site-specific calibration, this
+system utilizes a "Universal Golden Dataset" pre-trained to recognize a specific set of
+Standardized Printable Eco-Cards. The software includes a built-in "Asset Repository"
+allowing users to generate high-resolution PDF templates of these cards, ensuring the
+system is generic and replicable in any school environment without retraining the
+algorithm.
+Target Users and Data Privacy. The pilot phase involves two user groups:
+preschoolers, who interact with the system using the printed Eco-Cards, and
+proponents, who serve as system administrators. To adhere to strict data privacy
+standards, the system employs a "Nickname-Based Identification System." No
+personally identifiable information (PII) is collected; instead, students select
+pseudonyms to track their progress on the "Comparative Performance Dashboard,"
+which ranks proficiency based on assessment scores.
+Data Classification and Ordinance Compliance. The system strictly adheres
+to the classification standards of Municipal Ordinance No. 007-06, categorizing waste
+into four (4) distinct streams: Compostable, Recyclable, Non-Recyclable, and Special
+Waste. The recognition capability is powered by ORB feature extraction and KNN
+classification, processing images of the standardized 2D Eco-Cards.
+8
+Technical Architecture. The development stack includes Python and OpenCV
+for the core computer vision logic (ORB-KNN), PHP for server-side bridging, MySQL
+for storing assessment logs and student proficiency records, and
+HTML/CSS/JavaScript for the interactive front-end featuring the "Bin-Bin" mascot. The
+system runs on a local XAMPP environment, ensuring full offline functionality.
+Limitations of the Study Dependency on Print Quality. A critical limitation of
+this study is the system’s dependency on the visual fidelity of the physical input. The
+recognition accuracy of the ORB-KNN algorithm is directly correlated with the print
+quality of the Eco-Cards. Factors such as low resolution (below 300 DPI), poor ink
+saturation, grayscale printing of colored assets, or use of non-standard paper textures
+may significantly degrade feature extraction and reduce system responsiveness. The
+study assumes the use of high-quality, full-color prints on matte or semi-gloss
+cardstock for optimal performance.
+No Physical Waste Handling. The study is strictly limited to the use of 2D EcoCards for all instructional and assessment phases. The detection of actual, physical
+3D waste objects is excluded from the scope to ensure hygiene and safety for
+preschool participants. The system serves as a cognitive instructional tool, not a
+physical waste-sorting machine. While the system utilizes 2D cards for reliability, the
+instructional goal is Symbolic Mastery associating the visual label (e.g., an image of a
+sachet) with the correct disposal category (Red Bin) which effectively transfers to
+physical waste handling behavior through reverse socialization.
+Assessment vs. Behavioral Tracking. The system evaluates postinstructional cognitive proficiency students’ ability to identify and categorize waste
+cards after guided instruction rather than pre-existing knowledge or real-world
+behavioral compliance. It assesses knowledge retention only and functions as a
+cognitive instructional tool, not a physical waste-sorting system.
+Lighting Conditions. The computer vision engine is calibrated for "Standard
+Classroom Lighting Environments" (approximately 300-500 lux). Extreme lighting
+9
+conditions, such as dim rooms or direct sunlight glare on the glossy card surface, are
+excluded from the scope, as these variances affect the contrast required for the ORB
+algorithm to detect key points.
+Definition of Terms
+Technical Terms
+Confusion Matrix. A specific table layout that allows visualization of the
+performance of an algorithm by comparing the Actual Class against the Predicted
+Class to identify specific error patterns (Stehman, 1997). In this study, it is used to
+quantify which Standardized Eco-Cards are most frequently misclassified by the
+system.
+Hybrid ORB-KNN Algorithm. A computer vision architecture that combines
+ORB (Oriented FAST and Rotated BRIEF), a fast binary descriptor invariant to rotation
+and noise (Rublee et al., 2011), with KNN (K-Nearest Neighbors), a non-parametric
+classifier used for pattern matching (Zhang et al., 2019). In this study, this lightweight
+model replaces heavy Convolutional Neural Networks (CNNs) to enable real-time
+image recognition on standard consumer-grade laptops without internet access.
+Microservice Architecture. An architectural style where an application is
+structured as a collection of loosely coupled services (Newman, 2015). EcoLearn
+adopts this by separating the User Interface (PHP/HTML) from the Computer Vision
+Engine (Python), communicating via internal HTTP requests to optimize resource
+management.
+One-Shot Learning. A computer vision capability that allows a system to learn
+information about object categories from one, or only a few, training images (Zhang et
+al., 2019). In EcoLearn, this allows the Administrator to register a new Standardized
+Eco-Card into the database instantly by scanning it once, without the need for
+extensive retraining or thousands of image samples.
+Region of Interest (ROI). A specific subset of samples within a dataset
+identified for a particular purpose (Karami et al., 2017). In this study, it refers to the
+10
+"Green Box" overlay on the live webcam feed where the student must position the
+Standardized Eco-Card for optimal detection.
+Operational Terms
+Admin Dashboard. The secure, password-protected backend interface
+designed for the proponents. It provides tools to manage the Universal Golden
+Dataset, generate Standardized Eco-Cards via the Asset Repository, and view systemgenerated Proficiency Analytics.
+Assessment Mode. A distinct operational state of the software where the "BinBin" instructional feedback is disabled. This mode is used to verify the system's ability
+to log raw classification data without user assistance, serving as a functional contrast
+to the Instructional Mode.
+Asset Repository. A built-in system module that stores the high-resolution
+digital templates of the Eco-Cards. It functions as a "Print Engine," allowing the
+Administrator to download and print consistent, standardized 4×5-inch PDF cards to
+ensure the physical input matches the digital training data.
+Classification Accuracy. The primary performance metric logged by the
+system, defined as the percentage of correctly identified Eco-Cards during a session.
+This data point is calculated by the PHP backend (Correct Scans / Total Scans) to
+quantify system reliability and user proficiency.
+Instructional Feedback ("Bin-Bin"). The primary output mechanism of the
+system. It features an animated mascot ("Bin-Bin") that provides immediate audiovisual guidance, delivering positive reinforcement (e.g., "Correct!") or corrective advice
+based on the classification result of the scanned card.
+Instructional Mode. The default operational state of the system where the
+"Bin-Bin" mascot is active. In this mode, the system provides real-time validation and
+audio-visual cues to guide the user in correctly identifying the waste category of the
+scanned Eco-Card.
+11
+Proficiency Analytics. Quantitative system logs stored in the MySQL
+database track key metrics classification accuracy and response latency to verify data
+storage and system reliability.
+Standardized Printable Eco-Cards. The specific physical inputs used by the
+system. These are 4×5-inch cards printed from the Asset Repository, containing highfidelity reference images. They replace "real trash" to ensure hygienic, consistent, and
+reliable detection by the ORB-KNN algorithm.
+Two-Phase Learning Protocol. The operational workflow designed to validate
+the system's dual functionality, consisting of: (1) Instructional Mode—where the system
+provides automated feedback, and (2) Assessment Mode—where the system logs
+performance data without providing feedback.
+Universal Golden Dataset. The master collection of reference feature vectors
+stored in the system. Unlike a site-specific dataset, this is a pre-calibrated library linked
+1:1 with the Standardized Eco-Cards, allowing the system to be deployed in any
+location without initial training.
+12
+REVIEW OF RELATED LITERATURE
+This chapter presents related literature and studies that provide the theoretical
+and empirical foundation for the development of "EcoLearn," an interactive waste
+segregation instructional and assessment tool for preschoolers. The review is
+organized into five thematic sections: Early Childhood as the Critical Period for
+Environmental Cognition, Interactive Instructional Design and Digital Feedback
+Mechanisms, Standardization of Educational Assets amidst Heterogeneous Waste,
+The Legal Framework as a Compliance Benchmark, and Computer Vision
+Architectures for Offline Education (ORB-KNN vs. CNN).
+Early Childhood as the Critical Period for Environmental Cognition
+The success of environmental education relies heavily on the timing of its
+introduction. Research in developmental psychology suggests that the "formative
+years," specifically between ages 3 and 7, are the most critical period for establishing
+lifelong ecological concepts. Otto and Pensini (2017) conducted a longitudinal study
+demonstrating that environmental behaviors learned during early childhood are more
+resistant to change than those learned in adulthood. Their findings suggest that naturebased education in preschool leads to "pro-environmentalism" that persists into
+adolescence.
+However, the challenge lies in the abstraction of the concept. Torquati et al.
+(2020) argue that waste segregation is often too abstract for young minds to grasp
+without concrete visualization. Jean Piaget’s Theory of Cognitive Development
+supports this, positing that children in the "Pre-Operational Stage" (ages 2–7) learn
+best through symbolic play and immediate visual interaction rather than passive
+listening (McLeod, 2018). This cognitive gap necessitates the use of tools that
+transform the abstract concept of "segregation" into a concrete, interactive activity.
+Furthermore, Spiteri (2020) emphasizes that "Action Competence" in young
+children, the ability to take action on environmental issues, must be built through
+13
+repetitive, guided practice rather than one-off lectures. Tungpalan (2020) corroborates
+this in the Philippine context, finding that local preschool curriculums often lack
+interactive materials, relying instead on static visual aids that fail to engage "digitalnative" learners. This "instructional void" validates the need for EcoLearn, which
+translates abstract legal mandates into concrete, interactive assessments suitable for
+the pre-operational cognitive stage of Filipino children.
+Interactive Instructional Design and Digital Feedback Mechanisms
+To bridge the gap between abstract concepts and child engagement, modern
+educators increasingly turn to Interactive Instructional Design. Unlike traditional
+behavioral conditioning which relies on physical rewards, this approach focuses on
+Cognitive Scaffolding through immediate digital feedback.
+The underlying principle aligns with Constructivist Learning Theory, where
+learners actively construct knowledge through interaction. In the context of "EcoLearn,"
+this manifests through the "Bin-Bin" Digital Instructor. Homer et al. (2018) found that
+digital indicators of competence (such as on-screen progress tracking) significantly
+increase immediate task engagement in children by providing a sense of mastery.
+Linehan and Kirman (2019) argue that interactive software functions as a
+"behavioral architecture," where the system acts as the scaffolding agent, reducing the
+burden on teachers to provide constant individual correction. Crucially, Dichev and
+Dicheva (2017) warn that instructional tools must be "meaningful," meaning the
+interaction mechanics (sorting cards) must directly mimic the real-world skill.
+The integration of interactive elements in Philippine basic education has proven
+effective. A 2025 study by Namoco et al. on public elementary learners in Butuan City
+demonstrated that interactive strategies (real-time feedback and progress tracking)
+significantly improved academic performance and engagement compared to traditional
+worksheets. Similarly, Rakasiwi et al. (2025) found that digital learning tools in local
+schools successfully bridged the gap between "knowing" and "doing," transforming
+passive awareness into active cognitive mastery. EcoLearn adopts these proven
+14
+strategies by utilizing Continuous Accuracy Tracking (The Comparative Dashboard) to
+sustain attention in resource-constrained classrooms.
+Digital Assessment as a Measure of Cognitive Mastery
+Beyond instruction, digital tools serve as effective mechanisms for formative
+assessment in early childhood. Unlike traditional paper-and-pencil tests which require
+literacy skills that preschoolers lack, image-based digital assessments allow students
+to demonstrate post-instructional understanding through direct interaction. The
+system's Knowledge Assessment Mode functions as a formative assessment tool that
+measures retention after guided learning, rather than testing innate or pre-existing
+knowledge. Namoco et al. (2025) observed that automated systems provide "unbiased
+accuracy metrics," eliminating teacher subjectivity.
+Standardization of Educational Assets vs. Heterogeneous Waste Streams
+Designing an accurate recognition system requires addressing the complexity
+of the local waste stream. While global datasets exist, they often fail to account for the
+unique composition of waste in Philippine educational institutions. Recent studies by
+Flores and Lacang (2024) and Barcelo et al. (2024) characterize the waste profile in
+Philippine schools as highly specific, dominated by three major fractions: recyclables
+(specifically paper and PET bottles) accounting for 42.08%, residuals (specifically
+single-use flexible plastics and sachets) at 30%, and biodegradable food waste at
+20.8%. Flores and Lacang (2024) further highlight that hazardous 'Special Waste'
+comprises less than 1% of school-generated trash.
+This data necessitates a shift from generic, large-scale datasets to a targeted
+'Standardized Dataset' approach. Instead of training the algorithm on thousands of
+irrelevant items, this study focuses on the top 10 most frequent waste items per
+category identified in these local studies. This ensures that the 'EcoLearn' system is
+optimized to recognize the actual 'Sachet Economy' waste preschoolers encounter
+daily such as 3-in-1 coffee packets and plastic labo which are frequently misclassified
+in generic Western datasets (Barcelo et al., 2024).
+15
+EcoLearn facilitates this by strictly adhering to the waste taxonomy mandated
+by Republic Act No. 9003 (Ecological Solid Waste Management Act of 2000) and
+validated in recent school-based assessments by Flores and Lacang (2024):
+Compostable, Recyclable, Residual, and Special Waste.
+The Legal Framework as a Compliance Benchmark
+While the system is generic, its instructional logic is grounded in the strict
+compliance standards of Carmona, Cavite, a recognized DENR Hall of Fame Awardee.
+The study uses the municipality’s ordinance as a Standard of Excellence for
+calibration.
+Republic Act No. 9003 mandates segregation at the source , and Section 55
+explicitly requires its integration into academic curricula. Locally, the study’s
+classification engine is anchored on Municipal Ordinance No. 007-06:
+• Section 66 (Mandatory Segregation) mandates the separation of waste into the
+four specific streams used in the app.
+• Section 145 (IEC Campaign) requires active education programs.
+Atienza (2019) notes that implementation often fails due to "weak behavioral
+enforcement". Antonio (2020) suggests that since Local Government Units (LGUs) lack
+manpower for monitoring, "educational automation" serves as a viable alternative for
+widespread training. By aligning the generic tool with these strict local laws, EcoLearn
+ensures that any preschooler using the system is trained to meet the highest regulatory
+standards.
+The National Curriculum: Alignment with MATATAG Kindergarten Framework
+While local ordinances provide the legal penalty for non-compliance, the Department
+of Education’s MATATAG Kindergarten Curriculum provides the pedagogical mandate
+for waste segregation. The curriculum explicitly integrates environmental stewardship
+under the macro-themes "Exploring Our Community" and "Caring for Our World" within
+the "Makabansa" learning area (DepEd, 2024). Specifically, Learning Competency 22
+requires learners to "demonstrate proper ways of caring and protecting one's
+16
+community" , while Competency 40 mandates them to "show ways of caring for and
+protecting our environment" and Competency 43 requires them to "classify objects
+based on observable properties".
+This national framework validates EcoLearn’s operational logic. By digitizing the
+classification process, the system directly addresses the curriculum's requirement for
+"observable properties"-based classification. As noted by Tungpalan (2020), early
+childhood education often lacks interactive tools to teach these specific competencies.
+EcoLearn fills this gap by providing a digital platform that ensures students meet both
+the legal standards of Carmona’s Ordinance No. 007-06 and the academic standards
+of the MATATAG Curriculum.
+Computer Vision: Suitability of ORB-KNN for Standardized Inputs
+In the field of computer vision, a significant divergence exists between "Deep
+Learning" (CNNs) and "Feature-Based" (ORB/SIFT) approaches for object detection.
+Convolutional Neural Networks (CNNs), such as ResNet, VGG-16, or YOLO, are
+currently regarded as the gold standard for recognizing objects in complex,
+unstructured, and highly variable environments (Dhillon & Verma, 2020). However,
+their deployment in educational settings is often hindered by high computational costs.
+While Convolutional Neural Networks (CNNs) offer high accuracy, they require
+substantial computational resources that exceed the capabilities of standard
+educational laptops (Rublee et al., 2011; Mekki et al., 2024). Mekki et al. (2024)
+emphasize that deploying deep learning models on embedded systems often results
+in unacceptable latency without specialized hardware accelerators.
+In contrast, the Hybrid ORB-KNN architecture is optimized for standardized 2D
+flashcard inputs. ORB (Oriented FAST and Rotated BRIEF), introduced by Rublee et
+al. (2011), is a fast binary descriptor that is invariant to rotation and scale. This
+geometric invariance is essential for preschool users who may present Eco-Cards at
+irregular angles. ORB is invariant to rotation and scale, a critical feature validated in
+recent comparative studies on edge devices (Taha & Hameed, 2024), ensuring reliable
+17
+detection despite the developing motor skills of children.. Karami et al. (2017) further
+showed that ORB is two orders of magnitude faster than SIFT and significantly lighter
+than CNNs, sustaining high frame rates on standard CPUs without internet access.
+Real-time responsiveness is achieved through efficient binary descriptor
+matching. Unlike SIFT or SURF, which rely on complex floating-point computations,
+ORB uses binary strings matched via the Hamming distance, a simple bitwise
+operation. This computational efficiency enables the “Bin-Bin” mascot to deliver
+immediate audio-visual feedback in under one second, a key requirement for
+sustaining preschoolers’ attention (Rublee et al., 2011).
+The K-Nearest Neighbors (KNN) classifier complements ORB by enabling
+zero-latency adaptation. Unlike CNN-based systems that require time-consuming
+retraining when new waste categories or card designs are introduced, feature-based
+matching supports one-shot learning (Zhang et al., 2019). This allows EcoLearn to
+recognize new Printable Eco-Cards by simply storing their keypoints, supporting the
+study’s goal of a scalable and easily updatable assessment tool. Consequently, while
+CNNs excel in recognizing complex 3D waste, the Hybrid ORB-KNN approach is better
+suited for controlled environments.
+Review of Related Systems and Applications
+To establish the state of the art in waste management technology, ten existing
+systems were reviewed, prioritizing those that utilize gamification strategies for
+children and digital segregation tools. In early childhood education, several
+applications employ intuitive mechanics to teach waste segregation standards. Basura
+Buster (Department of Environment and Natural Resources [DENR], 2021) is a notable
+local example designed for children aged 5 to 8, using a drag-and-drop interface to
+sort trash according to Philippine standards. Similarly, Grow Recycling (Gro Play,
+2025) and Garbage Gobblers (Bored Monkey, 2018) use character-driven interactions
+and visual feedback to engage preschool-aged users and reinforce environmental
+awareness.
+18
+Beyond basic sorting mechanics, various platforms have adopted arcade-style
+and simulation elements to reinforce knowledge retention. Recycle Roundup (National
+Geographic Kids, 2019) serves as a web-based instructional tool that provides
+immediate factual feedback on specific waste items. To test user reflexes and rapid
+decision-making, Eco Sort 2026 (OG Interactives, 2026) challenges players to switch
+modes between biodegradable and non-biodegradable categories dynamically.
+Furthermore, EcoSort (Binus Game Development Club, 2020) expands the scope of
+gameplay by introducing logistical elements, requiring users to not only segregate
+hazardous and organic waste but also manage its shipment to recycling centers,
+highlighting the broader waste management cycle.
+In terms of behavioral modification and utility, applications have been
+developed to support sustainable lifestyles and information retrieval. JouleBug (2019)
+gamifies daily eco-friendly habits by awarding badges and fostering social competition,
+demonstrating how digital achievements can motivate real-world waste reduction.
+Complementing this is iRecycle (2019), which functions as a location-based utility for
+identifying disposal options for over 350 materials. While less gamified, it provides the
+critical informational infrastructure necessary for users to practice the disposal
+methods advocated by educational games, aligning with the instructional objectives of
+the proposed study.
+Finally, recent technological advancements have integrated artificial
+intelligence and computer vision to automate waste recognition, directly paralleling the
+technical architecture of the proposed thesis. Litterati (2018) utilizes geo-tagging and
+image recognition to crowdsource litter mapping, demonstrating the efficacy of visual
+analysis in identifying waste on a global scale. On a household level, the prototype
+application Pilahin (Putra & Harjoko, 2025) employs similar image recognition features
+to assist users in categorizing waste. These systems validate the feasibility of using
+visual algorithms, such as the proposed Hybrid ORB-KNN, to enhance the accuracy
+and interactivity of waste segregation tools.
+19
+Synthesis of Related Studies
+The reviewed literature establishes that early childhood (ages 3–7) is a critical
+period for forming lifelong environmental habits. Studies by Otto and Pensini (2017)
+and Spiteri (2020) indicate that although this stage is optimal for habit formation, waste
+segregation concepts require concrete and visual interventions to be effective. The
+literature also identifies an instructional gap: traditional methods such as posters and
+lectures fail to engage digital-native preschoolers, while many existing mobile
+applications remain purely screen-based and lack the tactile learning experiences
+essential for the pre-operational stage.
+Furthermore, a clear divergence exists in technological approaches to waste
+management. Advanced systems often rely on Convolutional Neural Networks (CNNs)
+for high-accuracy detection (e.g., Litterati; Mekki et al., 2024), but these methods are
+computationally expensive and unsuitable for resource-constrained public schools in
+the Philippines. In contrast, lightweight algorithms such as ORB-KNN have proven
+effective for feature-based recognition (Rublee et al., 2011; Taha & Hameed, 2024) yet
+remain underutilized in educational gamification for waste sorting.The synthesis also
+reveals a contextual gap in existing datasets, as most global studies rely on Western
+waste profiles that do not reflect the Philippine “Sachet Economy” (Flores & Lacang,
+2024). This mismatch limits the effectiveness of generic AI tools in local classrooms
+where sachets and small residual wastes are prevalent..
+EcoLearn bridges these gaps by integrating three key domains: (1)
+pedagogical strategy, shifting from passive instruction to active, manipulative-based
+learning through physical Eco-Cards; (2) technological optimization, favoring the
+lightweight Hybrid ORB-KNN algorithm over CNNs to ensure offline usability on
+standard school laptops; and (3) regulatory compliance, aligning waste classification
+with Municipal Ordinance No. 007-06 and the MATATAG Kindergarten Curriculum.
+Unlike existing mobile games that operate solely in virtual environments, the system
+combines physical interaction with digital feedback, resulting in a standardized tool.
+20
+METHODOLOGY
+Material
+EcoLearn will be developed using Visual Studio Code, with HTML, CSS, and
+JavaScript for a preschool-friendly interface (ages 3–6) featuring high-contrast visuals
+and large interactive elements. Its core logic uses Python with OpenCV and Flask to
+run a Computer Vision Microservice performing real-time Hybrid ORB-KNN recognition
+of Standardized 2D Eco-Cards, while PHP manages server-side operations,
+asynchronous communication, and PDF generation of printable cards. MySQL stores
+the Universal Golden Dataset, Student Proficiency Records (anonymous nicknames),
+and assessment logs. The system runs fully offline via XAMPP on a consumer-grade
+laptop with Intel Core i5, 8GB RAM along with a 720p USB webcam mounted 30–
+40 cm above a scanning mat, and Mermaid Live generates architecture and data flow
+diagrams.
+Methods
+The Evolutionary Prototyping Development model (Fig. 1) of Pressman and
+Maxim (2020) was used as the development lifecycle.
+Figure 1. Evolutionary Prototyping Model (Pressman & Maxim, 2020)
+21
+The Evolutionary Prototyping Model (Figure 1) is a cyclical software
+development approach ideal for educational assessment tools needing continuous
+refinement based on user interaction and instructional accuracy. It was chosen for
+EcoLearn to iteratively fine-tune the ORB-KNN algorithm for Standardized Printable
+Eco-Cards and adjust feedback mechanisms according to preschooler responses. The
+model’s workflow uses forward arrows to show progression from Requirements
+Gathering through Quick Design, Prototype Building, User Evaluation, and Final
+Product, while a feedback arrow labeled “No” returns from User Acceptance to
+Prototype, enabling repeated refinements. This iterative cycle ensures the Assessment
+Module accurately logs student proficiency, which serves as the ultimate measure of
+system success.
+Requirements Gathering. Prior to development, the proponents will conduct
+a comprehensive Content and Compliance Analysis to establish the generic system's
+functional baselines. Instead of site-specific assessments, this phase focuses on
+strictly aligning the classification logic with Municipal Ordinance No. 007-06 to ensure
+the "Universal Golden Dataset" is legally compliant. Simultaneously, the proponents
+will define the appropriate pedagogical requirements for preschoolers (ages 3–6) to
+guide the design of the "Bin-Bin" mascot and Standardized Eco-Cards, while also
+establishing technical constraints to ensure the Hybrid ORB-KNN algorithm remains
+lightweight for offline deployment on standard public-school laptops.
+Quick Design. This stage focuses on the development of a Standardized
+Universal System through the establishment of a pre-calibrated recognition model. The
+proponents will curate a 'Universal Golden Dataset' composed of 46 Standardized
+Printable Eco-Cards (10 per category). The selection of these 46 items was strictly
+data-driven, based on the dominant waste fractions in Philippine schools identified by
+Flores and Lacang (2024). This reduction from a massive theoretical dataset to a
+targeted standardized set serves two critical functions:
+22
+1. Cognitive Appropriateness: It respects the cognitive load limits of children aged
+3-6 (Jean Piaget’s Pre-Operational Stage) by focusing on mastery of core items
+rather than overwhelming memorization.
+2. Performance Efficiency: It ensures the system maintains sub-second response
+times on standard school laptops by processing a lean, high-quality feature
+set."
+This dataset is paired 1:1 with a set of Standardized Printable Eco-Cards
+generated as high-resolution PDF assets (300 DPI); by controlling the visual input
+through these standardized cards, the system guarantees that feature extraction
+remains consistent and replicable across any school environment without the need for
+local retraining.
+Simultaneously, the operational workflow is designed as an "Instructional-toAssessment Pipeline" where students first engage in Guided Learning Mode (with "BinBin" feedback), followed by an Independent Assessment Phase that logs proficiency
+metrics (accuracy and speed) to measure knowledge retention. To ensure hygiene and
+hardware security, the physical deployment strictly utilizes the printed cards within a
+designated "Green Box" scanning zone, keeping the laptop out of reach of the
+preschoolers and eliminating the health risks associated with handling actual waste
+materials.
+23
+This phase involved the creation of the Operational Framework using the InputProcess-Output (IPO) model to illustrate the system's data flow and transformation
+logic. This conceptual design is illustrated in Figure 2.
+Figure 2. Input-Process-Output (IPO) Model of EcoLearn
+As shown in Figure 2, EcoLearn follows a three-phase workflow: Input,
+Process, and Output. The Input Phase combines the Universal Golden Dataset with
+live webcam captures of Standardized Printable Eco-Cards and accepts Student
+Nicknames to start the session, sending raw frames to the server via AJAX to maintain
+a thin-client setup. In the Process Phase, the Python Flask Microservice handles image
+pre-processing (grayscale), ORB feature extraction, and KNN classification, while the
+PHP backend calculates real-time proficiency metrics such as accuracy and
+recognition speed. The Output Phase delivers immediate instructional feedback to
+students via the Bin-Bin mascot and simultaneously generates Student Proficiency
+Records and downloadable compliance reports for administrators.
+24
+The design specifications for the key modules were finalized at this stage, and
+a System Architecture Diagram was developed to illustrate the interaction between the
+frontend interface, the backend logic, and the computer vision engine, as shown in
+Figure 3
+Figure 3. System Architecture Diagram of EcoLearn
+As illustrated in Figure 3, the system adopts a Five-Tiered Hybrid Architecture
+optimized for offline efficiency and modular separation of concerns. The External Input
+tier begins with the Standardized Eco-Card, providing consistent visual input. The
+25
+Client Layer acts as a thin client, featuring the Webcam Capture Module, Preschool
+Interface for Bin-Bin feedback, and Admin Dashboard. It performs no heavy
+processing, capturing the ROI and sending Base64 images via AJAX.
+The Application Layer hosts the PHP Controller and persistent Python Flask
+API, which processes HTTP POST requests without reloading the interpreter. The
+Machine Learning Layer runs the ORB-KNN Recognition Engine in a warm state,
+holding feature templates in memory for rapid extraction and matching. The Data Layer
+stores the Universal Golden Dataset for reference and the Student Records DB for
+proficiency logs and analytics. This separation decouples heavy computation from the
+interface, enabling real-time feedback for preschoolers while logging detailed data for
+administrators.
+To visualize the user interactions and functional permissions required to
+support the system’s operation, the Use Case Diagram is detailed in Figure 4.
+Figure 4. Use Case Diagram of EcoLearn
+26
+As illustrated in Figure 4, the system supports two primary actors: the
+Preschooler and the Administrator. The Preschooler follows a simple, login-free
+workflow were scanning a Standardized Eco-Card automatically triggers immediate
+audio-visual instructional feedback. In contrast, the Administrator handles backend
+management and data integrity; after authentication, they can manage the Universal
+Golden Dataset, view proficiency analytics, and access the asset repository for printing
+Eco-Cards, with all administrative actions requiring prior login.
+To visualize the data structure required to support these functions, the EntityRelationship Diagram (ERD) is detailed in Figure 5.
+Figure 5. Entity Relationship Diagram of EcoLearn
+27
+Figure 5 illustrates the EcoLearn Entity-Relationship Diagram (ERD),
+presenting a normalized database schema for secure and reliable data management.
+The schema is centered on TBL_ADMIN, which stores encrypted administrator
+credentials and controls system settings, assets, and student sessions. Waste
+classification is defined in TBL_CATEGORIES, linked to TBL_CARD_ASSETS and
+TBL_GOLDEN_DATASET, where the binary ORB feature vectors for recognition are
+stored. Student performance tracking is handled through TBL_SESSIONS for session
+metadata and TBL_SCAN_TRANSACTIONS for individual scan records, including
+card IDs, accuracy, and response time, while system adaptability is maintained via
+TBL_SYSTEM_CONFIG, allowing dynamic adjustment of ORB sensitivity thresholds
+and model versions without source code changes.
+Build Prototype. This phase focused on full-stack development of the
+EcoLearn system using a Hybrid Local Architecture to ensure offline stability and highfidelity performance. Development was organized into three core modules: the Student
+Interface, built with HTML5, CSS3, and JavaScript, providing a distraction-free
+environment with an ROI overlay and the animated "Bin-Bin" mascot for immediate,
+randomized audio-visual feedback during Instructional Mode, with the ability to toggle
+to Knowledge Assessment Mode where feedback is withheld to measure independent
+mastery; the Computer Vision Engine, implemented as a persistent Python Flask
+microservice that loads OpenCV and the Universal Golden Dataset at startup to enable
+millisecond-level ORB-KNN inference without per-request reloading; and the
+Administrator Dashboard, a secure control panel offering an asset repository for PDF
+Eco-Card generation, a one-shot learning module for instant card registration, and
+proficiency analytics with PDF compliance report export. The entire system operates
+on a local XAMPP server (Apache and MySQL), ensuring zero latency and full offline
+functionality.
+28
+Customer Evaluation. This phase will be conducted at Carmona Elementary
+School in Carmona, Cavite, to validate the operational compliance of the EcoLearn
+System. The protocol is divided into three stages: Phase 1 (Unit & Integration Testing)
+verifies the stability of core modules, including the Webcam Capture and One-Shot
+Learning integrity; Phase 2 (Technical Quality Assessment) engages IT experts to audit
+the system against ISO 25010 standards, specifically measuring Performance
+Efficiency (response latency), Reliability (ORB-KNN accuracy), and Usability (interface
+intuitiveness) via a 5-point Likert scale. Phase 3 (System Validation) deploys the
+software in a live classroom environment to validate the Two-Phase Instructional
+Workflow: first, students engage with the Instructional Mode where "Bin-Bin" provides
+real-time corrective feedback; second, students transition to Knowledge Assessment
+Mode where they independently scan cards without assistance. This stress-test
+validates the system's ability to log post-instructional proficiency data and measure
+learning outcomes following guided instruction. Data analysis will utilize Confusion
+Matrices and System Logs to quantify recognition error rates, ensuring the software
+meets the required technical specifications for deployment.
+Final Product. Final Product. Upon successful completion of deployment
+testing and ISO 25010 validation, the final output will be a fully functional, standalone
+educational software suite designed for offline deployment on a standard consumergrade laptop paired with an external webcam, serving as a portable "Plug-and-Play"
+instructional station without custom hardware. The environment runs on a preconfigured local XAMPP stack (MySQL/PHP) coupled with a Persistent Python ORBKNN Engine for real-time inference, ensuring full functionality without internet
+connectivity. The comprehensive educational package includes the EcoLearn
+Software Installer (unifying the Admin Dashboard, Student Interface, and Database),
+an Asset Repository containing the Universal Golden Dataset and Standardized
+Printable Eco-Cards (PDFs), and a full Documentation Suite comprising the source.
+29
+Technical Implementation of the Hybrid ORB-KNN Algorithm
+To ensure the system operates efficiently on standard consumer-grade
+hardware without internet dependency, this study implements a Hybrid ORB-KNN
+Architecture instead of computationally intensive Convolutional Neural Networks
+(CNNs). This specific algorithmic pipeline is designed to process the Standardized
+Printable Eco-Cards through a four-stage recognition process:
+1. Image Acquisition and Pre-processing. The system captures video frames
+at 30 FPS via the webcam. To reduce computational load, the frame is
+immediately cropped to the Region of Interest (ROI) the "Green Box" overlay
+discarding 80% of the background pixels. The cropped image is then
+converted from RGB to Grayscale, eliminating color variance (lighting noise)
+while preserving the high-contrast edge features of the Eco-Cards.
+2. ORB Feature Extraction (Oriented FAST and Rotated BRIEF). The core
+detection engine utilizes ORB, which fuses two distinct techniques:
+a. FAST (Features from Accelerated Segment Test): Detects
+"Keypoints" (corners and edges) on the card image.
+b. BRIEF (Binary Robust Independent Elementary Features):
+Converts these keypoints into binary feature vectors (strings of 0s
+and 1s). Crucially, ORB adds an "Orientation" component, making
+the recognition Rotation Invariant. This ensures that even if a
+preschooler holds the card upside down or sideways, the system
+can still match the features correctly.
+3. K-Nearest Neighbors (KNN) Classification. Once the feature vectors are
+extracted, they are passed to the KNN Classifier. The system compares the
+live descriptors against the Universal Golden Dataset using the Hamming
+Distance metric. Unlike Euclidean distance used in deep learning, Hamming
+distance uses bitwise XOR operations, which are extremely fast for the CPU
+to calculate.
+30
+a. The algorithm identifies the K=3 closest matches in the database.
+b. A Voting Mechanism determines the final class (e.g., if 3 out of 3
+matches are "Plastic Bottle," the system returns "Recyclable").
+c. Lowe’s Ratio Test is applied to filter out weak matches (false
+positives) caused by background noise.
+4. One-Shot Learning Integration. Because the KNN classifier is "lazy" (it
+stores data rather than training a model weights file), the system supports
+One-Shot Learning. When an Administrator adds a new card via the
+dashboard, its features are simply appended to the Golden Dataset. The
+system updates instantly without the hours of re-training required by neural
+networks.
+To visualize this internal processing logic, the algorithm’s structure is detailed
+in Figure 6, which presents a step-by-step flow of data from feature extraction through
+classification and final decision output.
+Figure 6. Structural Process Flow of the Hybrid ORB-KNN Algorithm
+31
+REFERENCES
+Antonio, L. (2020). Challenges in the implementation of the ecological solid waste
+management act in Metro Manila. Philippine Institute for Development Studies.
+Atienza, V. A. (2019). Breaking the "sachet economy": The case of solid waste
+management in the Philippines. Journal of Developing Societies, 35(1), 1-21.
+Bank Sampah. (2020). MySmash [Mobile application software]. Google Play Store.
+Barcelo, J., Artuz, M. T., Tansengco, M., Herrera, D., Chuayana, J. M., & Esguerra, R.
+(2024). Waste analysis and characterization study in a Philippine science and
+technology research and development institution. Environment and Natural
+Resources Journal, 22(6), 547–564.
+Binus Game Development Club. (2020). EcoSort [Mobile application software]. Itch.io.
+Retrieved from https://bgdc.itch.io/ecosort
+Bored Monkey. (2018). Garbage Gobblers [Mobile application software]. Google Play
+Store.
+Castillo, A. L., & Otoma, S. (2013). Status of solid waste management in the
+Philippines. Proceedings of the 24th Annual Conference of JSMCWM, 1-2.
+Davis, J. (2019). Young children and the environment: Early education for sustainability
+(3rd ed.). Cambridge University Press.
+Department of Environment and Natural Resources (DENR). (2021). Basura Buster
+[Mobile application software]. Google Play Store.
+Department of Education. (2024). MATATAG curriculum: Kindergarten. Pasig City:
+Department of Education.
+Department of Environment and Natural Resources (DENR). (2001). Implementing
+rules and regulations of Republic Act 9003. DENR Administrative Order No.
+2001-34.
+Dhillon, A., & Verma, G. K. (2020). Convolutional neural network: A review of models,
+methodologies and applications to object detection. Progress in Artificial
+Intelligence, 9(2), 85-112.
+Dichev, C., & Dicheva, D. (2017). Gamifying education: What is known, what is
+believed and what remains uncertain: A critical review. International Journal of
+Educational Technology in Higher Education, 14(1), 9.
+Flores, J. A., & Lacang, G. C. (2024). Solid wastes generated from selected secondary
+schools in Claveria, Misamis Oriental, Philippines. Science International
+(Lahore), 36(4), 187-192.
+Gro Play. (2025). Grow Recycling [Mobile application software]. Google Play Store.
+Homer, R., Hew, K. F., & Tan, C. Y. (2018). Comparing digital badges-and-points with
+classroom token systems: Effects on elementary school students' mathematics
+32
+achievement and motivation. Educational Technology Research and
+Development, 66(5), 1177-1203.
+JouleBug. (2019). JouleBug [Mobile application software]. Apple App Store.
+Karami, E., Shehata, S., & Smith, A. (2017). Image identification using SIFT, SURF,
+and ORB. Journal of Computing, 5(2), 1-12.
+Linehan, C., & Kirman, B. (2019). Gamification as behavioral psychology. In The
+gamification of learning and instruction fieldbook (pp. 81-106). Wiley.
+Litterati. (2018). Litterati [Mobile application software]. Google Play Store.
+McLeod, S. (2018). Jean Piaget's theory of cognitive development. Simply Psychology.
+https://www.simplypsychology.org/piaget.html.
+Mekki, O., Bazi, R., & Brik, Y. (2024). Comparative survey of embedded system
+implementations of convolutional neural networks in autonomous cars
+applications. IEEE Access, 12, 1-15.
+Municipal Government of Carmona. (2006). Municipal Ordinance No. 007-06: The
+Environment Code of the Municipality of Carmona. Office of the Sangguniang
+Bayan.
+Namoco, R. A., et al. (2025). Gamification strategies in public elementary science
+education: Effects on academic performance and engagement in Butuan City.
+Philippine Journal of Science Education, 14(2), 45-58.
+National Geographic Kids. (2019). Recycle Roundup [Online Game]. Retrieved from
+https://kids.nationalgeographic.com/games/action-adventure/article/recycleroundup-new
+OG Interactives. (2026). Eco Sort 2026 [Mobile application software]. Google Play
+Store.
+Otto, S., & Pensini, P. (2017). Nature-based environmental education of children:
+Environmental knowledge and connectedness to nature, together, are related
+to ecological behavior. Global Environmental Change, 47, 88-94.
+Putra, A. S., & Harjoko, A. (2025). Mobile app as digitalisation of waste sorting
+management. International Journal of Interactive Mobile Technologies, 19(2),
+45-58.
+Rakasiwi, S., et al. (2025). Bridging the gap: The impact of gamified learning on
+environmental behavioral compliance in local schools. Journal of
+Environmental Psychology and Education, 19(1), 112-125.
+Republic Act No. 9003. (2000). Ecological Solid Waste Management Act of 2000.
+Official Gazette of the Republic of the Philippines.
+Rublee, E., Rabaud, V., Konolige, K., & Bradski, G. (2011). ORB: An efficient
+alternative to SIFT or SURF. Proceedings of the IEEE International Conference
+on Computer Vision (ICCV), 2564-2571.
+33
+Saplaco, S. R., et al. (2021). Assessment of solid waste management practices in
+selected schools in the Philippines. Journal of Environmental Science and
+Management, 24(1), 45-56.
+Spiteri, J. (2020). Environmental action competence in early childhood education.
+Environmental Education Research, 26(1), 1-15.
+Taha, A., & Hameed, A. (2024). Performance evaluation of feature extraction
+algorithms (SIFT, SURF, ORB) for real-time applications. International Journal
+of Computer Applications, 185(4), 12-18.
+Torquati, J., Cutler, K., Gilkerson, D., & Sarver, S. (2020). Early childhood educators'
+perceptions of nature, science, and environmental education. Early Education
+and Development, 24(5), 721-743.
+Tungpalan, M. (2020). Integration of environmental education in the Philippine
+preschool curriculum. UP College of Education.
+Uddin, Z. (2023). Instructional strategies in environmental education: An assessment
+of Philippine public kindergarten programs. Asia Pacific Journal of Educators
+and Education, 38(1), 89-104.
+World Bank. (2021). Market study for Philippines: Plastics circularity opportunities and
+barriers. World Bank Group.
+Zhang, Y., Li, X., & Wang, S. (2019). A comparative study of feature matching methods
+for object recognition. International Journal of Computer Vision, 12(4), 200-215
+34
+APPENDICES
+Appendix 1
+Unit Testing
+35
+36
+37
+38
+39
+Appendix 2
+System Testing
+40
+41
+42
+43
+Appendix 3
+Acceptance Testing
+44

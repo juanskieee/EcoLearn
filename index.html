@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌱 EcoLearn - Help Bin-Bin Sort Waste!</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="animated-background">
+        <div class="floating-leaf leaf-1">🍃</div>
+        <div class="floating-leaf leaf-2">🌿</div>
+        <div class="floating-leaf leaf-3">♻️</div>
+        <div class="floating-leaf leaf-4">🌱</div>
+    </div>
+
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <h1 class="bouncy-title">EcoLearn</h1>
+            <div class="binbin-intro">
+                <img src="assets/binbin_happy.png" alt="Bin-Bin" class="binbin-large">
+                <div class="speech-bubble">
+                    <p>Hi! I'm <strong>Bin-Bin</strong>! 👋</p>
+                    <p>Let's sort some waste!</p>
+                </div>
+            </div>
+            
+            <div class="name-input-container">
+                <label class="mode-title" style="display:block; margin-bottom:10px; font-weight:700; color:var(--color-purple);">Pick a Mode:</label>
+                <div class="mode-options">
+                    <label class="mode-option">
+                        <input type="radio" name="learning-mode" value="instructional" checked>
+                        <span class="mode-label">
+                            <span class="mode-icon">📚</span>
+                            <strong>Learn</strong>
+                        </span>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="learning-mode" value="assessment">
+                        <span class="mode-label">
+                            <span class="mode-icon">🎯</span>
+                            <strong>Test</strong>
+                        </span>
+                    </label>
+                </div>
+                
+                <div class="nickname-selection">
+                    <label style="display:block; margin-bottom:10px; font-weight:700;">Who are you?</label>
+                    <div id="preset-nickname-container" class="nickname-input-group">
+                        <select id="preset-nicknames">
+                            <option value="">Loading nicknames...</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button class="btn-start" onclick="startGame()">🚀 PLAY!</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-screen" class="game-screen hidden">
+        <header class="game-header">
+            <div class="header-left">
+                <div class="logo">🌱 EcoLearn</div>
+            </div>
+            <div class="header-center">
+                <div class="student-badge">
+                    <span id="student-display-name">Student</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="score-display">
+                    <div class="score-item">
+                        <div class="score-label">Scans</div>
+                        <div class="score-value" id="scan-count">0</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-label">Correct</div>
+                        <div class="score-value correct" id="correct-count">0</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="game-main">
+            <section class="camera-section">
+                <div class="camera-container">
+                    <div class="camera-header">
+                        <h2>📸 Camera</h2>
+                    </div>
+                    <div class="camera-frame">
+                        <video id="webcam" autoplay playsinline></video>
+                        <div class="roi-overlay">
+                             <div class="roi-guide">Place card in box</div>
+                        </div>
+                        <div class="scan-effect" id="scan-effect"></div>
+                    </div>
+                    <div style="margin-top: 1.5rem;">
+                        <button class="btn-scan" onclick="captureAndIdentify()" id="scan-btn">
+                            <span class="btn-icon">📸</span>
+                            <span class="btn-text">SCAN CARD</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="feedback-section">
+                <div class="binbin-container">
+                    <div class="binbin-character">
+                        <img id="binbin-image" src="assets/binbin_neutral.png" alt="Bin-Bin">
+                    </div>
+                    
+                    <div class="feedback-panel">
+                        <div class="feedback-content">
+                            <p id="result-text" class="result-message">
+                                Ready? Show me a card!
+                            </p>
+                            <div id="category-display" class="category-display hidden">
+                                <div class="bin-icon" id="bin-icon">🗑️</div>
+                                <div class="category-info">
+                                    <span class="category-label" style="font-size:0.8rem; color:#888;">GOES TO:</span>
+                                    <div class="category-name" id="category-name">Paper</div>
+                                </div>
+                            </div>
+                            
+                            <div class="confidence-bar-container hidden" id="confidence-container" style="margin-top:10px;">
+                                <div style="font-size:0.8rem; color:#888; display:flex; justify-content:space-between;">
+                                    <span>Sureness:</span>
+                                    <span id="confidence-percent">0%</span>
+                                </div>
+                                <div style="height:6px; background:#eee; border-radius:3px; margin-top:4px;">
+                                    <div class="confidence-fill" id="confidence-fill" style="height:100%; background:var(--color-green); border-radius:3px; width:0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="category-guide">
+                    <h4 style="margin-bottom:1rem; color:var(--color-text);">Helpers:</h4>
+                    <div class="guide-grid">
+                        <div class="guide-item compostable">
+                            <span class="guide-icon">🌱</span>
+                            <span>Compost</span>
+                        </div>
+                        <div class="guide-item recyclable">
+                            <span class="guide-icon">♻️</span>
+                            <span>Recycle</span>
+                        </div>
+                        <div class="guide-item non-recyclable">
+                            <span class="guide-icon">🗑️</span>
+                            <span>Non-Recyclable</span>
+                        </div>
+                        <div class="guide-item special">
+                            <span class="guide-icon">⚠️</span>
+                            <span>Special</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <button class="btn-end-session" onclick="endSession()">
+            ✖ Stop
+        </button>
+    </div>
+
+    <div id="results-screen" class="results-screen hidden">
+        <div class="results-content">
+            <h1 class="results-title" style="font-size:3rem; color:var(--color-green); margin-bottom:1rem;">Awesome!</h1>
+            <div class="binbin-celebrate">
+                <img src="assets/binbin_happy.png" alt="Bin-Bin" style="width:150px;">
+            </div>
+            <div class="results-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="final-scans">0</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat-card highlight">
+                    <div class="stat-value" id="final-correct">0</div>
+                    <div class="stat-label">Correct</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="final-accuracy">0%</div>
+                    <div class="stat-label">Score</div>
+                </div>
+            </div>
+            <p class="results-message" id="results-message">You are an Eco Hero!</p>
+            <button class="btn-restart" onclick="location.reload()">
+                🔄 Play Again
+            </button>
+            <div style="margin-top:20px;">
+                <a href="admin/" style="color:#aaa; text-decoration:none; font-size:0.9rem;">View Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="capture-canvas" style="display:none;"></canvas>
+
+    <audio id="success-sound" src="assets/success.mp3" preload="auto"></audio>
+    <audio id="error-sound" src="assets/error.mp3" preload="auto"></audio>
+
+    <script src="js/script.js"></script>
+    
+    <!-- Service Worker for Offline Caching (Portable - No XAMPP config!) -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/js/sw.js')
+                    .then(() => console.log('✅ EcoLearn: Offline Ready!'))
+                    .catch((e) => console.warn('SW failed:', e));
+            });
+        }
+    </script>
+</body>
+</html>
