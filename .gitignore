@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 /node_modules
 .DS_Store
+/assets_png
+/thesis_proper
+/assets
