@@ -306,7 +306,7 @@ require_once 'check_session.php';
             </section>
 
             <!-- SYSTEM CONFIGURATION SECTION -->
-            <section id="config" class="section-card tab-content">
+            <section id="config" class="section-card scrollable tab-content">
                 <div class="config-header-row">
                     <div class="config-header-left">
                         <h3 class="section-title">⚙️ System Configuration</h3>
@@ -460,7 +460,6 @@ require_once 'check_session.php';
                         <h4>👤 Add Student Nickname</h4>
                         <button class="modal-close" onclick="closeAddNicknameModal()">✕</button>
                     </div>
-                    <p style="margin-bottom: 1.5rem; color: #64748b; font-size: 0.9rem;">Create a friendly nickname for student login</p>
                     <div class="one-shot-form">
                         <div class="form-group">
                             <label>📝 Student Nickname:</label>

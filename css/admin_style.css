@@ -1668,6 +1668,7 @@ h1, h2, h3, h4, .stat-value {
    ============================================ */
 .one-shot-form {
     max-width: 100%;
+    padding: 1rem;
 }
 
 .form-group {
@@ -1787,6 +1788,8 @@ h1, h2, h3, h4, .stat-value {
 .config-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    overflow:auto; 
+    max-width:100%;
     gap: 1.5rem;
 }
 
