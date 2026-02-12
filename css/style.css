@@ -319,6 +319,13 @@ button:active {
     gap: 0.5rem;
 }
 
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
 .student-badge {
     background: var(--color-purple);
     color: white;
@@ -378,50 +385,112 @@ button:active {
     box-shadow: 0 6px 0 var(--color-border);
 }
 
+.camera-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
 .camera-header h2 {
     color: var(--color-text);
-    margin-bottom: 1rem;
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.camera-status {
+    font-size: 0.85rem;
+    color: var(--color-text-light);
+    font-weight: 500;
+}
+
+.camera-status.live {
+    color: var(--color-green);
+}
+
+.camera-status.error {
+    color: var(--color-red);
 }
 
 .camera-frame {
     position: relative;
     border-radius: var(--radius-md);
     overflow: hidden;
-    background: #000;
-    border: 4px solid var(--color-text); /* Tablet look */
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    background: #1a1a1a;
+    border: 3px solid var(--color-border);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.camera-viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    max-height: 420px;
 }
 
 #webcam {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    display: block;
+    height: 100%;
+    object-fit: cover;
     transform: scaleX(-1);
+    display: block;
 }
 
-/* ROI Overlay */
+/* ROI Overlay - corner brackets + dim */
 .roi-overlay {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 70%;
-    height: 70%;
-    border: 4px dashed rgba(255, 255, 255, 0.8);
+    width: 72%;
+    height: 72%;
     border-radius: var(--radius-sm);
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* Dim outside */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
 }
+
+.roi-corners {
+    position: absolute;
+    inset: 0;
+    border: 3px solid rgba(255, 255, 255, 0.9);
+    border-radius: inherit;
+}
+
+.roi-corner {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-color: var(--color-green);
+    border-style: solid;
+    border-width: 0;
+}
+
+.roi-corner.roi-tl { top: -3px; left: -3px; border-top-width: 4px; border-left-width: 4px; border-radius: 4px 0 0 0; }
+.roi-corner.roi-tr { top: -3px; right: -3px; border-top-width: 4px; border-right-width: 4px; border-radius: 0 4px 0 0; }
+.roi-corner.roi-bl { bottom: -3px; left: -3px; border-bottom-width: 4px; border-left-width: 4px; border-radius: 0 0 0 4px; }
+.roi-corner.roi-br { bottom: -3px; right: -3px; border-bottom-width: 4px; border-right-width: 4px; border-radius: 0 0 4px 0; }
 
 .roi-guide {
     position: absolute;
-    bottom: -40px;
+    bottom: -36px;
     left: 50%;
     transform: translateX(-50%);
     color: white;
     font-weight: 600;
-    background: rgba(0,0,0,0.6);
-    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    background: rgba(0,0,0,0.7);
+    padding: 0.45rem 1rem;
     border-radius: 20px;
     white-space: nowrap;
+}
+
+.camera-actions {
+    margin-top: 1.5rem;
 }
 
 /* Scan Effect */
@@ -430,14 +499,15 @@ button:active {
     top: 0;
     left: 0;
     width: 100%;
-    height: 10px;
-    background: var(--color-green);
-    box-shadow: 0 0 15px var(--color-green);
+    height: 8px;
+    background: linear-gradient(90deg, transparent, var(--color-green), transparent);
+    box-shadow: 0 0 20px var(--color-green);
     opacity: 0;
+    z-index: 2;
 }
 
 .scan-effect.active {
-    animation: scanAnimation 1.5s ease-in-out;
+    animation: scanAnimation 1.2s ease-in-out;
 }
 
 @keyframes scanAnimation {
@@ -478,16 +548,117 @@ button:active {
 }
 
 .result-message {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     color: var(--color-text);
-    min-height: 3.6rem; /* Prevent layout shift */
+    min-height: 3.6rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1.4;
 }
 
-/* Category Result Card */
-.category-display {
+.result-big {
+    font-size: 1.5rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.result-card-name {
+    font-size: 1.1rem;
+}
+
+/* Kindergarten-friendly category result */
+.category-display.category-display-kids {
+    margin-top: 1rem;
+    padding: 1.25rem 1rem;
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    animation: popIn 0.4s var(--bounce), successPulse 0.6s ease-out;
+    border-width: 3px;
+}
+
+.bin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.2);
+}
+
+.bin-badge-icon {
+    font-size: 1.8rem;
+}
+
+.category-name-kids {
+    font-size: 1.35rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+.confidence-kids {
+    margin-top: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--color-text-light);
+    font-weight: 600;
+}
+
+@keyframes successPulse {
+    0% { transform: scale(0.95); opacity: 0.9; }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Scanned cards strip - positive reinforcement for preschoolers */
+.scanned-cards-strip {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 2px dashed var(--color-border);
+}
+
+.scanned-cards-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin-bottom: 0.5rem;
+}
+
+.scanned-cards-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-height: 1.5rem;
+}
+
+.scanned-card-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.65rem;
+    background: white;
+    border: 2px solid var(--color-border);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text);
+    box-shadow: 0 2px 0 var(--color-border);
+}
+
+.scanned-card-chip .chip-icon {
+    font-size: 1rem;
+}
+
+/* Legacy category display (assessment / fallback) */
+.category-display:not(.category-display-kids) {
     margin-top: 1rem;
     padding: 1rem;
     background: white;
@@ -496,7 +667,6 @@ button:active {
     display: flex;
     align-items: center;
     gap: 1rem;
-    animation: popIn 0.4s var(--bounce);
 }
 
 .bin-icon {
@@ -624,18 +794,130 @@ button:active {
     100% { transform: scale(1); opacity: 1; }
 }
 
+/* ============================================
+   LEADERBOARD (Game & Results)
+   ============================================ */
+
+.game-leaderboard {
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 3px 0 var(--color-border);
+}
+
+.game-leaderboard-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.game-leaderboard-list .leaderboard-item {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
+}
+
+.results-leaderboard {
+    width: 100%;
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 3px 0 var(--color-border);
+}
+
+.leaderboard-heading {
+    font-size: 1rem;
+    color: var(--color-text);
+    margin: 0 0 0.75rem 0;
+    font-weight: 700;
+}
+
+.leaderboard-list {
+    min-height: 60px;
+}
+
+.leaderboard-loading {
+    color: var(--color-text-light);
+    font-size: 0.9rem;
+}
+
+.leaderboard-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.35rem;
+    background: white;
+    border: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+
+.leaderboard-item:last-child {
+    margin-bottom: 0;
+}
+
+.leaderboard-item.highlight {
+    background: #F0FDF4;
+    border-color: var(--color-green);
+    box-shadow: 0 2px 0 rgba(88, 204, 2, 0.2);
+}
+
+.leaderboard-rank {
+    flex-shrink: 0;
+    font-weight: 800;
+    min-width: 1.75rem;
+    text-align: center;
+    font-size: 1rem;
+}
+
+.leaderboard-name {
+    flex: 1;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.leaderboard-score {
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--color-green);
+    font-size: 0.95rem;
+}
+
+.leaderboard-empty {
+    color: var(--color-text-light);
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+}
+
+.results-leaderboard-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.results-leaderboard-list .leaderboard-item {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 900px) {
     .game-main {
         grid-template-columns: 1fr;
     }
     
-    .camera-frame {
-        aspect-ratio: 4/3;
-        height: auto;
+    .camera-viewport {
+        max-height: none;
     }
     
     .binbin-character {
         height: 120px;
+    }
+    
+    .leaderboard-item {
+        font-size: 0.85rem;
     }
 }

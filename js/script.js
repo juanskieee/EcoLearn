@@ -34,13 +34,14 @@ const categoryName = document.getElementById('category-name');
 const binIcon = document.getElementById('bin-icon');
 const scanBtn = document.getElementById('scan-btn');
 const scanEffect = document.getElementById('scan-effect');
-const confidenceContainer = document.getElementById('confidence-container');
-const confidenceFill = document.getElementById('confidence-fill');
-const confidencePercent = document.getElementById('confidence-percent');
 
 const scanCountEl = document.getElementById('scan-count');
 const correctCountEl = document.getElementById('correct-count');
 const accuracyEl = document.getElementById('accuracy');
+const binBadge = document.getElementById('bin-badge');
+const binBadgeLabel = document.getElementById('bin-badge-label');
+const confidenceKidsEl = document.getElementById('confidence-kids');
+const scannedCardsListEl = document.getElementById('scanned-cards-list');
 
 // Audio
 const successSound = document.getElementById('success-sound');
@@ -53,7 +54,24 @@ const errorSound = document.getElementById('error-sound');
 document.addEventListener('DOMContentLoaded', function() {
     initializeWelcomeScreen();
     loadSystemSettings(); // Load ROI color and other settings
+    setupSessionEndOnUnload();
 });
+
+// End session when user leaves or reloads so the server does not keep an open session
+function setupSessionEndOnUnload() {
+    function endSessionIfActive() {
+        if (!sessionId) return;
+        fetch(`${API_URL}/session/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+            keepalive: true
+        }).catch(function() {});
+        sessionId = null;
+    }
+    window.addEventListener('beforeunload', endSessionIfActive);
+    window.addEventListener('pagehide', endSessionIfActive);
+}
 
 // Load system settings from admin config
 async function loadSystemSettings() {
@@ -63,12 +81,11 @@ async function loadSystemSettings() {
         
         if (data.status === 'success' && data.config) {
             data.config.forEach(cfg => {
-                // Apply ROI Box Color
+                // Apply ROI Box Color to corner brackets
                 if (cfg.config_key === 'roi_box_color') {
-                    const roiOverlay = document.querySelector('.roi-overlay');
-                    if (roiOverlay) {
-                        roiOverlay.style.borderColor = cfg.config_value;
-                    }
+                    document.querySelectorAll('.roi-corner').forEach(el => {
+                        if (el) el.style.borderColor = cfg.config_value;
+                    });
                 }
             });
         }
@@ -130,13 +147,14 @@ function handleModeChange(event) {
     console.log('🎮 Mode selected:', sessionMode);
 }
 
-// Category Configuration
+// Category Configuration (kindergarten-friendly: short, clear, high-contrast)
 const categories = {
     'Compostable': {
         color: '#10B981',
         icon: '🌱',
         binColor: 'green',
         message: 'Great! This goes in the GREEN bin for composting!',
+        shortMessage: 'Put in the GREEN bin!',
         mascot: 'assets/binbin_happy.png'
     },
     'Recyclable': {
@@ -144,29 +162,45 @@ const categories = {
         icon: '♻️',
         binColor: 'blue',
         message: 'Awesome! This goes in the BLUE bin for recycling!',
+        shortMessage: 'Put in the BLUE bin!',
         mascot: 'assets/binbin_happy.png'
     },
     'Non-Recyclable': {
         color: '#EF4444',
         icon: '🗑️',
         binColor: 'red',
-        message: 'This goes in the RED bin for non-recyclable waste.',
+        message: 'This goes in the RED bin.',
+        shortMessage: 'Put in the RED bin!',
         mascot: 'assets/binbin_neutral.png'
     },
     'Special Waste': {
         color: '#F59E0B',
         icon: '⚠️',
         binColor: 'yellow',
-        message: 'Careful! This goes in the YELLOW bin for special waste!',
+        message: 'Careful! This goes in the YELLOW bin!',
+        shortMessage: 'Put in the YELLOW bin!',
         mascot: 'assets/binbin_warning.png'
     }
 };
+
+// Last N scanned cards for positive reinforcement (preschool)
+const SCANNED_CARDS_MAX = 12;
+let scannedCardsHistory = [];
 
 // ============================================
 // INITIALIZATION
 // ============================================
 
+function setCameraStatus(status, isError) {
+    const el = document.getElementById('camera-status');
+    if (!el) return;
+    el.textContent = status;
+    el.classList.toggle('live', !isError && status.toLowerCase().indexOf('live') >= 0);
+    el.classList.toggle('error', !!isError);
+}
+
 async function initCamera() {
+    setCameraStatus('Starting…', false);
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
@@ -175,9 +209,11 @@ async function initCamera() {
             } 
         });
         video.srcObject = stream;
+        setCameraStatus('Live', false);
         console.log('✅ Camera initialized');
     } catch (err) {
         console.error('❌ Camera error:', err);
+        setCameraStatus('Camera unavailable', true);
         alert('Camera access denied. Please allow camera access to use EcoLearn.');
     }
 }
@@ -204,7 +240,9 @@ async function startGame() {
     studentNickname = name;
     sessionMode = selectedMode;
     studentDisplayName.textContent = name;
-    
+    scannedCardsHistory = [];
+    if (scannedCardsListEl) scannedCardsListEl.innerHTML = '';
+
     // Configure UI based on mode
     configureGameForMode(selectedMode);
     
@@ -234,7 +272,8 @@ async function startGame() {
             // Transition to game
             welcomeScreen.classList.add('hidden');
             gameScreen.classList.remove('hidden');
-            
+            loadLeaderboardForIndex('game', studentNickname);
+
             // Initialize camera
             await initCamera();
             
@@ -324,6 +363,62 @@ function showResults(stats) {
     }
     
     document.getElementById('results-message').textContent = message;
+    loadLeaderboardForIndex('results', studentNickname);
+}
+
+// ============================================
+// LEADERBOARD (index.html welcome & results)
+// ============================================
+
+function getAccuracyColor(accuracy) {
+    if (accuracy >= 90) return 'var(--color-green)';
+    if (accuracy >= 75) return 'var(--color-blue)';
+    if (accuracy >= 50) return 'var(--color-yellow)';
+    return 'var(--color-red)';
+}
+
+async function loadLeaderboardForIndex(which, highlightNickname) {
+    const containerIds = {
+        game: 'game-leaderboard-list',
+        results: 'results-leaderboard-list'
+    };
+    const containerId = containerIds[which];
+    if (!containerId) return;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '<div class="leaderboard-loading">Loading…</div>';
+
+    try {
+        const response = await fetch(`${API_URL}/admin/student-proficiency`);
+        const data = await response.json();
+
+        if (data.status !== 'success' || !data.leaderboard || data.leaderboard.length === 0) {
+            container.innerHTML = '<p class="leaderboard-empty">No rankings yet. Complete a session in Test mode to appear here!</p>';
+            return;
+        }
+
+        const top = data.leaderboard.slice(0, 10);
+        const rankDisplay = (rank) => (rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank);
+
+        container.innerHTML = top.map(student => {
+            const isHighlight = highlightNickname && student.nickname === highlightNickname;
+            return `<div class="leaderboard-item${isHighlight ? ' highlight' : ''}" role="listitem">
+                <span class="leaderboard-rank">${rankDisplay(student.rank)}</span>
+                <span class="leaderboard-name">${escapeHtml(student.nickname)}</span>
+                <span class="leaderboard-score" style="color:${getAccuracyColor(student.avg_accuracy)}">${student.avg_accuracy}%</span>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        console.warn('Leaderboard load failed:', err);
+        container.innerHTML = '<p class="leaderboard-empty">Could not load leaderboard.</p>';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // ============================================
@@ -344,7 +439,7 @@ async function captureAndIdentify() {
     // Set thinking state
     resultText.textContent = "Hmm... let me think...";
     categoryDisplay.classList.add('hidden');
-    confidenceContainer.classList.add('hidden');
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
     binbinImg.style.transform = "scale(0.9) rotate(-5deg)";
     binbinImg.src = 'assets/binbin_neutral.png';
     
@@ -439,6 +534,15 @@ function handleAssessmentMode(data) {
     }
 }
 
+function addToScannedCards(cardName, icon) {
+    if (!scannedCardsListEl || !cardName) return;
+    scannedCardsHistory.unshift({ name: cardName, icon: icon || '✅' });
+    if (scannedCardsHistory.length > SCANNED_CARDS_MAX) scannedCardsHistory.pop();
+    scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
+        return '<span class="scanned-card-chip"><span class="chip-icon">' + escapeHtml(c.icon) + '</span>' + escapeHtml(c.name) + '</span>';
+    }).join('');
+}
+
 function showInstructionalFeedback(data) {
     const category = data.category;
     const config = categories[category];
@@ -448,27 +552,33 @@ function showInstructionalFeedback(data) {
         return;
     }
     
-    // Play success sound
-    successSound.play().catch(e => console.log('Audio play failed:', e));
+    successSound.play().catch(function() {});
     
-    // Animate Bin-Bin
     binbinImg.src = config.mascot;
     binbinImg.style.transform = "scale(1.15) rotate(5deg)";
-    setTimeout(() => {
+    setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
     
-    // Show result with educational message
-    resultText.innerHTML = `<strong>It's a ${data.card_name}!</strong><br>${config.message}`;
+    // Kindergarten-friendly: big "Correct!" and simple line
+    resultText.innerHTML = '<strong class="result-big">Correct!</strong><br><span class="result-card-name">It\'s a ' + escapeHtml(data.card_name || 'card') + '!</span>';
     
-    // Show category
+    categoryDisplay.classList.remove('hidden');
     categoryName.textContent = category;
     categoryName.style.color = config.color;
     binIcon.textContent = config.icon;
-    categoryDisplay.classList.remove('hidden');
+    if (binBadge) {
+        binBadge.style.background = config.color;
+        binBadge.style.borderColor = config.color;
+    }
+    if (binBadgeLabel) binBadgeLabel.textContent = config.shortMessage || ('Put in the ' + category + ' bin!');
     
-    // Show confidence
-    showConfidence(data.confidence);
+    addToScannedCards(data.card_name, config.icon);
+    
+    if (confidenceKidsEl) {
+        confidenceKidsEl.classList.remove('hidden');
+        confidenceKidsEl.textContent = (data.confidence >= 0.8) ? 'Bin-Bin is sure!' : 'Bin-Bin thinks so!';
+    }
 }
 
 function showAssessmentIdentification(data) {
@@ -585,53 +695,48 @@ async function selectAssessmentChoice(selectedCategory) {
 
 function showAssessmentCorrect(selectedCategory) {
     const config = categories[selectedCategory];
-    
-    // Play success sound
-    successSound.play().catch(e => console.log('Audio play failed:', e));
-    
-    // Animate Bin-Bin
+    successSound.play().catch(function() {});
     binbinImg.src = config.mascot;
     binbinImg.style.transform = "scale(1.15) rotate(5deg)";
-    setTimeout(() => {
+    setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
-    
-    resultText.innerHTML = `<strong>✅ Correct!</strong><br>Yes, this goes in the ${selectedCategory} bin!`;
-    
-    // Show the correct category
+    resultText.innerHTML = '<strong class="result-big">Correct!</strong><br><span class="result-card-name">Yes! ' + (config.shortMessage || 'Put it in the ' + selectedCategory + ' bin!') + '</span>';
+    categoryDisplay.classList.remove('hidden');
     categoryName.textContent = selectedCategory;
     categoryName.style.color = config.color;
     binIcon.textContent = config.icon;
-    categoryDisplay.classList.remove('hidden');
-    
-    // Remove choices
-    const choices = document.querySelector('.assessment-choices');
+    if (binBadge) {
+        binBadge.style.background = config.color;
+        binBadge.style.borderColor = config.color;
+    }
+    if (binBadgeLabel) binBadgeLabel.textContent = config.shortMessage || ('Put in the ' + selectedCategory + ' bin!');
+    if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, config.icon);
+    if (confidenceKidsEl) { confidenceKidsEl.classList.add('hidden'); }
+    var choices = document.querySelector('.assessment-choices');
     if (choices) choices.remove();
 }
 
 function showAssessmentIncorrect(selectedCategory, correctCategory) {
-    const correctConfig = categories[correctCategory];
-    
-    // Play error sound
-    errorSound.play().catch(e => console.log('Audio play failed:', e));
-    
-    // Animate Bin-Bin
+    var correctConfig = categories[correctCategory];
+    errorSound.play().catch(function() {});
     binbinImg.src = 'assets/binbin_warning.png';
     binbinImg.style.transform = "scale(1.15) rotate(-5deg)";
-    setTimeout(() => {
+    setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
-    
-    resultText.innerHTML = `<strong>❌ Not quite right!</strong><br>This should go in the <strong>${correctCategory}</strong> bin.`;
-    
-    // Show the correct category
+    resultText.innerHTML = '<strong class="result-big">Not quite!</strong><br><span class="result-card-name">This goes in the <strong>' + escapeHtml(correctCategory) + '</strong> bin. Try again next time!</span>';
+    categoryDisplay.classList.remove('hidden');
     categoryName.textContent = correctCategory;
     categoryName.style.color = correctConfig.color;
     binIcon.textContent = correctConfig.icon;
-    categoryDisplay.classList.remove('hidden');
-    
-    // Remove choices
-    const choices = document.querySelector('.assessment-choices');
+    if (binBadge) {
+        binBadge.style.background = correctConfig.color;
+        binBadge.style.borderColor = correctConfig.color;
+    }
+    if (binBadgeLabel) binBadgeLabel.textContent = correctConfig.shortMessage || ('Put in the ' + correctCategory + ' bin!');
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+    var choices = document.querySelector('.assessment-choices');
     if (choices) choices.remove();
 }
 
@@ -652,13 +757,6 @@ function resetAssessmentState() {
 function showSuccessFeedback(data) {
     // This function is now replaced by showInstructionalFeedback
     showInstructionalFeedback(data);
-}
-
-function showConfidence(confidence) {
-    const confidenceValue = Math.round(confidence * 100);
-    confidencePercent.textContent = confidenceValue + '%';
-    confidenceFill.style.width = confidenceValue + '%';
-    confidenceContainer.classList.remove('hidden');
 }
 
 function showErrorFeedback(data) {

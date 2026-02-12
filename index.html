@@ -66,11 +66,6 @@
             <div class="header-left">
                 <div class="logo">🌱 EcoLearn</div>
             </div>
-            <div class="header-center">
-                <div class="student-badge">
-                    <span id="student-display-name">Student</span>
-                </div>
-            </div>
             <div class="header-right">
                 <div class="score-display">
                     <div class="score-item">
@@ -82,6 +77,9 @@
                         <div class="score-value correct" id="correct-count">0</div>
                     </div>
                 </div>
+                <div class="student-badge">
+                    <span id="student-display-name">Student</span>
+                </div>
             </div>
         </header>
 
@@ -89,16 +87,25 @@
             <section class="camera-section">
                 <div class="camera-container">
                     <div class="camera-header">
-                        <h2>📸 Camera</h2>
+                        <h2>📸 Live camera</h2>
+                        <span class="camera-status" id="camera-status">Starting…</span>
                     </div>
                     <div class="camera-frame">
-                        <video id="webcam" autoplay playsinline></video>
-                        <div class="roi-overlay">
-                             <div class="roi-guide">Place card in box</div>
+                        <div class="camera-viewport">
+                            <video id="webcam" autoplay playsinline muted></video>
+                            <div class="roi-overlay" aria-hidden="true">
+                                <div class="roi-corners">
+                                    <span class="roi-corner roi-tl"></span>
+                                    <span class="roi-corner roi-tr"></span>
+                                    <span class="roi-corner roi-bl"></span>
+                                    <span class="roi-corner roi-br"></span>
+                                </div>
+                                <div class="roi-guide">Place card here</div>
+                            </div>
+                            <div class="scan-effect" id="scan-effect"></div>
                         </div>
-                        <div class="scan-effect" id="scan-effect"></div>
                     </div>
-                    <div style="margin-top: 1.5rem;">
+                    <div class="camera-actions">
                         <button class="btn-scan" onclick="captureAndIdentify()" id="scan-btn">
                             <span class="btn-icon">📸</span>
                             <span class="btn-text">SCAN CARD</span>
@@ -114,27 +121,22 @@
                     </div>
                     
                     <div class="feedback-panel">
-                        <div class="feedback-content">
+                        <div class="feedback-content" id="feedback-content">
                             <p id="result-text" class="result-message">
                                 Ready? Show me a card!
                             </p>
-                            <div id="category-display" class="category-display hidden">
-                                <div class="bin-icon" id="bin-icon">🗑️</div>
-                                <div class="category-info">
-                                    <span class="category-label" style="font-size:0.8rem; color:#888;">GOES TO:</span>
-                                    <div class="category-name" id="category-name">Paper</div>
+                            <div id="category-display" class="category-display category-display-kids hidden">
+                                <div class="bin-badge" id="bin-badge">
+                                    <span class="bin-badge-icon" id="bin-icon">🗑️</span>
+                                    <span class="bin-badge-label" id="bin-badge-label">Put in the GREEN bin!</span>
                                 </div>
+                                <div class="category-name-kids" id="category-name">Paper</div>
                             </div>
-                            
-                            <div class="confidence-bar-container hidden" id="confidence-container" style="margin-top:10px;">
-                                <div style="font-size:0.8rem; color:#888; display:flex; justify-content:space-between;">
-                                    <span>Sureness:</span>
-                                    <span id="confidence-percent">0%</span>
-                                </div>
-                                <div style="height:6px; background:#eee; border-radius:3px; margin-top:4px;">
-                                    <div class="confidence-fill" id="confidence-fill" style="height:100%; background:var(--color-green); border-radius:3px; width:0%;"></div>
-                                </div>
-                            </div>
+                            <p class="confidence-kids hidden" id="confidence-kids"></p>
+                        </div>
+                        <div class="scanned-cards-strip" id="scanned-cards-strip" aria-label="Cards you sorted">
+                            <span class="scanned-cards-title">Cards you sorted:</span>
+                            <div class="scanned-cards-list" id="scanned-cards-list"></div>
                         </div>
                     </div>
                 </div>
@@ -160,6 +162,11 @@
                         </div>
                     </div>
                 </div>
+
+                <section class="game-leaderboard" aria-label="Leaderboard">
+                    <h3 class="leaderboard-heading">🏆 Top Eco Heroes</h3>
+                    <div id="game-leaderboard-list" class="leaderboard-list game-leaderboard-list"></div>
+                </section>
             </section>
         </main>
 
@@ -189,6 +196,10 @@
                 </div>
             </div>
             <p class="results-message" id="results-message">You are an Eco Hero!</p>
+            <section class="results-leaderboard" aria-label="Leaderboard">
+                <h3 class="leaderboard-heading">🏆 Leaderboard</h3>
+                <div id="results-leaderboard-list" class="leaderboard-list results-leaderboard-list"></div>
+            </section>
             <button class="btn-restart" onclick="location.reload()">
                 🔄 Play Again
             </button>

@@ -1777,9 +1777,9 @@ async function confirmSaveAllConfig() {
         closeConfirmationModal();
         
         if (failCount === 0) {
-            showToast(`✅ Successfully saved ${successCount} settings!`, 'success');
+            showToast(`Successfully saved ${successCount} settings!`, 'success');
         } else {
-            showToast(`⚠️ Saved ${successCount} settings, ${failCount} failed`, 'error');
+            showToast(`Saved ${successCount} settings, ${failCount} failed`, 'error');
         }
         
     } catch (error) {
