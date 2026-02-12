@@ -21,6 +21,7 @@ let assessmentQuestion = null;
 const welcomeScreen = document.getElementById('welcome-screen');
 const gameScreen = document.getElementById('game-screen');
 const resultsScreen = document.getElementById('results-screen');
+const learnEndScreen = document.getElementById('learn-end-screen');
 
 const studentNameInput = document.getElementById('student-name');
 const studentDisplayName = document.getElementById('student-display-name');
@@ -55,22 +56,99 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeWelcomeScreen();
     loadSystemSettings(); // Load ROI color and other settings
     setupSessionEndOnUnload();
+    restoreSessionIfExists(); // Check for saved session
 });
 
-// End session when user leaves or reloads so the server does not keep an open session
-function setupSessionEndOnUnload() {
-    function endSessionIfActive() {
-        if (!sessionId) return;
-        fetch(`${API_URL}/session/end`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}',
-            keepalive: true
-        }).catch(function() {});
-        sessionId = null;
+// Session persistence - save/restore from localStorage
+function saveSessionToStorage() {
+    if (!sessionId) return;
+    const sessionData = {
+        sessionId: sessionId,
+        studentNickname: studentNickname,
+        sessionMode: sessionMode,
+        totalScans: totalScans,
+        correctScans: correctScans,
+        scannedCardsHistory: scannedCardsHistory,
+        timestamp: Date.now()
+    };
+    localStorage.setItem('ecolearn_session', JSON.stringify(sessionData));
+}
+
+function restoreSessionIfExists() {
+    const savedSession = localStorage.getItem('ecolearn_session');
+    if (!savedSession) return;
+    
+    try {
+        const sessionData = JSON.parse(savedSession);
+        // Check if session is less than 2 hours old
+        if (Date.now() - sessionData.timestamp > 2 * 60 * 60 * 1000) {
+            localStorage.removeItem('ecolearn_session');
+            return;
+        }
+        
+        // Restore session state
+        sessionId = sessionData.sessionId;
+        studentNickname = sessionData.studentNickname;
+        sessionMode = sessionData.sessionMode;
+        totalScans = sessionData.totalScans || 0;
+        correctScans = sessionData.correctScans || 0;
+        scannedCardsHistory = sessionData.scannedCardsHistory || [];
+        
+        // Update UI
+        studentDisplayName.textContent = studentNickname;
+        scanCountEl.textContent = totalScans;
+        correctCountEl.textContent = correctScans;
+        
+        if (scannedCardsListEl && scannedCardsHistory.length > 0) {
+            scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
+                return '<span class="scanned-card-chip"><span class="chip-icon">' + escapeHtml(c.icon) + '</span>' + escapeHtml(c.name) + '</span>';
+            }).join('');
+        }
+        
+        // Configure UI and show game screen
+        configureGameForMode(sessionMode);
+        
+        // Add learn-mode class to hide leaderboard in instructional mode
+        if (sessionMode === 'instructional') {
+            gameScreen.classList.add('learn-mode');
+        } else {
+            gameScreen.classList.remove('learn-mode');
+        }
+        
+        welcomeScreen.classList.add('hidden');
+        gameScreen.classList.remove('hidden');
+        loadLeaderboardForIndex('game', studentNickname);
+        
+        // Initialize camera
+        initCamera();
+        setInitialGameMessage();
+        
+        console.log('✅ Session restored:', sessionId);
+    } catch (error) {
+        console.error('Failed to restore session:', error);
+        localStorage.removeItem('ecolearn_session');
     }
-    window.addEventListener('beforeunload', endSessionIfActive);
-    window.addEventListener('pagehide', endSessionIfActive);
+}
+
+function clearSessionStorage() {
+    localStorage.removeItem('ecolearn_session');
+}
+
+// End session when user leaves (but not on refresh)
+function setupSessionEndOnUnload() {
+    // Only show warning on refresh if session is active
+    window.addEventListener('beforeunload', function(e) {
+        if (sessionId && !gameScreen.classList.contains('hidden')) {
+            // Save session state so it can be restored
+            saveSessionToStorage();
+        }
+    });
+    
+    // End session only when actually leaving the page (navigation away)
+    window.addEventListener('pagehide', function() {
+        // Session will be restored on page load if user refreshes
+        // So we don't end it here
+    });
 }
 
 // Load system settings from admin config
@@ -246,6 +324,13 @@ async function startGame() {
     // Configure UI based on mode
     configureGameForMode(selectedMode);
     
+    // Add learn-mode class to hide leaderboard in instructional mode
+    if (selectedMode === 'instructional') {
+        gameScreen.classList.add('learn-mode');
+    } else {
+        gameScreen.classList.remove('learn-mode');
+    }
+    
     // Start session
     try {
         const response = await fetch(`${API_URL}/session/start`, {
@@ -269,6 +354,9 @@ async function startGame() {
             assessmentStep = 'scan';
             currentScanResult = null;
             
+            // Save session to localStorage
+            saveSessionToStorage();
+            
             // Transition to game
             welcomeScreen.classList.add('hidden');
             gameScreen.classList.remove('hidden');
@@ -290,7 +378,7 @@ async function startGame() {
 }
 
 function configureGameForMode(mode) {
-    const scoreDisplay = document.querySelector('.score-display');
+    const scoreDisplay = document.querySelector('.score-board');
     
     if (mode === 'instructional') {
         // Hide scores in instructional mode
@@ -303,10 +391,10 @@ function configureGameForMode(mode) {
 
 function setInitialGameMessage() {
     if (sessionMode === 'instructional') {
-        resultText.textContent = 'Ready to learn? Place a card in the camera and I\'ll help you sort it!';
+        resultText.innerHTML = '<strong>LEARN MODE:</strong><br>Place a card and I\'ll show you its magical home!';
         binbinImg.src = 'assets/binbin_neutral.png';
     } else {
-        resultText.textContent = 'Assessment mode: Place a card in the camera to begin!';
+        resultText.innerHTML = '<strong>TEST MODE:</strong><br>Place a card, then YOU choose which bin it belongs to!';
         binbinImg.src = 'assets/binbin_neutral.png';
     }
 }
@@ -315,6 +403,9 @@ async function endSession() {
     if (!confirm('Are you sure you want to finish learning?')) {
         return;
     }
+    
+    // Clear saved session
+    clearSessionStorage();
     
     try {
         const response = await fetch(`${API_URL}/session/end`, {
@@ -483,7 +574,7 @@ async function captureAndIdentify() {
         
         isScanning = false;
         scanBtn.disabled = false;
-        scanBtn.innerHTML = '<span class="btn-icon">📸</span><span class="btn-text">SCAN NOW</span>';
+        scanBtn.innerHTML = '<span class="btn-icon">📸</span><span class="btn-text">SCAN CARD</span>';
     }, 'image/jpeg', 0.95);
 }
 
@@ -541,6 +632,9 @@ function addToScannedCards(cardName, icon) {
     scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
         return '<span class="scanned-card-chip"><span class="chip-icon">' + escapeHtml(c.icon) + '</span>' + escapeHtml(c.name) + '</span>';
     }).join('');
+    
+    // Save progress
+    saveSessionToStorage();
 }
 
 function showInstructionalFeedback(data) {
@@ -608,8 +702,8 @@ function showAssessmentChoices() {
                 <button class="choice-btn" onclick="selectAssessmentChoice('Non-Recyclable')" data-category="Non-Recyclable">
                     🗑️ Non-Recyclable
                 </button>
-                <button class="choice-btn" onclick="selectAssessmentChoice('Special-Waste')" data-category="Special-Waste">
-                    ⚠️ Special
+                <button class="choice-btn" onclick="selectAssessmentChoice('Special Waste')" data-category="Special Waste">
+                    ⚠️ Special Waste
                 </button>
             </div>
         </div>
@@ -664,7 +758,10 @@ async function selectAssessmentChoice(selectedCategory) {
             
             // Update accuracy
             const accuracy = totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 100;
-            accuracyEl.textContent = accuracy + '%';
+            if (accuracyEl) accuracyEl.textContent = accuracy + '%';
+            
+            // Save progress
+            saveSessionToStorage();
         } else {
             console.error('Assessment submit failed:', data.message);
             // Fall back to local handling
