@@ -241,26 +241,6 @@ button:active {
     background-attachment: fixed;
 }
 
-.game-header {
-    background: white;
-    padding: 1rem 2rem;
-    border-bottom: 3px solid var(--color-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 2rem;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-}
-
-.logo {
-    color: var(--color-green);
-    font-weight: 700;
-    font-size: 1.8rem;
-    flex-shrink: 0;
-}
-
 .header-center {
     flex: 1;
     display: flex;
@@ -315,23 +295,13 @@ button:active {
     background: var(--color-border);
 }
 
-.btn-quit {
-    background: var(--color-red);
-    color: white;
-    font-size: 0.9rem;
-    font-weight: 600;
-    padding: 0.6rem 1.2rem;
-    border-radius: var(--radius-sm);
-    box-shadow: 0 3px 0 var(--color-red-dark);
-    flex-shrink: 0;
-}
 
 /* Game Container */
 .game-container {
-    max-width: 1800px;
+    max-width: 1600px;
     width: 100%;
     margin: 0 auto;
-    padding: 3rem 2rem;
+    padding: 1.5rem 1.5rem;
     flex: 1;
     display: flex;
     justify-content: center;
@@ -340,9 +310,9 @@ button:active {
 
 .game-layout {
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 1.5rem;
-    align-items: start;
+    grid-template-columns: 1fr 1fr 1.8fr 1fr;
+    gap: 2rem;
+    align-items: center;
     width: 100%;
 }
 
@@ -351,28 +321,49 @@ button:active {
     display: none;
 }
 
-/* Sidebar */
-.game-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    position: sticky;
-    top: 90px;
+.game-screen.learn-mode .game-layout {
+    grid-template-columns: 1fr 1.8fr 1fr;
 }
 
 .leaderboard-card,
 .guide-card {
-    background: white;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    backdrop-filter: blur(8px);
     border-radius: var(--radius-lg);
-    border: 2px solid var(--color-border);
-    box-shadow: 0 4px 0 var(--color-border);
-    padding: 1.5rem;
+    border: 3px solid #A5D6A7;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15), 0 4px 0 #C8E6C9;
+    padding: 1rem;
+    transform: translateY(-40px);
+}
+
+.guide-card {
+    position: relative;
+    overflow: visible;
+    border: none;
+    box-shadow: none;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    padding: 2rem 1.5rem;
+}
+
+.guide-frame-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -49%);
+    z-index: 10;
+    pointer-events: none;
+    width: 108%;
+    height: 120%;
+    object-fit: fill;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15));
 }
 
 .card-title {
     font-size: 1rem;
     font-weight: 700;
-    color: var(--color-text);
+    color: #2E7D32;
     margin-bottom: 1rem;
     text-align: center;
 }
@@ -441,76 +432,68 @@ button:active {
 }
 
 .category-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
 }
 
 .category-item {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.7rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
-    font-weight: 600;
-    transition: transform 0.2s;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.8rem 0.5rem;
+    border-radius: 18px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    color: #2E7D32;
+    background: rgba(255, 255, 255, 0.75);
+    border: 2px solid #C8E6C9;
+    box-shadow: 0 3px 0 #E8F5E9;
 }
 
 .category-item:hover {
-    transform: translateX(3px);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(76, 175, 80, 0.15);
+    border-color: #A5D6A7;
 }
 
 .cat-icon {
     font-size: 1.3rem;
+    display: none; /* hide emoji icons, replaced by images */
 }
 
-.category-item.compostable {
-    background: #DCFCE7;
-    color: var(--color-green-dark);
+.cat-img {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+    transition: transform 0.2s;
 }
 
-.category-item.recyclable {
-    background: #DBEAFE;
-    color: var(--color-blue-dark);
-}
-
-.category-item.non-recyclable {
-    background: #FEE2E2;
-    color: var(--color-red-dark);
-}
-
-.category-item.special {
-    background: #FEF3C7;
-    color: var(--color-yellow-dark);
-}
-
-/* Main Game Area */
-.game-main {
-    display: flex;
-    flex-direction: row;
-    gap: 1.5rem;
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
-}
-
+/* Main Game Area - all cards in one row */
 .camera-card {
-    flex: 1.2;
-    background: white;
-    border-radius: var(--radius-lg);
-    border: 2px solid var(--color-border);
-    box-shadow: 0 4px 0 var(--color-border);
-    padding: 2.5rem;
+    padding: 1rem;
 }
 
 .feedback-card {
-    flex: 0.8;
-    background: white;
-    border-radius: var(--radius-lg);
-    border: 2px solid var(--color-border);
-    box-shadow: 0 4px 0 var(--color-border);
-    padding: 2.5rem;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    backdrop-filter: blur(8px);
+    border-radius: 28px;
+    border: 3px solid #a3d98a;
+    box-shadow: 0 6px 18px rgba(76, 175, 80, 0.18), 0 4px 0 #b8dfa3;
+    padding: 1.2rem 1rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    transform: translateY(-40px);
 }
 
 /* Camera Card */
@@ -520,8 +503,9 @@ button:active {
     overflow: hidden;
     background: #1a1a1a;
     aspect-ratio: 4/3;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     border: 3px solid var(--color-border);
+    overflow: visible;
 }
 
 #webcam {
@@ -529,6 +513,25 @@ button:active {
     height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
+    background-color: black;
+}
+
+.frame-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    pointer-events: none;
+    
+    width: 115%;  
+    height: 125%; 
+    
+    object-fit: fill;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    
+    filter: contrast(1.1) drop-shadow(0 4px 6px rgba(0,0,0,0.3));
 }
 
 .roi-box {
@@ -625,22 +628,45 @@ button:active {
 }
 
 .btn-scan-main {
-    background: var(--color-blue);
-    color: white;
-    font-size: 1.3rem;
-    font-weight: 700;
-    padding: 1rem 2rem;
-    border-radius: var(--radius-lg);
-    box-shadow: 0 4px 0 var(--color-blue-dark);
+   background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: block;
+    margin: 0 auto; /* Center it */
     width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    max-width: 280px; /* Control the max size here */
+    
+    /* Smooth animation for the click */
+    transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Remove the blue highlight on mobile when tapped */
+    -webkit-tap-highlight-color: transparent;
 }
 
+.btn-scan-main img {
+    width: 100%;
+    height: auto;
+    display: block;
+    
+    /* Optional: Add a subtle drop shadow for depth */
+    filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+}
+
+/* 3. The "Juicy" Click Effect */
+.btn-scan-main:active {
+    /* Shrink slightly to simulate being pressed down */
+    transform: scale(0.95) translateY(4px);
+    
+    /* Reduce shadow to make it look closer to the ground */
+    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.2));
+}
+
+/* 4. (Optional) Hover Effect for Desktop */
+.btn-scan-main:hover {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 15px 20px rgba(0,0,0,0.3)); /* Bigger shadow */
+}
 .btn-scan-main:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -653,7 +679,8 @@ button:active {
 /* Feedback Card */
 .binbin-mascot {
     text-align: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.3rem;
+    order: 2;
 }
 
 #binbin-image {
@@ -663,26 +690,30 @@ button:active {
 }
 
 .feedback-content {
-    background: var(--color-bg-offset);
-    padding: 1.5rem;
-    border-radius: var(--radius-md);
-    border: 2px solid #EEE;
-    min-height: 200px;
+    background: rgba(255, 255, 255, 0.75);
+    padding: 1rem 1.2rem;
+    border-radius: 18px;
+    border: 2px solid #c5e1a5;
+    min-height: auto;
+    order: 1;
+    width: 100%;
+    text-align: center;
 }
 
 .feedback-message {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     text-align: center;
-    color: var(--color-text);
-    margin-bottom: 1rem;
-    line-height: 1.4;
+    color: #3a5a20;
+    margin-bottom: 0.5rem;
+    line-height: 1.35;
+    font-weight: 600;
 }
 
 .result-big {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     font-weight: 700;
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.3rem;
 }
 
 .result-card-name {
@@ -690,12 +721,12 @@ button:active {
 }
 
 .category-result {
-    margin-top: 1rem;
+    margin-top: 0.5rem;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.5rem;
     animation: popIn 0.4s var(--bounce);
 }
 
@@ -724,24 +755,29 @@ button:active {
 
 .confidence-text {
     text-align: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--color-text-light);
-    margin-top: 0.5rem;
+    margin-top: 0.3rem;
     font-weight: 600;
 }
 
 .scanned-history {
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-    border-top: 2px dashed var(--color-border);
+    margin-top: 0.3rem;
+    padding: 0.7rem 1rem;
+    background: #f5edd5;
+    border-radius: 16px;
+    border: 2px solid #e6d9a8;
+    width: 100%;
+    order: 3;
 }
 
 .history-title {
     display: block;
     font-size: 0.85rem;
     font-weight: 700;
-    color: var(--color-text-light);
-    margin-bottom: 0.6rem;
+    color: #5a4e2f;
+    margin-bottom: 0.4rem;
+    text-align: center;
 }
 
 .history-chips {
@@ -749,6 +785,7 @@ button:active {
     flex-wrap: wrap;
     gap: 0.4rem;
     min-height: 30px;
+    justify-content: center;
 }
 
 .scanned-card-chip {
@@ -756,12 +793,12 @@ button:active {
     align-items: center;
     gap: 0.3rem;
     padding: 0.35rem 0.7rem;
-    background: white;
-    border: 2px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid #C8E6C9;
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 700;
-    box-shadow: 0 2px 0 var(--color-border);
+    box-shadow: 0 2px 0 #E8F5E9;
 }
 
 .chip-icon {
@@ -943,19 +980,13 @@ button:active {
    RESPONSIVE
    ============================================ */
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
     .game-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
     }
-    
-    .game-sidebar {
-        flex-direction: row;
-        position: static;
-    }
-    
-    .leaderboard-card,
-    .guide-card {
-        flex: 1;
+
+    .game-screen.learn-mode .game-layout {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -966,12 +997,12 @@ button:active {
         padding: 1rem;
     }
     
-    .logo {
-        font-size: 1.5rem;
+    .game-layout {
+        grid-template-columns: 1fr;
     }
-    
-    .game-sidebar {
-        flex-direction: column;
+
+    .game-screen.learn-mode .game-layout {
+        grid-template-columns: 1fr;
     }
     
     .game-container {
@@ -980,7 +1011,7 @@ button:active {
     
     .camera-card,
     .feedback-card {
-        padding: 1.5rem;
+        padding: 1rem;
     }
 }
 
@@ -1000,4 +1031,112 @@ button:active {
         font-size: 1.1rem;
         padding: 0.8rem 1.5rem;
     }
+}
+
+/* ============================================
+   HEADER LAYOUT
+   ============================================ */
+
+.game-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* Pushes everything to the right by default */
+    padding: 15px 40px;
+    height: 110px;
+    position: relative; /* Critical for centering */
+    z-index: 100;
+}
+
+/* 1. LOGO STYLING (The Centering Fix) */
+.header-left {
+    position: absolute;       /* Ignore other items */
+    left: 50%;                /* Move to middle */
+    transform: translateX(-50%); /* Center it perfectly */
+    top: 50%;                 /* Move to vertical middle */
+    margin-top: -45px;        /* Half of the logo height (90px/2) to center vertically */
+}
+
+.logo-img {
+    height: 135px;
+    width: auto;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,0.1));
+    transition: transform 0.2s;
+}
+
+.logo-img:hover {
+    transform: scale(1.05) rotate(-3deg);
+}
+
+/* 2. RIGHT CONTROLS GROUP */
+.header-right {
+    display: flex;
+    align-items: center;
+    margin-top: 2.5rem;
+    margin-right: 2.5rem;
+    gap: 20px;
+    position: relative;
+    z-index: 10; /* Ensure buttons are clickable over the logo */
+}
+
+/* The Greeting Widget (Sun + Name) */
+.greeting-widget {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: default;
+}
+
+.greeting-img {
+    width: 260px;
+    height: auto;
+    display: block;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(255, 200, 0, 0.3));
+}
+
+.greeting-name {
+    position: absolute;
+    right: 55px;
+    top: 58%;
+    transform: translateY(-20%);
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #2E7D32;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* The Mushroom Button */
+.img-btn-quit {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 80px; /* Mushroom Size */
+    transition: transform 0.1s;
+}
+
+.img-btn-quit img {
+    width: 130%;
+    height: auto;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,0.15));
+}
+
+.img-btn-quit:active {
+    transform: scale(0.9) translateY(4px);
+}
+
+.img-btn-quit:hover {
+    transform: translateY(-2px) rotate(5deg);
+}
+
+/* Responsive Tweak for Tablets */
+@media (max-width: 768px) {
+    .game-header { padding: 10px 20px; height: auto; flex-direction: column; gap: 10px; }
+    .header-right { width: 100%; justify-content: center; }
+    .logo-img { height: 60px; }
 }

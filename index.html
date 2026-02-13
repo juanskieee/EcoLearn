@@ -63,12 +63,24 @@
 
     <div id="game-screen" class="game-screen hidden">
         <header class="game-header">
-            <div class="logo">🌱 EcoLearn</div>
-            <div class="header-center">
-                <div class="student-info">
-                    <span class="student-name" id="student-display-name">Student</span>
+            
+            <div class="header-left">
+                <img src="assets/logo.png" alt="EcoLearn" class="logo-img">
+            </div>
+
+            <div class="header-right">
+                
+                <div class="greeting-widget">
+                    <img src="assets/sun_placeholder.png" alt="Hello" class="greeting-img">
+                    <span class="greeting-name" id="student-display-name">Student</span>
                 </div>
-                <div class="score-board">
+
+                <button class="img-btn-quit" onclick="endSession()" title="Quit Game">
+                    <img src="assets/quit_button.png" alt="Quit">
+                </button>
+            </div>
+
+           <div class="score-board">
                     <div class="score-item">
                         <span class="score-value" id="scan-count">0</span>
                         <span class="score-label">Scans</span>
@@ -78,84 +90,79 @@
                         <span class="score-value" id="correct-count">0</span>
                         <span class="score-label">Correct</span>
                     </div>
-                </div>
             </div>
-            <button class="btn-quit" onclick="endSession()">✖ Quit</button>
         </header>
-
+        
         <main class="game-container">
             <div class="game-layout">
-                <aside class="game-sidebar">
-                    <div class="leaderboard-card">
-                        <h3 class="card-title">🏆 Top Players</h3>
-                        <div id="game-leaderboard-list" class="leaderboard-list"></div>
-                    </div>
-                    
-                    <div class="guide-card">
-                        <h3 class="card-title">📚 Categories</h3>
-                        <div class="category-list">
-                            <div class="category-item compostable">
-                                <span class="cat-icon">🌱</span>
-                                <span>Compostable</span>
-                            </div>
-                            <div class="category-item recyclable">
-                                <span class="cat-icon">♻️</span>
-                                <span>Recyclable</span>
-                            </div>
-                            <div class="category-item non-recyclable">
-                                <span class="cat-icon">🗑️</span>
-                                <span>Non-Recyclable</span>
-                            </div>
-                            <div class="category-item special">
-                                <span class="cat-icon">⚠️</span>
-                                <span>Special Waste</span>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
+                <div class="leaderboard-card">
+                    <h3 class="card-title">🏆 Top Players</h3>
+                    <div id="game-leaderboard-list" class="leaderboard-list"></div>
+                </div>
 
-                <section class="game-main">
-                    <div class="camera-card">
-                        <div class="camera-display">
-                            <video id="webcam" autoplay playsinline muted></video>
-                            <div class="roi-box">
-                                <div class="roi-corner tl"></div>
-                                <div class="roi-corner tr"></div>
-                                <div class="roi-corner bl"></div>
-                                <div class="roi-corner br"></div>
-                            </div>
-                            <div class="scan-line" id="scan-effect"></div>
-                            <div class="camera-overlay">
-                                <span class="camera-status" id="camera-status">Starting camera...</span>
-                            </div>
+                <div class="guide-card">
+                    <img src="assets/leafframe.png" class="guide-frame-overlay" alt="Leaf Frame">
+                    <h3 class="card-title">Categories</h3>
+                    <div class="category-list">
+                        <div class="category-item compostable">
+                            <img src="assets/compostable_icon.png" alt="Compostable" class="cat-img">
+                            <span>Compostable</span>
                         </div>
-                        <button class="btn-scan-main" onclick="captureAndIdentify()" id="scan-btn">
-                            <span class="scan-icon">📸</span>
-                            <span class="scan-text">SCAN CARD</span>
-                        </button>
+                        <div class="category-item recyclable">
+                            <img src="assets/recyclable_icon.png" alt="Recyclable" class="cat-img">
+                            <span>Recyclable</span>
+                        </div>
+                        <div class="category-item non-recyclable">
+                            <img src="assets/non_recyclable_icon.png" alt="Non-Recyclable" class="cat-img">
+                            <span>Non-Recyclable</span>
+                        </div>
+                        <div class="category-item special">
+                            <img src="assets/special_waste_icon.png" alt="Special Waste" class="cat-img">
+                            <span>Special Waste</span>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="feedback-card">
-                        <div class="binbin-mascot">
-                            <img id="binbin-image" src="assets/binbin_neutral.png" alt="Bin-Bin">
+                <div class="camera-card">
+                    <div class="camera-display">
+                        <video id="webcam" autoplay playsinline muted></video>
+                        <img src="assets/woodframe2.png" class="frame-overlay" alt="Camera Frame">
+                        <div class="roi-box">
+                            <div class="roi-corner tl"></div>
+                            <div class="roi-corner tr"></div>
+                            <div class="roi-corner bl"></div>
+                            <div class="roi-corner br"></div>
                         </div>
-                        <div class="feedback-content" id="feedback-content">
-                            <p class="feedback-message" id="result-text">Ready? Show me a card!</p>
-                            <div id="category-display" class="category-result hidden">
-                                <div class="result-badge" id="bin-badge">
-                                    <span class="badge-icon" id="bin-icon">🗑️</span>
-                                    <span class="badge-text" id="bin-badge-label">Put in GREEN bin!</span>
-                                </div>
-                                <div class="category-name" id="category-name">Paper</div>
-                            </div>
-                            <p class="confidence-text hidden" id="confidence-kids"></p>
-                        </div>
-                        <div class="scanned-history" id="scanned-cards-strip">
-                            <span class="history-title">Recent scans:</span>
-                            <div class="history-chips" id="scanned-cards-list"></div>
+                        <div class="scan-line" id="scan-effect"></div>
+                        <div class="camera-overlay">
+                            <span class="camera-status" id="camera-status">Starting camera...</span>
                         </div>
                     </div>
-                </section>
+                    <button class="btn-scan-main" onclick="captureAndIdentify()" id="scan-btn">
+                        <img src="/assets/scandcard.png" alt="SCAN CARD">
+                    </button>
+                </div>
+
+                <div class="feedback-card">
+                    <div class="binbin-mascot">
+                        <img id="binbin-image" src="assets/binbin_neutral.png" alt="Bin-Bin">
+                    </div>
+                    <div class="feedback-content" id="feedback-content">
+                        <p class="feedback-message" id="result-text">Ready? Show me a card!</p>
+                        <div id="category-display" class="category-result hidden">
+                            <div class="result-badge" id="bin-badge">
+                                <span class="badge-icon" id="bin-icon">🗑️</span>
+                                <span class="badge-text" id="bin-badge-label">Put in GREEN bin!</span>
+                            </div>
+                            <div class="category-name" id="category-name">Paper</div>
+                        </div>
+                        <p class="confidence-text hidden" id="confidence-kids"></p>
+                    </div>
+                    <div class="scanned-history" id="scanned-cards-strip">
+                        <span class="history-title">Recent scans:</span>
+                        <div class="history-chips" id="scanned-cards-list"></div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>

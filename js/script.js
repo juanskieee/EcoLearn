@@ -521,8 +521,8 @@ async function captureAndIdentify() {
     
     isScanning = true;
     scanBtn.disabled = true;
-    scanBtn.textContent = '🔄 Scanning...';
-    
+    scanBtn.style.opacity = "0.6"; // Dim the button instead of changing text
+
     // Visual feedback
     scanEffect.classList.add('active');
     setTimeout(() => scanEffect.classList.remove('active'), 1000);
@@ -574,7 +574,7 @@ async function captureAndIdentify() {
         
         isScanning = false;
         scanBtn.disabled = false;
-        scanBtn.innerHTML = '<span class="btn-icon">📸</span><span class="btn-text">SCAN CARD</span>';
+        scanBtn.style.opacity = "1"; // Restore button opacity
     }, 'image/jpeg', 0.95);
 }
 
