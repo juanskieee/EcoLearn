@@ -29,7 +29,7 @@
             </div>
             
             <div class="name-input-container">
-                <label class="mode-title" style="display: block; margin-bottom: 1rem; font-weight: 700; color: var(--color-purple);">Pick a Mode:</label>
+                <label class="mode-title">Pick a Mode:</label>
                 <div class="mode-options">
                     <label class="mode-option">
                         <input type="radio" name="learning-mode" value="instructional" checked>
@@ -47,8 +47,8 @@
                     </label>
                 </div>
                 
-                <div class="nickname-selection" style="margin-top: 2rem;">
-                    <label style="display: block; margin-bottom: 1rem; font-weight: 700;">Who are you?</label>
+                <div class="nickname-selection">
+                    <label>Who are you?</label>
                     <div id="preset-nickname-container" class="nickname-input-group">
                         <select id="preset-nicknames">
                             <option value="">Loading nicknames...</option>
@@ -56,7 +56,7 @@
                     </div>
                 </div>
                 
-                <button class="btn-start" onclick="startGame()" style="margin-top: 2rem;">🚀 PLAY!</button>
+                <button class="btn-start" onclick="startGame()">🚀 PLAY!</button>
             </div>
         </div>
     </div>
@@ -186,9 +186,9 @@
 
     <div id="results-screen" class="results-screen hidden">
         <div class="results-content">
-            <h1 class="results-title" id="results-title" style="font-size:3rem; color:var(--color-green); margin-bottom:1rem;">Awesome!</h1>
+            <h1 class="results-title" id="results-title">Awesome!</h1>
             <div class="binbin-celebrate">
-                <img src="assets/binbin_happy.png" alt="Bin-Bin" style="width:150px;">
+                <img src="assets/binbin_happy.png" alt="Bin-Bin">
             </div>
 
             <!-- Learn Mode Results -->
@@ -238,7 +238,6 @@
         <div class="settings-modal-content" onclick="event.stopPropagation()">
             <img src="assets/leafframe.png" class="settings-frame-overlay" alt="Leaf Frame">
             <div class="settings-modal-header">
-                <img src="assets/settings_button.png" alt="Settings" class="settings-header-img">
                 <h3>Settings</h3>
             </div>
             <div class="settings-modal-body">
@@ -335,6 +334,9 @@
     <audio id="success-sound" preload="auto"></audio>
     <audio id="error-sound" preload="auto"></audio>
     <audio id="background-music" preload="auto" loop></audio>
+
+    <!-- Assessment Choice Modal (Test Mode) -->
+    <div id="assessmentModal" class="assessment-modal">
 
     <script src="js/script.js"></script>
     

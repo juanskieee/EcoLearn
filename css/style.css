@@ -210,6 +210,23 @@ button:active {
     background-position: right 1rem center;
 }
 
+.nickname-selection {
+    margin-top: 2rem;
+}
+
+.nickname-selection label {
+    display: block;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.mode-title {
+    display: block;
+    margin-bottom: 1rem;
+    font-weight: 700;
+    color: var(--color-purple);
+}
+
 .nickname-selection select:focus {
     border-color: var(--color-blue);
     outline: none;
@@ -227,6 +244,7 @@ button:active {
     max-width: 300px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    margin-top: 2rem;
 }
 
 /* ============================================
@@ -239,23 +257,6 @@ button:active {
     flex-direction: column;
     background: url('../assets/background.png') no-repeat center/cover;
     background-attachment: fixed;
-}
-
-.header-center {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.student-info {
-    background: var(--color-purple);
-    color: white;
-    padding: 0.4rem 1.2rem;
-    border-radius: 999px;
-    font-weight: 600;
-    font-size: 0.95rem;
 }
 
 .score-board {
@@ -435,7 +436,6 @@ button:active {
 .card-title-img {
     display: block;
     margin: 0 auto;
-    height: auto;
     width: 150px;
     height: auto;
     position: relative;
@@ -579,11 +579,6 @@ button:active {
     border-color: #A5D6A7;
 }
 
-.cat-icon {
-    font-size: 1.3rem;
-    display: none; /* hide emoji icons, replaced by images */
-}
-
 .cat-img {
     width: 150px;
     height: 150px;
@@ -706,12 +701,6 @@ button:active {
     100% { top: 100%; opacity: 0; }
 }
 
-.camera-overlay {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-}
-
 .live-indicator {
     position: absolute;
     left: 50%;
@@ -726,23 +715,6 @@ button:active {
     display: none;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
     animation: pulseLive 2s ease-in-out infinite;
-}
-
-.camera-status {
-    background: rgba(0,0,0,0.7);
-    color: white;
-    padding: 0.4rem 0.8rem;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.camera-status.live {
-    background: var(--color-green);
-}
-
-.camera-status.error {
-    background: var(--color-red);
 }
 
 .btn-scan-main {
@@ -788,10 +760,6 @@ button:active {
 .btn-scan-main:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-}
-
-.scan-icon {
-    font-size: 1.5rem;
 }
 
 /* Feedback Card */
@@ -1208,6 +1176,10 @@ button:active {
     font-size: 3rem;
     color: var(--color-green);
     margin-bottom: 1rem;
+}
+
+.binbin-celebrate img {
+    width: 150px;
 }
 
 .results-stats {
@@ -1764,13 +1736,6 @@ button:active {
     margin-bottom: 1.5rem;
     position: relative;
     z-index: 1;
-}
-
-.settings-header-img {
-    width: 60px;
-    height: 60px;
-    object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12));
 }
 
 .settings-modal-header h3 {

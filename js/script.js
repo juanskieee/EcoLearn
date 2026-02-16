@@ -1,5 +1,5 @@
 // ============================================
-// ECOLEARN - IMPROVED GAME LOGIC
+// ECOLEARN - GAME LOGIC
 // ============================================
 
 const API_URL = 'http://localhost:5000';
@@ -21,9 +21,6 @@ let assessmentQuestion = null;
 const welcomeScreen = document.getElementById('welcome-screen');
 const gameScreen = document.getElementById('game-screen');
 const resultsScreen = document.getElementById('results-screen');
-const learnEndScreen = document.getElementById('learn-end-screen');
-
-const studentNameInput = document.getElementById('student-name');
 const studentDisplayName = document.getElementById('student-display-name');
 
 const video = document.getElementById('webcam');
@@ -49,16 +46,16 @@ const successSound = document.getElementById('success-sound');
 const errorSound = document.getElementById('error-sound');
 
 // ============================================
-// UI INITIALIZATION AND HANDLERS
+// UI INITIALIZATION
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeWelcomeScreen();
-    loadSystemSettings(); // Load ROI color and other settings
+    loadSystemSettings();
     setupSessionEndOnUnload();
-    restoreSessionIfExists(); // Check for saved session
-    loadAudioViaFetch();      // Load audio via fetch to bypass IDM
-    loadAudioSettings();      // Restore mute/unmute settings
+    restoreSessionIfExists();
+    loadAudioViaFetch();
+    loadAudioSettings();
 });
 
 // Session persistence - save/restore from localStorage
@@ -82,13 +79,11 @@ function restoreSessionIfExists() {
     
     try {
         const sessionData = JSON.parse(savedSession);
-        // Check if session is less than 2 hours old
         if (Date.now() - sessionData.timestamp > 2 * 60 * 60 * 1000) {
             localStorage.removeItem('ecolearn_session');
             return;
         }
         
-        // Restore session state
         sessionId = sessionData.sessionId;
         studentNickname = sessionData.studentNickname;
         sessionMode = sessionData.sessionMode;
@@ -96,7 +91,6 @@ function restoreSessionIfExists() {
         correctScans = sessionData.correctScans || 0;
         scannedCardsHistory = sessionData.scannedCardsHistory || [];
         
-        // Update UI
         studentDisplayName.textContent = studentNickname;
         scanCountEl.textContent = totalScans;
         correctCountEl.textContent = correctScans;
@@ -110,10 +104,8 @@ function restoreSessionIfExists() {
             }).join('');
         }
         
-        // Configure UI and show game screen
         configureGameForMode(sessionMode);
         
-        // Add learn-mode class to hide leaderboard in instructional mode
         if (sessionMode === 'instructional') {
             gameScreen.classList.add('learn-mode');
         } else {
@@ -124,13 +116,9 @@ function restoreSessionIfExists() {
         gameScreen.classList.remove('hidden');
         loadLeaderboardForIndex('game', studentNickname);
         
-        // Initialize camera
         initCamera();
         setInitialGameMessage();
-        
-        console.log('✅ Session restored:', sessionId);
     } catch (error) {
-        console.error('Failed to restore session:', error);
         localStorage.removeItem('ecolearn_session');
     }
 }
@@ -139,7 +127,6 @@ function clearSessionStorage() {
     localStorage.removeItem('ecolearn_session');
 }
 
-// End session when user leaves (but not on refresh)
 function setupSessionEndOnUnload() {
     // Only show warning on refresh if session is active
     window.addEventListener('beforeunload', function(e) {
@@ -178,10 +165,6 @@ async function loadSystemSettings() {
 }
 
 function initializeWelcomeScreen() {
-    // Load preset nicknames
-    loadPresetNicknames();
-    
-    // Set up mode selection handlers
     const modeRadios = document.querySelectorAll('input[name="learning-mode"]');
     modeRadios.forEach(radio => {
         radio.addEventListener('change', handleModeChange);
@@ -192,7 +175,6 @@ async function loadPresetNicknames() {
     const presetSelect = document.getElementById('preset-nicknames');
     
     try {
-        console.log('🔄 Loading preset nicknames...');
         const response = await fetch(`${API_URL}/admin/nicknames`);
         
         if (!response.ok) {
@@ -200,37 +182,26 @@ async function loadPresetNicknames() {
         }
         
         const data = await response.json();
-        console.log('📝 Nicknames response:', data);
         
         if (data.status === 'success' && data.nicknames && data.nicknames.length > 0) {
-            // Handle both object format (new) and string format (legacy)
             presetSelect.innerHTML = '<option value="">Choose a nickname...</option>' +
                 data.nicknames.map(item => {
-                    // If item is an object, extract nickname property; otherwise use as string
                     const nickname = typeof item === 'object' ? item.nickname : item;
                     return `<option value="${nickname}">${nickname}</option>`;
                 }).join('');
-            console.log(`✅ Loaded ${data.nicknames.length} nicknames`);
         } else {
             presetSelect.innerHTML = '<option value="">No nicknames available - contact admin</option>';
-            console.log('⚠️ No nicknames found');
         }
     } catch (error) {
-        console.error('❌ Failed to load preset nicknames:', error);
         presetSelect.innerHTML = '<option value="">Unable to load nicknames - contact admin</option>';
     }
 }
 
-function handleNicknameTypeChange(event) {
-    // This function is no longer needed since we only have preset nicknames
-}
-
 function handleModeChange(event) {
     sessionMode = event.target.value;
-    console.log('🎮 Mode selected:', sessionMode);
 }
 
-// Category Configuration (kindergarten-friendly: short, clear, high-contrast)
+// Category Configuration
 const categories = {
     'Compostable': {
         color: '#10B981',
@@ -270,6 +241,14 @@ const categories = {
 const SCANNED_CARDS_MAX = 3;
 let scannedCardsHistory = [];
 
+// Category icon mapping
+const categoryIcons = {
+    'Compostable': 'assets/compostable_icon.png',
+    'Recyclable': 'assets/recyclable_icon.png',
+    'Non-Recyclable': 'assets/non_recyclable_icon.png',
+    'Special Waste': 'assets/special_waste_icon.png'
+};
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -297,9 +276,7 @@ async function initCamera() {
         });
         video.srcObject = stream;
         setCameraStatus('Live', false);
-        console.log('✅ Camera initialized');
     } catch (err) {
-        console.error('❌ Camera error:', err);
         setCameraStatus('Camera unavailable', true);
         alert('Camera access denied. Please allow camera access to use EcoLearn.');
     }
@@ -358,7 +335,6 @@ async function startGame() {
         
         if (data.status === 'success') {
             sessionId = data.session_id;
-            console.log(`✅ Session started: ${sessionId} (${sessionMode} mode)`);
             
             // Reset game state
             totalScans = 0;
@@ -366,7 +342,6 @@ async function startGame() {
             assessmentStep = 'scan';
             currentScanResult = null;
             
-            // Save session to localStorage
             saveSessionToStorage();
             
             // Transition to game
@@ -374,10 +349,8 @@ async function startGame() {
             gameScreen.classList.remove('hidden');
             loadLeaderboardForIndex('game', studentNickname);
 
-            // Initialize camera
             await initCamera();
             
-            // Set initial game state message
             setInitialGameMessage();
         } else {
             alert('Failed to start session. Please check if the server is running.');
@@ -584,7 +557,6 @@ async function loadLeaderboardForIndex(which, highlightNickname) {
             </div>`;
         }).join('');
     } catch (err) {
-        console.warn('Leaderboard load failed:', err);
         container.innerHTML = '<p class="leaderboard-empty">Could not load leaderboard.</p>';
     }
 }
@@ -647,7 +619,6 @@ async function captureAndIdentify() {
             });
             
             const data = await response.json();
-            console.log('Classification result:', data);
             
             if (sessionMode === 'instructional') {
                 handleInstructionalMode(data);
@@ -656,7 +627,6 @@ async function captureAndIdentify() {
             }
             
         } catch (err) {
-            console.error('❌ Classification error:', err);
             showErrorFeedback({ reason: 'connection_error' });
         }
         
@@ -691,10 +661,10 @@ async function logInstructionalScan(data) {
         });
         
         if (response.ok) {
-            console.log('✅ Instructional scan logged');
+            // Scan logged successfully
         }
     } catch (error) {
-        console.error('❌ Failed to log instructional scan:', error);
+        // Failed to log scan
     }
 }
 
@@ -713,7 +683,6 @@ function handleAssessmentMode(data) {
 
 function addToScannedCards(cardName, icon, category) {
     if (!scannedCardsListEl || !cardName) return;
-    // Build image path from category and card name
     const categoryFolder = category ? category.replace(/ /g, '-') : '';
     const cardFileName = (cardName || '').replace(/ /g, '_');
     const imgPath = categoryFolder ? ('assets/' + categoryFolder + '/' + cardFileName + '.webp') : '';
@@ -726,7 +695,6 @@ function addToScannedCards(cardName, icon, category) {
         return '';
     }).join('');
     
-    // Save progress
     saveSessionToStorage();
 }
 
@@ -734,10 +702,7 @@ function showInstructionalFeedback(data) {
     const category = data.category;
     const config = categories[category];
     
-    if (!config) {
-        console.error('Unknown category:', category);
-        return;
-    }
+    if (!config) return;
     
     successSound.play().catch(function() {});
     
@@ -773,13 +738,6 @@ function showInstructionalFeedback(data) {
     const learnCatIcon = document.getElementById('learn-category-icon');
     const learnCatName = document.getElementById('learn-category-name');
     if (learnCatInfo && learnCatName) {
-        // Map category to icon image
-        const categoryIcons = {
-            'Compostable': 'assets/compostable_icon.png',
-            'Recyclable': 'assets/recyclable_icon.png',
-            'Non-Recyclable': 'assets/non_recyclable_icon.png',
-            'Special Waste': 'assets/special_waste_icon.png'
-        };
         // Set icon next to card image
         if (learnCatIcon) {
             learnCatIcon.src = categoryIcons[category] || '';
@@ -915,10 +873,10 @@ async function selectAssessmentChoice(selectedCategory) {
         });
         const data = await response.json();
         if (data.status === 'success') {
-            console.log('✅ Assessment submitted');
+            // Assessment submitted successfully
         }
     } catch (error) {
-        console.error('❌ Assessment submit error:', error);
+        // Assessment submit failed
     }
     
     // 3. Update stats locally
@@ -949,7 +907,7 @@ async function selectAssessmentChoice(selectedCategory) {
     }, 1200);
 }
 
-function showAssessmentCorrect(selectedCategory) {
+function showErrorFeedback(data) {
     const config = categories[selectedCategory];
     const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
     
@@ -975,12 +933,6 @@ function showAssessmentCorrect(selectedCategory) {
         learnCardDisplay.className = 'learn-card-display cat-' + selectedCategory.toLowerCase().replace(/ /g, '-');
     }
     // Set category icon
-    const categoryIcons = {
-        'Compostable': 'assets/compostable_icon.png',
-        'Recyclable': 'assets/recyclable_icon.png',
-        'Non-Recyclable': 'assets/non_recyclable_icon.png',
-        'Special Waste': 'assets/special_waste_icon.png'
-    };
     if (learnCatIcon) learnCatIcon.src = categoryIcons[selectedCategory] || '';
     
     // Show category label
@@ -1025,12 +977,6 @@ function showAssessmentIncorrect(selectedCategory, correctCategory) {
         learnCardDisplay.className = 'learn-card-display cat-' + correctCategory.toLowerCase().replace(/ /g, '-');
     }
     // Set category icon
-    const categoryIcons = {
-        'Compostable': 'assets/compostable_icon.png',
-        'Recyclable': 'assets/recyclable_icon.png',
-        'Non-Recyclable': 'assets/non_recyclable_icon.png',
-        'Special Waste': 'assets/special_waste_icon.png'
-    };
     if (learnCatIcon) learnCatIcon.src = categoryIcons[correctCategory] || '';
     
     // Show category label
@@ -1065,11 +1011,6 @@ function resetAssessmentState() {
     
     // Ensure modal is closed
     closeAssessmentModal();
-}
-
-function showSuccessFeedback(data) {
-    // This function is now replaced by showInstructionalFeedback
-    showInstructionalFeedback(data);
 }
 
 function showErrorFeedback(data) {
@@ -1359,10 +1300,6 @@ document.addEventListener('keydown', (e) => {
 // STARTUP
 // ============================================
 
-console.log('🌱 EcoLearn System Ready!');
-console.log('📡 API URL:', API_URL);
-
-// Check server connection
 fetch(`${API_URL}/health`)
     .then(r => r.json())
     .then(data => {
