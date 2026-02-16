@@ -1,0 +1,428 @@
+/* ============================================
+   ECOLEARN ADMIN - ALL MODALS
+   Cards Modal, Add Card Modal, Confirmation,
+   Logout, Remove Nickname
+   ============================================ */
+
+/* ============================================
+   CARDS MODAL (View Category Cards)
+   ============================================ */
+.cards-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: background 0.2s ease, backdrop-filter 0.2s ease;
+    will-change: background, backdrop-filter;
+}
+
+.cards-modal.active {
+    display: flex !important;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+}
+
+.cards-modal .modal-content {
+    background: white;
+    border-radius: var(--radius-card);
+    max-width: 900px;
+    width: 95%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
+    position: relative;
+    will-change: transform, opacity;
+}
+
+.cards-modal.active .modal-content {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.cards-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    border-bottom: 2px solid #A5D6A7;
+}
+
+.cards-modal .modal-header h4 {
+    font-size: 1.4rem;
+    color: #2E7D32;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.cards-modal .modal-close {
+    background: white;
+    border: 2px solid #A5D6A7;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #558B2F;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cards-modal .modal-close:hover {
+    background: var(--color-red);
+    border-color: var(--color-red);
+    color: white;
+    transform: rotate(90deg);
+}
+
+.cards-modal .modal-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem;
+    overflow-y: auto;
+    background: #fafafa;
+}
+
+.cards-modal .modal-cards-grid::-webkit-scrollbar       { width: 8px; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-track  { background: #f1f1f1; border-radius: 4px; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb  { background: #ccc; border-radius: 4px; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+/* --- Modal Card Item --- */
+.modal-card-item {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 2px solid var(--color-border);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    content-visibility: auto;
+    contain-intrinsic-size: 140px 140px;
+    contain: layout style paint;
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+.modal-card-item:hover {
+    border-color: #2E7D32;
+    transform: translateY(-4px) translateZ(0);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.modal-card-item img {
+    width: 100%;
+    height: 80px;
+    object-fit: contain;
+    margin-bottom: 0.75rem;
+    border-radius: 6px;
+    aspect-ratio: 4/5;
+    background: #f8f9fa;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+.modal-card-item .card-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.5rem;
+    color: var(--color-text);
+}
+
+.modal-card-item .btn-pdf {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: var(--color-green);
+    color: white;
+    border: none;
+    border-radius: var(--radius-btn);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    box-shadow: 0 2px 0 var(--color-green-dark);
+}
+
+.modal-card-item .btn-pdf:hover  { transform: translateY(-1px); box-shadow: 0 3px 0 var(--color-green-dark); }
+.modal-card-item .btn-pdf:active { transform: translateY(2px); box-shadow: none; }
+
+/* ============================================
+   ADD CARD MODAL
+   ============================================ */
+.add-card-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    padding: 2rem;
+    backdrop-filter: blur(5px);
+    overflow: hidden;
+}
+
+.add-card-modal.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.add-card-modal-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    position: relative;
+    transform: scale(0.9) translateY(20px);
+    opacity: 0;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.add-card-modal.active .add-card-modal-content {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.add-card-modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    border-bottom: 2px solid #A5D6A7;
+    border-radius: 16px 16px 0 0;
+    flex-shrink: 0;
+}
+
+.add-card-modal .modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.add-card-modal .modal-header h4 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #2E7D32;
+}
+
+.add-card-modal .modal-close {
+    background: white;
+    border: 2px solid #A5D6A7;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #558B2F;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-card-modal .modal-close:hover {
+    background: var(--color-red);
+    border-color: var(--color-red);
+    color: white;
+    transform: rotate(90deg);
+}
+
+/* ============================================
+   CONFIRMATION MODAL (Config Save, Logout, Remove)
+   ============================================ */
+.confirmation-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    z-index: 10001;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: background 0.2s ease, backdrop-filter 0.2s ease;
+}
+
+.confirmation-modal.active {
+    display: flex !important;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+}
+
+.confirmation-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 500px;
+    width: 95%;
+    padding: 2rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
+}
+
+.confirmation-modal.active .confirmation-content {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.confirmation-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.confirmation-header .icon { font-size: 3rem; }
+.confirmation-header h3    { margin: 0; font-size: 1.5rem; color: #2E7D32; }
+
+.confirmation-body { margin-bottom: 2rem; }
+.confirmation-body p { margin: 0 0 1rem 0; color: #558B2F; line-height: 1.6; font-size: 1.1rem; text-align: center; }
+.confirmation-body p strong { font-weight: 700; color: #2E7D32; }
+
+.confirmation-body .text-muted {
+    color: #64748b;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.confirmation-text {
+    font-size: 1.1rem;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.confirmation-warning,
+.config-changes-warning {
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--color-red);
+}
+
+/* --- Config Changes List --- */
+.config-changes-list {
+    background: #F9FAFB;
+    border: 2px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.config-change-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #E5E7EB;
+    font-size: 0.9rem;
+}
+
+.config-change-item:last-child { border-bottom: none; }
+.config-change-item .key   { font-weight: 600; color: var(--color-text); }
+.config-change-item .value { color: #2E7D32; font-weight: 700; }
+
+/* --- Confirmation Actions --- */
+.confirmation-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.btn-confirm-cancel {
+    background: #F3F4F6;
+    color: #6B7280;
+    border: 2px solid #E5E7EB;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-btn);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-confirm-cancel:hover { background: #E5E7EB; border-color: #D1D5DB; }
+.btn-confirm-cancel.hidden { display: none; }
+
+.btn-confirm-save {
+    background: var(--color-green);
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: var(--radius-btn);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 3px 0 var(--color-green-dark);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-confirm-save:hover  { transform: translateY(-1px); box-shadow: 0 4px 0 var(--color-green-dark); }
+.btn-confirm-save:active { transform: translateY(3px); box-shadow: none; }
+
+/* --- Danger variant --- */
+.btn-confirm-save.danger {
+    background: #EF4444;
+    box-shadow: 0 3px 0 #DC2626;
+}
+
+.btn-confirm-save.danger:hover  { box-shadow: 0 4px 0 #DC2626; }
+.btn-confirm-save.danger:active { transform: translateY(3px); box-shadow: none; }
+
+/* --- Logout Modal specifics --- */
+#logoutModal .confirmation-header .icon { color: #EF4444; }
+#logoutModal .confirmation-header h3    { color: var(--color-text); }
+#logoutModal .btn-confirm-save { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
+#logoutModal .btn-confirm-save:hover { box-shadow: 0 4px 0 #DC2626; }
+
+/* --- Remove Nickname Modal specifics --- */
+#remove-nickname-modal .confirmation-header .icon { color: #EF4444; }
+#remove-nickname-modal .confirmation-header h3    { color: var(--color-text); }
+#remove-nickname-modal .btn-confirm-save { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
+#remove-nickname-modal .btn-confirm-save:hover  { box-shadow: 0 4px 0 #DC2626; }
+#remove-nickname-modal .btn-confirm-save:active { transform: translateY(3px); box-shadow: none; }
+
+#remove-nickname-name {
+    color: var(--color-text);
+    font-size: 1.2rem;
+    text-align: center;
+    font-weight: 700;
+    margin: 1rem 0;
+}

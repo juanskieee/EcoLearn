@@ -8,8 +8,17 @@ require_once 'check_session.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/x-icon" href="../assets/binbin.ico">
     <title>EcoLearn Admin Dashboard</title>
-    <link rel="stylesheet" href="../css/admin_style.css">
-    <link rel="stylesheet" href="../css/admin_overview_styles.css">
+    <!-- Modular Admin CSS (clean, organized, no spaghetti) -->
+    <link rel="stylesheet" href="../css/admin_base.css">
+    <link rel="stylesheet" href="../css/admin_sidebar.css">
+    <link rel="stylesheet" href="../css/admin_overview.css">
+    <link rel="stylesheet" href="../css/admin_tables.css">
+    <link rel="stylesheet" href="../css/admin_matrix.css">
+    <link rel="stylesheet" href="../css/admin_assets.css">
+    <link rel="stylesheet" href="../css/admin_cards.css">
+    <link rel="stylesheet" href="../css/admin_config.css">
+    <link rel="stylesheet" href="../css/admin_nicknames.css">
+    <link rel="stylesheet" href="../css/admin_modals.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
@@ -83,7 +92,7 @@ require_once 'check_session.php';
             <header class="top-header">
                 <h1>Dashboard</h1>
                 <div class="user-profile">
-                    <span class="admin-badge">👤 <?php echo htmlspecialchars($_SESSION['admin_username']); ?></span>
+                    <img src="../assets/admin.png" class="admin-badge" alt="Admin">
                 </div>
             </header>
 

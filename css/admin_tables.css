@@ -1,0 +1,118 @@
+/* ============================================
+   ECOLEARN ADMIN - TABLES (Logs & Leaderboard)
+   ============================================ */
+
+/* --- Modern Table --- */
+.modern-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.modern-table th {
+    text-align: left;
+    padding: 1rem;
+    color: #558B2F;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    border-bottom: 2px solid rgba(165, 214, 167, 0.5);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.modern-table td {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(165, 214, 167, 0.25);
+    font-weight: 500;
+}
+
+/* --- Table Containers (scrollable inside section-card) --- */
+.logs-table-container,
+.leaderboard-table-container {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.logs-table-container::-webkit-scrollbar,
+.leaderboard-table-container::-webkit-scrollbar { width: 8px; }
+
+.logs-table-container::-webkit-scrollbar-track,
+.leaderboard-table-container::-webkit-scrollbar-track { background: rgba(200, 230, 201, 0.3); border-radius: 4px; }
+
+.logs-table-container::-webkit-scrollbar-thumb,
+.leaderboard-table-container::-webkit-scrollbar-thumb { background: rgba(46, 125, 50, 0.2); border-radius: 4px; }
+
+.logs-table-container::-webkit-scrollbar-thumb:hover,
+.leaderboard-table-container::-webkit-scrollbar-thumb:hover { background: rgba(46, 125, 50, 0.35); }
+
+/* --- Table Empty State --- */
+.table-empty-state {
+    padding: 3rem 2rem !important;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 12px;
+}
+
+.table-empty-state .empty-state-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.table-empty-state .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+.table-empty-state strong {
+    font-size: 1.1rem;
+    color: #2E7D32;
+}
+
+.table-empty-state small {
+    font-size: 0.9rem;
+    color: #558B2F;
+    max-width: 400px;
+}
+
+/* --- Leaderboard Specifics --- */
+.rank-cell {
+    font-size: 1.2rem;
+}
+
+.accuracy-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+/* --- Health Pills --- */
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.health-pill {
+    background: rgba(255, 255, 255, 0.7);
+    padding: 1rem;
+    border-radius: var(--radius-btn);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    border: 2px solid rgba(165, 214, 167, 0.3);
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ccc;
+}
+
+.dot.ok  { background: var(--color-green); box-shadow: 0 0 5px var(--color-green); }
+.dot.err { background: var(--color-red); }

@@ -1,0 +1,65 @@
+/* ============================================
+   ECOLEARN ADMIN - CONFUSION MATRIX
+   ============================================ */
+
+.matrix-container {
+    overflow-x: auto;
+    margin-top: 1rem;
+}
+
+.confusion-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.confusion-matrix-table th,
+.confusion-matrix-table td {
+    padding: 0.75rem;
+    text-align: center;
+    border: 1px solid rgba(165, 214, 167, 0.4);
+}
+
+.confusion-matrix-table .corner-cell {
+    background: rgba(255, 255, 255, 0.5);
+    font-weight: 600;
+    text-align: left;
+    font-size: 0.8rem;
+}
+
+.confusion-matrix-table .pred-header,
+.confusion-matrix-table .actual-header {
+    background: rgba(232, 245, 225, 0.7);
+    font-weight: 600;
+    color: #2E7D32;
+}
+
+.confusion-matrix-table .cell-correct {
+    background: #D1FAE5;
+    color: #065F46;
+    font-weight: 700;
+}
+
+.confusion-matrix-table .cell-error {
+    background: #FEE2E2;
+    color: #991B1B;
+    font-weight: 600;
+}
+
+.confusion-matrix-table .cell-zero {
+    color: #aaa;
+}
+
+.confusion-matrix-table .row-total,
+.confusion-matrix-table .total-header {
+    background: rgba(200, 230, 201, 0.4);
+    font-weight: 600;
+    color: #2E7D32;
+}
+
+.category-accuracy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}

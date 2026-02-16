@@ -1,0 +1,217 @@
+/* ============================================
+   ECOLEARN ADMIN - SYSTEM CONFIGURATION
+   ============================================ */
+
+.config-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.config-header-left { flex: 1; }
+.config-header-left .section-title { margin-bottom: 0.5rem; }
+.config-header-left .subtitle { margin: 0; }
+
+.config-warning-box {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 243, 205, 0.85);
+    border: 2px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: flex-start;
+    max-width: fit-content;
+    gap: 0.5rem;
+}
+
+.config-warning-box .warning-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.config-warning-box .warning-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.config-warning-box .warning-text strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #92400E;
+}
+
+.config-warning-box .warning-text span {
+    color: #92400E;
+    line-height: 1.4;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    overflow: auto;
+    max-width: 100%;
+    gap: 1.5rem;
+}
+
+.config-card {
+    background: rgba(255, 255, 255, 0.85);
+    padding: 1.5rem;
+    border: 2px solid rgba(165, 214, 167, 0.4);
+    border-radius: var(--radius-card);
+    transition: all 0.2s;
+}
+
+.config-card:hover {
+    border-color: #A5D6A7;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.1);
+}
+
+.config-card .config-icon  { font-size: 2rem; margin-bottom: 0.5rem; }
+.config-card .config-title { font-weight: 700; font-size: 1rem; color: #2E7D32; margin-bottom: 0.25rem; }
+.config-card .config-desc  { font-size: 0.8rem; color: #558B2F; margin-bottom: 1rem; }
+
+.config-card .config-control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.config-card .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.config-card input[type="range"] {
+    flex: 1;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, #2E7D32 0%, #2E7D32 var(--value), #E5E7EB var(--value), #E5E7EB 100%);
+    border-radius: 4px;
+    outline: none;
+}
+
+.config-card input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #2E7D32;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s;
+}
+
+.config-card input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+.config-card .value-display {
+    min-width: 60px;
+    padding: 0.5rem;
+    background: rgba(232, 245, 225, 0.7);
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 700;
+    color: #2E7D32;
+}
+
+/* --- Save Section --- */
+.config-save-section {
+    margin-top: 2rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: var(--radius-card);
+    border: 2px solid #A5D6A7;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.1);
+}
+
+.config-save-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.config-save-info .icon { font-size: 2rem; }
+.config-save-info .text h4 { margin: 0 0 0.25rem 0; font-size: 1rem; color: #2E7D32; }
+.config-save-info .text p  { margin: 0; color: #558B2F; font-size: 0.8rem; }
+
+.btn-save-all-config {
+    background: linear-gradient(135deg, var(--color-green) 0%, #45a802 100%);
+    color: white;
+    border: none;
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius-btn);
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 0 var(--color-green-dark);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.btn-save-all-config:hover    { transform: translateY(-2px); box-shadow: 0 6px 0 var(--color-green-dark); }
+.btn-save-all-config:active   { transform: translateY(4px); box-shadow: none; }
+.btn-save-all-config:disabled { background: #9CA3AF; cursor: not-allowed; box-shadow: 0 4px 0 #6B7280; transform: none; }
+
+/* --- Number Input --- */
+.number-input-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 2px solid rgba(165, 214, 167, 0.5);
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.num-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: rgba(232, 245, 225, 0.6);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #2E7D32;
+}
+
+.num-btn:hover { background: #2E7D32; color: white; }
+.num-btn.minus { border-right: 1px solid rgba(165, 214, 167, 0.4); }
+.num-btn.plus  { border-left: 1px solid rgba(165, 214, 167, 0.4); }
+
+.config-number-input {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #2E7D32;
+    background: white;
+    padding: 0.5rem;
+}
+
+.config-number-input:focus { outline: none; }
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+    .config-save-section { flex-direction: column; text-align: center; }
+    .config-save-info { flex-direction: column; }
+    .btn-save-all-config { width: 100%; justify-content: center; }
+}
