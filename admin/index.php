@@ -37,42 +37,42 @@ require_once 'check_session.php';
             <ul class="nav-links">
                 <li>
                     <a href="javascript:void(0)" class="nav-item active" onclick="showTab('overview')">
-                        <span class="icon">📊</span> Overview
+                        Overview
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('confusion-matrix')">
-                        <span class="icon">🔢</span> Confusion Matrix
+                        Confusion Matrix
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('leaderboard')">
-                        <span class="icon">🏆</span> Leaderboard
+                        Leaderboard
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('asset-repository')">
-                        <span class="icon">🖼️</span> Asset Repository
+                        Asset Repository
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('one-shot')">
-                        <span class="icon">📸</span> Card Manager
+                        Card Manager
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('config')">
-                        <span class="icon">⚙️</span> System Config
+                        System Config
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('logs')">
-                        <span class="icon">📜</span> Scan Logs
+                        Scan Logs
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('nicknames')">
-                        <span class="icon">👥</span> Students
+                        Students
                     </a>
                 </li>
             </ul>
@@ -86,6 +86,9 @@ require_once 'check_session.php';
                 </a>
             </div>
         </nav>
+
+        <!-- Leaf Divider Frame -->
+        <img src="../assets/leaf_divider.png" class="sidebar-divider" alt="Decorative Leaf Divider">
 
         <main class="main-content">
             
@@ -141,9 +144,8 @@ require_once 'check_session.php';
             </section>
 
             <!-- CONFUSION MATRIX SECTION -->
-            <section id="confusion-matrix" class="section-card tab-content">
+            <section id="confusion-matrix" class="section-card scrollable tab-content">
                 <h3 class="section-title">🔢 Confusion Matrix</h3>
-                <p class="subtitle">Visualizes algorithm performance by comparing Actual vs Predicted classifications to identify error patterns.</p>
                 
                 <div id="confusion-matrix-container" class="matrix-container">
                     <div class="loading-cell"><div class="spinner"></div> Loading matrix data...</div>

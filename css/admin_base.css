@@ -152,7 +152,6 @@ button:active {
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0;
-    margin-bottom: 1rem;
 }
 
 .top-header h1 {
@@ -163,7 +162,7 @@ button:active {
 }
 
 .admin-badge {
-    height: 45px;
+    height: 70px;
     width: auto;
     filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
     transition: all 0.2s;
@@ -198,7 +197,7 @@ button:active {
 .section-card.scrollable.active {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 140px);
+    height: calc(100vh - 160px);
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -213,7 +212,7 @@ button:active {
 .section-title {
     font-size: 1.5rem;
     font-weight: 700;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     color: #2E7D32;
     text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
 }
@@ -570,6 +569,7 @@ button:active {
 /* --- Responsive --- */
 @media (max-width: 900px) {
     .sidebar { width: 80px; padding: 1rem 0.5rem; }
+    .sidebar-divider { left: calc(80px - 15px); width: 40px; }
     .nav-item span:not(.icon), .logo-icon + h2, .sidebar-footer button, .subtitle { display: none; }
     .logo-icon { margin: 0 auto 2rem; }
     .main-content { margin-left: 80px; padding: 1.5rem; width: calc(100% - 80px); }
