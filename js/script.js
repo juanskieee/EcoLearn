@@ -57,6 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSystemSettings(); // Load ROI color and other settings
     setupSessionEndOnUnload();
     restoreSessionIfExists(); // Check for saved session
+    loadAudioViaFetch();      // Load audio via fetch to bypass IDM
+    loadAudioSettings();      // Restore mute/unmute settings
 });
 
 // Session persistence - save/restore from localStorage
@@ -101,7 +103,10 @@ function restoreSessionIfExists() {
         
         if (scannedCardsListEl && scannedCardsHistory.length > 0) {
             scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
-                return '<span class="scanned-card-chip"><span class="chip-icon">' + escapeHtml(c.icon) + '</span>' + escapeHtml(c.name) + '</span>';
+                if (c.imgPath) {
+                    return '<span class="scanned-card-chip" title="' + escapeHtml(c.name) + '"><img src="' + escapeHtml(c.imgPath) + '" alt="' + escapeHtml(c.name) + '"></span>';
+                }
+                return '';
             }).join('');
         }
         
@@ -262,7 +267,7 @@ const categories = {
 };
 
 // Last N scanned cards for positive reinforcement (preschool)
-const SCANNED_CARDS_MAX = 12;
+const SCANNED_CARDS_MAX = 3;
 let scannedCardsHistory = [];
 
 // ============================================
@@ -270,11 +275,15 @@ let scannedCardsHistory = [];
 // ============================================
 
 function setCameraStatus(status, isError) {
-    const el = document.getElementById('camera-status');
-    if (!el) return;
-    el.textContent = status;
-    el.classList.toggle('live', !isError && status.toLowerCase().indexOf('live') >= 0);
-    el.classList.toggle('error', !!isError);
+    const liveIndicator = document.getElementById('live-status');
+    if (!liveIndicator) return;
+    
+    // Show live indicator only when camera is live
+    if (!isError && status.toLowerCase().indexOf('live') >= 0) {
+        liveIndicator.style.display = 'block';
+    } else {
+        liveIndicator.style.display = 'none';
+    }
 }
 
 async function initCamera() {
@@ -320,6 +329,9 @@ async function startGame() {
     studentDisplayName.textContent = name;
     scannedCardsHistory = [];
     if (scannedCardsListEl) scannedCardsListEl.innerHTML = '';
+
+    // Start background music immediately (must be in user-gesture context)
+    startBackgroundMusic();
 
     // Configure UI based on mode
     configureGameForMode(selectedMode);
@@ -378,20 +390,27 @@ async function startGame() {
 }
 
 function configureGameForMode(mode) {
-    const scoreDisplay = document.querySelector('.score-board');
+    const headerLeftScore = document.querySelector('.header-left-score');
     
     if (mode === 'instructional') {
         // Hide scores in instructional mode
-        scoreDisplay.style.display = 'none';
+        if (headerLeftScore) headerLeftScore.style.display = 'none';
     } else {
         // Show scores in assessment mode
-        scoreDisplay.style.display = 'flex';
+        if (headerLeftScore) headerLeftScore.style.display = 'flex';
     }
 }
 
 function setInitialGameMessage() {
+    // Hide learn-mode elements initially
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCatInfo = document.getElementById('learn-category-info');
+    if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
+    if (learnCatInfo) learnCatInfo.classList.add('hidden');
+    categoryDisplay.classList.add('hidden');
+    
     if (sessionMode === 'instructional') {
-        resultText.innerHTML = '<strong>LEARN MODE:</strong><br>Place a card and I\'ll show you its magical home!';
+        resultText.innerHTML = '<strong>LEARN MODE:</strong><br>Place a card and I\'ll tell you about it!';
         binbinImg.src = 'assets/binbin_neutral.png';
     } else {
         resultText.innerHTML = '<strong>TEST MODE:</strong><br>Place a card, then YOU choose which bin it belongs to!';
@@ -400,9 +419,32 @@ function setInitialGameMessage() {
 }
 
 async function endSession() {
-    if (!confirm('Are you sure you want to finish learning?')) {
-        return;
+    // Show quit confirmation modal instead of browser confirm()
+    showQuitModal();
+}
+
+function showQuitModal() {
+    const modal = document.getElementById('quitModal');
+    if (modal) {
+        modal.classList.add('active');
     }
+}
+
+function closeQuitModal() {
+    const modal = document.getElementById('quitModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function handleQuitModalBackdropClick(event) {
+    if (event.target === event.currentTarget) {
+        closeQuitModal();
+    }
+}
+
+async function confirmQuit() {
+    closeQuitModal();
     
     // Clear saved session
     clearSessionStorage();
@@ -418,6 +460,14 @@ async function endSession() {
         if (data.status === 'success') {
             // Show results
             showResults(data.stats);
+        } else {
+            // Backend error (e.g., no active session) - show results with local stats
+            console.warn('Session end returned error:', data.message);
+            showResults({
+                total_scans: totalScans,
+                correct_scans: correctScans,
+                accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+            });
         }
         
     } catch (err) {
@@ -435,26 +485,54 @@ function showResults(stats) {
     gameScreen.classList.add('hidden');
     resultsScreen.classList.remove('hidden');
     
-    document.getElementById('final-scans').textContent = stats.total_scans;
-    document.getElementById('final-correct').textContent = stats.correct_scans;
-    document.getElementById('final-accuracy').textContent = stats.accuracy + '%';
+    const learnResults = document.getElementById('learn-results');
+    const testResults = document.getElementById('test-results');
+    const resultsTitle = document.getElementById('results-title');
     
-    // Personalized message
-    const accuracy = stats.accuracy;
-    let message = '';
-    
-    if (accuracy >= 90) {
-        message = '🌟 You\'re an eco-champion! Amazing job!';
-    } else if (accuracy >= 75) {
-        message = '👍 Great work! You\'re getting really good at this!';
-    } else if (accuracy >= 50) {
-        message = '💪 Good effort! Keep practicing and you\'ll be a pro!';
+    if (sessionMode === 'instructional') {
+        // Learn mode: show encouraging message, no stats/leaderboard
+        learnResults.classList.remove('hidden');
+        testResults.classList.add('hidden');
+        resultsTitle.textContent = 'Great Exploring!';
+        
+        const learnMessage = document.getElementById('learn-results-message');
+        const scanCount = stats.total_scans || 0;
+        if (scanCount >= 10) {
+            learnMessage.textContent = '🌟 Wow! You explored ' + scanCount + ' cards today! You\'re becoming a waste sorting expert!';
+        } else if (scanCount >= 5) {
+            learnMessage.textContent = '🌱 Great job! You explored ' + scanCount + ' cards! Keep learning about waste sorting!';
+        } else if (scanCount > 0) {
+            learnMessage.textContent = '👋 Nice start! You explored ' + scanCount + ' card' + (scanCount > 1 ? 's' : '') + '! Come back to learn more!';
+        } else {
+            learnMessage.textContent = '🌱 Thanks for visiting! Come back to explore waste sorting cards!';
+        }
     } else {
-        message = '🌱 Nice try! Practice makes perfect. Try again!';
+        // Test mode: show full stats and leaderboard
+        learnResults.classList.add('hidden');
+        testResults.classList.remove('hidden');
+        resultsTitle.textContent = 'Awesome!';
+        
+        document.getElementById('final-scans').textContent = stats.total_scans;
+        document.getElementById('final-correct').textContent = stats.correct_scans;
+        document.getElementById('final-accuracy').textContent = stats.accuracy + '%';
+        
+        // Personalized message
+        const accuracy = stats.accuracy;
+        let message = '';
+        
+        if (accuracy >= 90) {
+            message = '🌟 You\'re an eco-champion! Amazing job!';
+        } else if (accuracy >= 75) {
+            message = '👍 Great work! You\'re getting really good at this!';
+        } else if (accuracy >= 50) {
+            message = '💪 Good effort! Keep practicing and you\'ll be a pro!';
+        } else {
+            message = '🌱 Nice try! Practice makes perfect. Try again!';
+        }
+        
+        document.getElementById('results-message').textContent = message;
+        loadLeaderboardForIndex('results', studentNickname);
     }
-    
-    document.getElementById('results-message').textContent = message;
-    loadLeaderboardForIndex('results', studentNickname);
 }
 
 // ============================================
@@ -485,7 +563,12 @@ async function loadLeaderboardForIndex(which, highlightNickname) {
         const data = await response.json();
 
         if (data.status !== 'success' || !data.leaderboard || data.leaderboard.length === 0) {
-            container.innerHTML = '<p class="leaderboard-empty">No rankings yet. Complete a session in Test mode to appear here!</p>';
+            container.innerHTML = `
+                <div class="leaderboard-empty-state">
+                    <span class="empty-icon">🏆</span>
+                    <span class="empty-title">No rankings yet!</span>
+                    <span class="empty-subtitle">Complete a session in Test mode to be the first on the board!</span>
+                </div>`;
             return;
         }
 
@@ -530,6 +613,11 @@ async function captureAndIdentify() {
     // Set thinking state
     resultText.textContent = "Hmm... let me think...";
     categoryDisplay.classList.add('hidden');
+    // Hide learn-mode elements while scanning
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCatInfo = document.getElementById('learn-category-info');
+    if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
+    if (learnCatInfo) learnCatInfo.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
     binbinImg.style.transform = "scale(0.9) rotate(-5deg)";
     binbinImg.src = 'assets/binbin_neutral.png';
@@ -579,10 +667,8 @@ async function captureAndIdentify() {
 }
 
 function handleInstructionalMode(data) {
-    // In instructional mode, no scores are tracked, just learning feedback
+    // In instructional mode, backend auto-logs scan transactions in /classify
     if (data.status === 'success') {
-        // Log the successful scan for instructional mode
-        logInstructionalScan(data);
         showInstructionalFeedback(data);
     } else {
         showErrorFeedback(data);
@@ -625,12 +711,19 @@ function handleAssessmentMode(data) {
     }
 }
 
-function addToScannedCards(cardName, icon) {
+function addToScannedCards(cardName, icon, category) {
     if (!scannedCardsListEl || !cardName) return;
-    scannedCardsHistory.unshift({ name: cardName, icon: icon || '✅' });
+    // Build image path from category and card name
+    const categoryFolder = category ? category.replace(/ /g, '-') : '';
+    const cardFileName = (cardName || '').replace(/ /g, '_');
+    const imgPath = categoryFolder ? ('assets/' + categoryFolder + '/' + cardFileName + '.webp') : '';
+    scannedCardsHistory.unshift({ name: cardName, icon: icon || '✅', category: category || '', imgPath: imgPath });
     if (scannedCardsHistory.length > SCANNED_CARDS_MAX) scannedCardsHistory.pop();
     scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
-        return '<span class="scanned-card-chip"><span class="chip-icon">' + escapeHtml(c.icon) + '</span>' + escapeHtml(c.name) + '</span>';
+        if (c.imgPath) {
+            return '<span class="scanned-card-chip" title="' + escapeHtml(c.name) + '"><img src="' + escapeHtml(c.imgPath) + '" alt="' + escapeHtml(c.name) + '"></span>';
+        }
+        return '';
     }).join('');
     
     // Save progress
@@ -654,80 +747,162 @@ function showInstructionalFeedback(data) {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
     
-    // Kindergarten-friendly: big "Correct!" and simple line
-    resultText.innerHTML = '<strong class="result-big">Correct!</strong><br><span class="result-card-name">It\'s a ' + escapeHtml(data.card_name || 'card') + '!</span>';
+    // Build friendly card name (replace underscores with spaces)
+    const friendlyName = (data.card_name || 'card').replace(/_/g, ' ');
     
-    categoryDisplay.classList.remove('hidden');
-    categoryName.textContent = category;
-    categoryName.style.color = config.color;
-    binIcon.textContent = config.icon;
-    if (binBadge) {
-        binBadge.style.background = config.color;
-        binBadge.style.borderColor = config.color;
+    // Show card name as educational info
+    resultText.innerHTML = '<span class="result-card-name">It\'s a <strong>' + escapeHtml(friendlyName) + '</strong>!</span>';
+    
+    // Show eco-card image
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCardImage = document.getElementById('learn-card-image');
+    if (learnCardDisplay && learnCardImage) {
+        // Build image path: assets/{Category}/{Card_Name}.webp
+        const categoryFolder = category.replace(/ /g, '-'); // "Special Waste" -> "Special-Waste"
+        // Ensure card filename uses underscores (file naming convention)
+        const cardFileName = (data.card_name || 'card').replace(/ /g, '_');
+        learnCardImage.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        learnCardImage.alt = friendlyName;
+        learnCardDisplay.classList.remove('hidden');
+        // Add category class for colored border
+        learnCardDisplay.className = 'learn-card-display cat-' + category.toLowerCase().replace(/ /g, '-');
     }
-    if (binBadgeLabel) binBadgeLabel.textContent = config.shortMessage || ('Put in the ' + category + ' bin!');
     
-    addToScannedCards(data.card_name, config.icon);
-    
-    if (confidenceKidsEl) {
-        confidenceKidsEl.classList.remove('hidden');
-        confidenceKidsEl.textContent = (data.confidence >= 0.8) ? 'Bin-Bin is sure!' : 'Bin-Bin thinks so!';
+    // Show learn-mode category info (icon + label)
+    const learnCatInfo = document.getElementById('learn-category-info');
+    const learnCatIcon = document.getElementById('learn-category-icon');
+    const learnCatName = document.getElementById('learn-category-name');
+    if (learnCatInfo && learnCatName) {
+        // Map category to icon image
+        const categoryIcons = {
+            'Compostable': 'assets/compostable_icon.png',
+            'Recyclable': 'assets/recyclable_icon.png',
+            'Non-Recyclable': 'assets/non_recyclable_icon.png',
+            'Special Waste': 'assets/special_waste_icon.png'
+        };
+        // Set icon next to card image
+        if (learnCatIcon) {
+            learnCatIcon.src = categoryIcons[category] || '';
+        }
+        learnCatName.textContent = category;
+        learnCatName.style.color = config.color;
+        learnCatInfo.classList.remove('hidden');
     }
+    
+    // Hide test-mode elements
+    categoryDisplay.classList.add('hidden');
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+    
+    addToScannedCards(data.card_name, config.icon, category);
+    
+    // Speak it in Tagalog
+    speak('Ito ay isang ' + friendlyName + '! Ilagay ito sa ' + category + '.');
+    
+    // Auto-reset to default after a delay
+    setTimeout(function() {
+        resetInstructionalFeedback();
+    }, 20000); // 20 seconds
+}
+
+function resetInstructionalFeedback() {
+    // Only reset if still in instructional mode and not currently scanning
+    if (sessionMode !== 'instructional' || isScanning) return;
+    
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCatInfo = document.getElementById('learn-category-info');
+    if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
+    if (learnCatInfo) learnCatInfo.classList.add('hidden');
+    categoryDisplay.classList.add('hidden');
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+    
+    resultText.innerHTML = '<strong>LEARN MODE:</strong><br>Place a card and I\'ll tell you about it!';
+    binbinImg.src = 'assets/binbin_neutral.png';
+    binbinImg.style.transform = 'scale(1) rotate(0deg)';
 }
 
 function showAssessmentIdentification(data) {
     // Show the item but don't reveal the answer yet
     binbinImg.src = 'assets/binbin_neutral.png';
-    resultText.innerHTML = `<strong>I see: ${data.card_name}</strong><br>Which category do you think this belongs to?`;
+    resultText.innerHTML = `<strong>I see: ${escapeHtml(data.card_name)}</strong><br>Waiting for your answer...`;
     
     // Hide the automatic category display
     categoryDisplay.classList.add('hidden');
     
-    // Show assessment choices
-    showAssessmentChoices();
+    // Show assessment modal
+    showAssessmentModal(data.card_name);
 }
 
-function showAssessmentChoices() {
-    // Create category choice buttons
-    const choicesHtml = `
-        <div class="assessment-choices">
-            <h4>Choose the correct bin:</h4>
-            <div class="choice-buttons">
-                <button class="choice-btn" onclick="selectAssessmentChoice('Compostable')" data-category="Compostable">
-                    🌱 Compostable
-                </button>
-                <button class="choice-btn" onclick="selectAssessmentChoice('Recyclable')" data-category="Recyclable">
-                    ♻️ Recyclable
-                </button>
-                <button class="choice-btn" onclick="selectAssessmentChoice('Non-Recyclable')" data-category="Non-Recyclable">
-                    🗑️ Non-Recyclable
-                </button>
-                <button class="choice-btn" onclick="selectAssessmentChoice('Special Waste')" data-category="Special Waste">
-                    ⚠️ Special Waste
-                </button>
-            </div>
-        </div>
-    `;
+function showAssessmentModal(cardName) {
+    const modal = document.getElementById('assessmentModal');
+    const itemNameEl = document.getElementById('assessment-item-name');
+    const binbinEl = document.getElementById('assessment-binbin');
+    const cardImgEl = document.getElementById('assessment-card-image');
     
-    // Add choices to the feedback panel
-    const feedbackContent = document.querySelector('.feedback-content');
+    // Set card name in modal
+    const friendlyName = (cardName || 'card').replace(/_/g, ' ');
+    itemNameEl.innerHTML = '<strong>' + escapeHtml(friendlyName) + '</strong>';
+    binbinEl.src = 'assets/binbin_neutral.png';
     
-    // Remove existing choices if any
-    const existingChoices = feedbackContent.querySelector('.assessment-choices');
-    if (existingChoices) {
-        existingChoices.remove();
+    // Show card image in modal
+    if (cardImgEl && currentScanResult) {
+        const categoryFolder = currentScanResult.category.replace(/ /g, '-');
+        const cardFileName = (cardName || '').replace(/ /g, '_');
+        cardImgEl.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        cardImgEl.alt = friendlyName;
     }
     
-    feedbackContent.insertAdjacentHTML('beforeend', choicesHtml);
+    // Reset all choice states
+    const choices = modal.querySelectorAll('.assessment-choice');
+    choices.forEach(c => {
+        c.classList.remove('choice-correct', 'choice-incorrect', 'choice-dimmed');
+        c.style.pointerEvents = 'auto';
+    });
+    
+    // Show modal
+    modal.classList.add('active');
+}
+
+function closeAssessmentModal() {
+    const modal = document.getElementById('assessmentModal');
+    modal.classList.remove('active');
 }
 
 async function selectAssessmentChoice(selectedCategory) {
     if (!currentScanResult) return;
     
     const correctCategory = currentScanResult.category;
+    const isCorrect = selectedCategory === correctCategory;
     
+    // 1. Immediately flash result on modal choices
+    const modal = document.getElementById('assessmentModal');
+    const modalChoices = modal.querySelectorAll('.assessment-choice');
+    const modalBinbin = document.getElementById('assessment-binbin');
+    
+    modalChoices.forEach(c => {
+        const cat = c.getAttribute('onclick').match(/'([^']+)'/)[1];
+        if (cat === selectedCategory && isCorrect) {
+            c.classList.add('choice-correct');
+        } else if (cat === selectedCategory && !isCorrect) {
+            c.classList.add('choice-incorrect');
+        } else if (cat === correctCategory && !isCorrect) {
+            c.classList.add('choice-correct');
+        } else {
+            c.classList.add('choice-dimmed');
+        }
+        c.style.pointerEvents = 'none';
+    });
+    
+    // Update modal Bin-Bin
+    if (isCorrect) {
+        modalBinbin.src = 'assets/binbin_happy.png';
+        successSound.play().catch(function() {});
+    } else {
+        modalBinbin.src = 'assets/binbin_warning.png';
+        errorSound.play().catch(function() {});
+    }
+    
+    // 2. Submit to backend (fire-and-forget for UI speed)
     try {
-        // Submit assessment to backend
         const response = await fetch(`${API_URL}/assessment/submit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -738,117 +913,158 @@ async function selectAssessmentChoice(selectedCategory) {
                 confidence: currentScanResult.confidence
             })
         });
-        
         const data = await response.json();
-        
         if (data.status === 'success') {
-            const isCorrect = data.is_correct;
-            
-            // Update stats
-            totalScans++;
-            scanCountEl.textContent = totalScans;
-            
-            if (isCorrect) {
-                correctScans++;
-                correctCountEl.textContent = correctScans;
-                showAssessmentCorrect(selectedCategory);
-            } else {
-                showAssessmentIncorrect(selectedCategory, correctCategory);
-            }
-            
-            // Update accuracy
-            const accuracy = totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 100;
-            if (accuracyEl) accuracyEl.textContent = accuracy + '%';
-            
-            // Save progress
-            saveSessionToStorage();
-        } else {
-            console.error('Assessment submit failed:', data.message);
-            // Fall back to local handling
-            const isCorrect = selectedCategory === correctCategory;
-            if (isCorrect) {
-                showAssessmentCorrect(selectedCategory);
-            } else {
-                showAssessmentIncorrect(selectedCategory, correctCategory);
-            }
+            console.log('✅ Assessment submitted');
         }
-        
     } catch (error) {
         console.error('❌ Assessment submit error:', error);
-        // Fall back to local handling
-        const isCorrect = selectedCategory === correctCategory;
+    }
+    
+    // 3. Update stats locally
+    totalScans++;
+    scanCountEl.textContent = totalScans;
+    if (isCorrect) {
+        correctScans++;
+        correctCountEl.textContent = correctScans;
+    }
+    const accuracy = totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 100;
+    if (accuracyEl) accuracyEl.textContent = accuracy + '%';
+    saveSessionToStorage();
+    
+    // 4. After brief flash, close modal and show result in feedback card
+    setTimeout(() => {
+        closeAssessmentModal();
+        
         if (isCorrect) {
             showAssessmentCorrect(selectedCategory);
         } else {
             showAssessmentIncorrect(selectedCategory, correctCategory);
         }
-    }
-    
-    // Reset for next scan
-    setTimeout(() => {
-        resetAssessmentState();
-    }, 3000);
+        
+        // Reset for next scan after 20 seconds
+        setTimeout(() => {
+            resetAssessmentState();
+        }, 20000);
+    }, 1200);
 }
 
 function showAssessmentCorrect(selectedCategory) {
     const config = categories[selectedCategory];
-    successSound.play().catch(function() {});
+    const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
+    
     binbinImg.src = config.mascot;
     binbinImg.style.transform = "scale(1.15) rotate(5deg)";
     setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
-    resultText.innerHTML = '<strong class="result-big">Correct!</strong><br><span class="result-card-name">Yes! ' + (config.shortMessage || 'Put it in the ' + selectedCategory + ' bin!') + '</span>';
-    categoryDisplay.classList.remove('hidden');
-    categoryName.textContent = selectedCategory;
-    categoryName.style.color = config.color;
-    binIcon.textContent = config.icon;
-    if (binBadge) {
-        binBadge.style.background = config.color;
-        binBadge.style.borderColor = config.color;
+    
+    // Show result text
+    resultText.innerHTML = '<span class="result-card-name"><strong class="result-big" style="color: var(--color-green);">Correct!</strong> It\'s a <strong>' + escapeHtml(friendlyName) + '</strong>!</span>';
+    
+    // Show eco-card image + category icon (same as learn mode)
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCardImage = document.getElementById('learn-card-image');
+    const learnCatIcon = document.getElementById('learn-category-icon');
+    if (learnCardDisplay && learnCardImage && currentScanResult) {
+        const categoryFolder = selectedCategory.replace(/ /g, '-');
+        const cardFileName = (currentScanResult.card_name || 'card').replace(/ /g, '_');
+        learnCardImage.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        learnCardImage.alt = friendlyName;
+        learnCardDisplay.classList.remove('hidden');
+        learnCardDisplay.className = 'learn-card-display cat-' + selectedCategory.toLowerCase().replace(/ /g, '-');
     }
-    if (binBadgeLabel) binBadgeLabel.textContent = config.shortMessage || ('Put in the ' + selectedCategory + ' bin!');
-    if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, config.icon);
-    if (confidenceKidsEl) { confidenceKidsEl.classList.add('hidden'); }
-    var choices = document.querySelector('.assessment-choices');
-    if (choices) choices.remove();
+    // Set category icon
+    const categoryIcons = {
+        'Compostable': 'assets/compostable_icon.png',
+        'Recyclable': 'assets/recyclable_icon.png',
+        'Non-Recyclable': 'assets/non_recyclable_icon.png',
+        'Special Waste': 'assets/special_waste_icon.png'
+    };
+    if (learnCatIcon) learnCatIcon.src = categoryIcons[selectedCategory] || '';
+    
+    // Show category label
+    const learnCatInfo = document.getElementById('learn-category-info');
+    const learnCatName = document.getElementById('learn-category-name');
+    if (learnCatInfo && learnCatName) {
+        learnCatName.textContent = selectedCategory;
+        learnCatName.style.color = config.color;
+        learnCatInfo.classList.remove('hidden');
+    }
+    
+    // Hide old test-mode elements
+    categoryDisplay.classList.add('hidden');
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+    
+    if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, config.icon, selectedCategory);
 }
 
 function showAssessmentIncorrect(selectedCategory, correctCategory) {
     var correctConfig = categories[correctCategory];
-    errorSound.play().catch(function() {});
+    const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
+    
     binbinImg.src = 'assets/binbin_warning.png';
     binbinImg.style.transform = "scale(1.15) rotate(-5deg)";
     setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
     }, 500);
-    resultText.innerHTML = '<strong class="result-big">Not quite!</strong><br><span class="result-card-name">This goes in the <strong>' + escapeHtml(correctCategory) + '</strong> bin. Try again next time!</span>';
-    categoryDisplay.classList.remove('hidden');
-    categoryName.textContent = correctCategory;
-    categoryName.style.color = correctConfig.color;
-    binIcon.textContent = correctConfig.icon;
-    if (binBadge) {
-        binBadge.style.background = correctConfig.color;
-        binBadge.style.borderColor = correctConfig.color;
+    
+    // Show result text
+    resultText.innerHTML = '<span class="result-card-name"><strong class="result-big" style="color: var(--color-red);">Not quite!</strong> It\'s a <strong>' + escapeHtml(friendlyName) + '</strong>.<br>It goes in <strong>' + escapeHtml(correctCategory) + '</strong>!</span>';
+    
+    // Show eco-card image + category icon (same as learn mode)
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCardImage = document.getElementById('learn-card-image');
+    const learnCatIcon = document.getElementById('learn-category-icon');
+    if (learnCardDisplay && learnCardImage && currentScanResult) {
+        const categoryFolder = correctCategory.replace(/ /g, '-');
+        const cardFileName = (currentScanResult.card_name || 'card').replace(/ /g, '_');
+        learnCardImage.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        learnCardImage.alt = friendlyName;
+        learnCardDisplay.classList.remove('hidden');
+        learnCardDisplay.className = 'learn-card-display cat-' + correctCategory.toLowerCase().replace(/ /g, '-');
     }
-    if (binBadgeLabel) binBadgeLabel.textContent = correctConfig.shortMessage || ('Put in the ' + correctCategory + ' bin!');
+    // Set category icon
+    const categoryIcons = {
+        'Compostable': 'assets/compostable_icon.png',
+        'Recyclable': 'assets/recyclable_icon.png',
+        'Non-Recyclable': 'assets/non_recyclable_icon.png',
+        'Special Waste': 'assets/special_waste_icon.png'
+    };
+    if (learnCatIcon) learnCatIcon.src = categoryIcons[correctCategory] || '';
+    
+    // Show category label
+    const learnCatInfo = document.getElementById('learn-category-info');
+    const learnCatName = document.getElementById('learn-category-name');
+    if (learnCatInfo && learnCatName) {
+        learnCatName.textContent = correctCategory;
+        learnCatName.style.color = correctConfig.color;
+        learnCatInfo.classList.remove('hidden');
+    }
+    
+    // Hide old test-mode elements
+    categoryDisplay.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
-    var choices = document.querySelector('.assessment-choices');
-    if (choices) choices.remove();
 }
 
 function resetAssessmentState() {
     assessmentStep = 'scan';
     currentScanResult = null;
     
-    // Reset UI
-    resultText.textContent = "Ready for the next item? Place a card in the camera!";
+    // Reset UI - hide learn-mode elements used for feedback
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCatInfo = document.getElementById('learn-category-info');
+    if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
+    if (learnCatInfo) learnCatInfo.classList.add('hidden');
     categoryDisplay.classList.add('hidden');
-    binbinImg.src = 'assets/binbin_neutral.png';
+    if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
     
-    // Remove any remaining choices
-    const choices = document.querySelector('.assessment-choices');
-    if (choices) choices.remove();
+    resultText.innerHTML = '<strong>TEST MODE:</strong><br>Place a card, then YOU choose which bin it belongs to!';
+    binbinImg.src = 'assets/binbin_neutral.png';
+    binbinImg.style.transform = 'scale(1) rotate(0deg)';
+    
+    // Ensure modal is closed
+    closeAssessmentModal();
 }
 
 function showSuccessFeedback(data) {
@@ -859,6 +1075,13 @@ function showSuccessFeedback(data) {
 function showErrorFeedback(data) {
     // Play error sound
     errorSound.play().catch(e => console.log('Audio play failed:', e));
+    
+    // Hide learn-mode elements
+    const learnCardDisplay = document.getElementById('learn-card-display');
+    const learnCatInfo = document.getElementById('learn-category-info');
+    if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
+    if (learnCatInfo) learnCatInfo.classList.add('hidden');
+    categoryDisplay.classList.add('hidden');
     
     // Animate Bin-Bin
     binbinImg.src = 'assets/binbin_confused.png';
@@ -871,13 +1094,13 @@ function showErrorFeedback(data) {
     let message = '';
     
     if (data.reason === 'insufficient_features') {
-        message = "I can't see the card clearly. Can you hold it still in the yellow box?";
+        message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng yellow box.";
     } else if (data.reason === 'low_confidence') {
-        message = "Hmm, I'm not sure about this one. Try showing me a clearer card!";
+        message = "Hmm, hindi ako sigurado dito. Subukan mong ipakita ang mas malinaw na card!";
     } else if (data.reason === 'connection_error') {
-        message = "Oops! I lost connection. Is the server running?";
+        message = "Naku! Nawala ang connection. Naka-on ba ang server?";
     } else {
-        message = "I don't recognize that card. Make sure it's one of our eco-cards!";
+        message = "Hindi ko nakikilala ang card na ito. Siguraduhing isa ito sa ating eco-cards!";
     }
     
     resultText.textContent = message;
@@ -887,20 +1110,220 @@ function showErrorFeedback(data) {
 }
 
 // ============================================
-// SPEECH SYNTHESIS
+// BACKGROUND MUSIC
 // ============================================
 
-function speak(text) {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.9;
-        utterance.pitch = 1.1;
-        utterance.volume = 0.8;
-        
-        window.speechSynthesis.speak(utterance);
+const bgMusic = document.getElementById('background-music');
+const BG_MUSIC_NORMAL_VOL = 0.3;  // Normal background volume
+const BG_MUSIC_DUCK_VOL = 0.08;   // Ducked volume during speech
+const BG_MUSIC_FADE_MS = 300;     // Fade duration in ms
+
+// Load audio files via fetch + blob URL to prevent IDM from intercepting
+function loadAudioViaFetch() {
+    const audioMap = [
+        { id: 'background-music', src: 'assets/background_music.mp3' },
+        { id: 'success-sound', src: 'assets/success.mp3' },
+        { id: 'error-sound', src: 'assets/error.mp3' }
+    ];
+    audioMap.forEach(function(item) {
+        const el = document.getElementById(item.id);
+        if (!el) return;
+        fetch(item.src)
+            .then(function(r) { return r.blob(); })
+            .then(function(blob) {
+                el.src = URL.createObjectURL(blob);
+            })
+            .catch(function(e) {
+                console.log('Audio load fallback for ' + item.id + ':', e);
+                el.src = item.src; // Fallback to direct src
+            });
+    });
+}
+
+function startBackgroundMusic() {
+    if (!bgMusic) return;
+    if (!bgMusic.paused) return; // Already playing
+    bgMusic.volume = BG_MUSIC_NORMAL_VOL;
+    bgMusic.play().catch(e => console.log('Background music autoplay blocked:', e));
+}
+
+// Auto-start music on first user interaction (any click/touch/key)
+function initBackgroundMusicOnInteraction() {
+    function handler() {
+        startBackgroundMusic();
+        document.removeEventListener('click', handler);
+        document.removeEventListener('touchstart', handler);
+        document.removeEventListener('keydown', handler);
     }
+    document.addEventListener('click', handler);
+    document.addEventListener('touchstart', handler);
+    document.addEventListener('keydown', handler);
+}
+initBackgroundMusicOnInteraction();
+
+// Mute states
+let bgmMuted = false;
+let sfxMuted = false;
+
+// Load saved settings from localStorage
+function loadAudioSettings() {
+    const saved = localStorage.getItem('ecolearn_audio_settings');
+    if (saved) {
+        try {
+            const settings = JSON.parse(saved);
+            bgmMuted = settings.bgmMuted || false;
+            sfxMuted = settings.sfxMuted || false;
+            
+            // Apply to audio elements
+            if (bgMusic) bgMusic.muted = bgmMuted;
+            if (successSound) successSound.muted = sfxMuted;
+            if (errorSound) errorSound.muted = sfxMuted;
+            
+            // Update toggle checkboxes
+            const bgmToggle = document.getElementById('toggle-bgm');
+            const sfxToggle = document.getElementById('toggle-sfx');
+            if (bgmToggle) bgmToggle.checked = !bgmMuted;
+            if (sfxToggle) sfxToggle.checked = !sfxMuted;
+        } catch (e) {
+            console.log('Could not load audio settings:', e);
+        }
+    }
+}
+
+function saveAudioSettings() {
+    localStorage.setItem('ecolearn_audio_settings', JSON.stringify({
+        bgmMuted: bgmMuted,
+        sfxMuted: sfxMuted
+    }));
+}
+
+function toggleBGM(enabled) {
+    bgmMuted = !enabled;
+    if (bgMusic) {
+        bgMusic.muted = bgmMuted;
+    }
+    saveAudioSettings();
+}
+
+function toggleSFX(enabled) {
+    sfxMuted = !enabled;
+    if (successSound) successSound.muted = sfxMuted;
+    if (errorSound) errorSound.muted = sfxMuted;
+    saveAudioSettings();
+}
+
+// Settings Modal
+function openSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.classList.add('active');
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function handleSettingsBackdropClick(event) {
+    if (event.target === event.currentTarget) closeSettingsModal();
+}
+
+function duckBackgroundMusic() {
+    if (!bgMusic || bgMusic.paused) return;
+    // Smooth fade down
+    const fadeStep = (BG_MUSIC_NORMAL_VOL - BG_MUSIC_DUCK_VOL) / 10;
+    let vol = bgMusic.volume;
+    const fadeDown = setInterval(() => {
+        vol -= fadeStep;
+        if (vol <= BG_MUSIC_DUCK_VOL) {
+            bgMusic.volume = BG_MUSIC_DUCK_VOL;
+            clearInterval(fadeDown);
+        } else {
+            bgMusic.volume = vol;
+        }
+    }, BG_MUSIC_FADE_MS / 10);
+}
+
+function restoreBackgroundMusic() {
+    if (!bgMusic || bgMusic.paused) return;
+    // Smooth fade up
+    const fadeStep = (BG_MUSIC_NORMAL_VOL - BG_MUSIC_DUCK_VOL) / 10;
+    let vol = bgMusic.volume;
+    const fadeUp = setInterval(() => {
+        vol += fadeStep;
+        if (vol >= BG_MUSIC_NORMAL_VOL) {
+            bgMusic.volume = BG_MUSIC_NORMAL_VOL;
+            clearInterval(fadeUp);
+        } else {
+            bgMusic.volume = vol;
+        }
+    }, BG_MUSIC_FADE_MS / 10);
+}
+
+// ============================================
+// SPEECH SYNTHESIS (Tagalog via gTTS)
+// ============================================
+
+let currentTTSAudio = null;
+
+function speak(text) {
+    // Stop any currently playing TTS audio
+    if (currentTTSAudio) {
+        currentTTSAudio.pause();
+        currentTTSAudio = null;
+        restoreBackgroundMusic();
+    }
+    
+    if (!text) return;
+    
+    // Duck the background music
+    duckBackgroundMusic();
+    
+    fetch(API_URL + '/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, lang: 'tl' })
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('TTS failed');
+        return response.json();
+    })
+    .then(data => {
+        if (!data.audio) throw new Error('No audio data');
+        // Decode base64 to audio blob
+        const byteChars = atob(data.audio);
+        const byteArray = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+            byteArray[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([byteArray], { type: 'audio/mpeg' });
+        const audioUrl = URL.createObjectURL(blob);
+        currentTTSAudio = new Audio(audioUrl);
+        currentTTSAudio.volume = 0.8;
+        currentTTSAudio.play().catch(e => {
+            console.log('TTS play failed:', e);
+            restoreBackgroundMusic();
+        });
+        currentTTSAudio.onended = function() {
+            URL.revokeObjectURL(audioUrl);
+            currentTTSAudio = null;
+            restoreBackgroundMusic();
+        };
+    })
+    .catch(err => {
+        console.warn('gTTS unavailable, falling back to browser TTS:', err);
+        // Fallback to browser speech synthesis
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.1;
+            utterance.volume = 0.8;
+            utterance.onend = function() { restoreBackgroundMusic(); };
+            window.speechSynthesis.speak(utterance);
+        } else {
+            restoreBackgroundMusic();
+        }
+    });
 }
 
 // ============================================
@@ -908,6 +1331,15 @@ function speak(text) {
 // ============================================
 
 document.addEventListener('keydown', (e) => {
+    // ESC to close quit modal
+    if (e.code === 'Escape') {
+        const quitModal = document.getElementById('quitModal');
+        if (quitModal && quitModal.classList.contains('active')) {
+            closeQuitModal();
+            return;
+        }
+    }
+    
     // Space or Enter to scan
     if ((e.code === 'Space' || e.code === 'Enter') && !welcomeScreen.classList.contains('hidden')) {
         e.preventDefault();

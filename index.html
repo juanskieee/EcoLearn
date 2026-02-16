@@ -64,6 +64,20 @@
     <div id="game-screen" class="game-screen hidden">
         <header class="game-header">
             
+            <div class="header-left-score">
+                <div class="score-board">
+                    <div class="score-item">
+                        <span class="score-value" id="scan-count">0</span>
+                        <span class="score-label">Scans</span>
+                    </div>
+                    <div class="score-divider"></div>
+                    <div class="score-item">
+                        <span class="score-value" id="correct-count">0</span>
+                        <span class="score-label">Correct</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="header-left">
                 <img src="assets/logo.png" alt="EcoLearn" class="logo-img">
             </div>
@@ -74,35 +88,27 @@
                     <img src="assets/sun_placeholder.png" alt="Hello" class="greeting-img">
                     <span class="greeting-name" id="student-display-name">Student</span>
                 </div>
-
+                <button class="btn-settings" onclick="openSettingsModal()" title="Settings">
+                    <img src="assets/settings_button.png" alt="Settings">
+                </button>
                 <button class="img-btn-quit" onclick="endSession()" title="Quit Game">
                     <img src="assets/quit_button.png" alt="Quit">
                 </button>
             </div>
 
-           <div class="score-board">
-                    <div class="score-item">
-                        <span class="score-value" id="scan-count">0</span>
-                        <span class="score-label">Scans</span>
-                    </div>
-                    <div class="score-divider"></div>
-                    <div class="score-item">
-                        <span class="score-value" id="correct-count">0</span>
-                        <span class="score-label">Correct</span>
-                    </div>
-            </div>
         </header>
         
         <main class="game-container">
             <div class="game-layout">
                 <div class="leaderboard-card">
+                    <img src="assets/leafframe.png" class="leaderboard-frame-overlay" alt="Leaf Frame">
                     <h3 class="card-title">🏆 Top Players</h3>
                     <div id="game-leaderboard-list" class="leaderboard-list"></div>
                 </div>
 
                 <div class="guide-card">
                     <img src="assets/leafframe.png" class="guide-frame-overlay" alt="Leaf Frame">
-                    <h3 class="card-title">Categories</h3>
+                    <img src="assets/categories.png" alt="Categories" class="card-title-img">
                     <div class="category-list">
                         <div class="category-item compostable">
                             <img src="assets/compostable_icon.png" alt="Compostable" class="cat-img">
@@ -134,21 +140,29 @@
                             <div class="roi-corner br"></div>
                         </div>
                         <div class="scan-line" id="scan-effect"></div>
-                        <div class="camera-overlay">
-                            <span class="camera-status" id="camera-status">Starting camera...</span>
-                        </div>
                     </div>
                     <button class="btn-scan-main" onclick="captureAndIdentify()" id="scan-btn">
                         <img src="/assets/scandcard.png" alt="SCAN CARD">
                     </button>
+                    <div class="live-indicator">
+                        <img src="assets/live.png" alt="Live" id="live-status">
+                    </div>
                 </div>
 
                 <div class="feedback-card">
-                    <div class="binbin-mascot">
-                        <img id="binbin-image" src="assets/binbin_neutral.png" alt="Bin-Bin">
-                    </div>
+                    <img src="assets/leafframe.png" class="feedback-frame-overlay" alt="Leaf Frame">
                     <div class="feedback-content" id="feedback-content">
+                        <!-- Learn Mode: Category name label (text only, no icon) -->
+                        <div id="learn-category-info" class="learn-category-info hidden">
+                            <span id="learn-category-name" class="learn-category-label"></span>
+                        </div>
+                        <!-- Learn Mode: Card image + category icon side by side -->
+                        <div id="learn-card-display" class="learn-card-display hidden">
+                            <img id="learn-card-image" class="learn-card-image" src="" alt="Eco Card">
+                            <img id="learn-category-icon" class="learn-category-icon" src="" alt="Category">
+                        </div>
                         <p class="feedback-message" id="result-text">Ready? Show me a card!</p>
+                        <!-- Test Mode: Category result (badge style) -->
                         <div id="category-display" class="category-result hidden">
                             <div class="result-badge" id="bin-badge">
                                 <span class="badge-icon" id="bin-icon">🗑️</span>
@@ -157,6 +171,9 @@
                             <div class="category-name" id="category-name">Paper</div>
                         </div>
                         <p class="confidence-text hidden" id="confidence-kids"></p>
+                    </div>
+                    <div class="binbin-mascot">
+                        <img id="binbin-image" src="assets/binbin_neutral.png" alt="Bin-Bin">
                     </div>
                     <div class="scanned-history" id="scanned-cards-strip">
                         <span class="history-title">Recent scans:</span>
@@ -169,42 +186,155 @@
 
     <div id="results-screen" class="results-screen hidden">
         <div class="results-content">
-            <h1 class="results-title" style="font-size:3rem; color:var(--color-green); margin-bottom:1rem;">Awesome!</h1>
+            <h1 class="results-title" id="results-title" style="font-size:3rem; color:var(--color-green); margin-bottom:1rem;">Awesome!</h1>
             <div class="binbin-celebrate">
                 <img src="assets/binbin_happy.png" alt="Bin-Bin" style="width:150px;">
             </div>
-            <div class="results-stats">
-                <div class="stat-card">
-                    <div class="stat-value" id="final-scans">0</div>
-                    <div class="stat-label">Total</div>
-                </div>
-                <div class="stat-card highlight">
-                    <div class="stat-value" id="final-correct">0</div>
-                    <div class="stat-label">Correct</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="final-accuracy">0%</div>
-                    <div class="stat-label">Score</div>
+
+            <!-- Learn Mode Results -->
+            <div id="learn-results" class="hidden">
+                <p class="results-message learn-mode-message" id="learn-results-message">
+                    🌱 Great job exploring today! You're learning so much about waste sorting!
+                </p>
+                <div class="learn-results-badge">
+                    <span class="learn-badge-icon">🌟</span>
+                    <span class="learn-badge-text">Eco Explorer!</span>
                 </div>
             </div>
-            <p class="results-message" id="results-message">You are an Eco Hero!</p>
-            <section class="results-leaderboard" aria-label="Leaderboard">
-                <h3 class="leaderboard-heading">🏆 Leaderboard</h3>
-                <div id="results-leaderboard-list" class="leaderboard-list results-leaderboard-list"></div>
-            </section>
+
+            <!-- Test Mode Results -->
+            <div id="test-results" class="hidden">
+                <div class="results-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="final-scans">0</div>
+                        <div class="stat-label">Total</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-value" id="final-correct">0</div>
+                        <div class="stat-label">Correct</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="final-accuracy">0%</div>
+                        <div class="stat-label">Score</div>
+                    </div>
+                </div>
+                <p class="results-message" id="results-message">You are an Eco Hero!</p>
+                <section class="results-leaderboard" aria-label="Leaderboard">
+                    <h3 class="leaderboard-heading">🏆 Leaderboard</h3>
+                    <div id="results-leaderboard-list" class="leaderboard-list results-leaderboard-list"></div>
+                </section>
+            </div>
+
             <button class="btn-restart" onclick="location.reload()">
                 🔄 Play Again
             </button>
-            <div style="margin-top:20px;">
-                <a href="admin/" style="color:#aaa; text-decoration:none; font-size:0.9rem;">View Dashboard</a>
-            </div>
         </div>
     </div>
 
     <canvas id="capture-canvas" style="display:none;"></canvas>
 
-    <audio id="success-sound" src="assets/success.mp3" preload="auto"></audio>
-    <audio id="error-sound" src="assets/error.mp3" preload="auto"></audio>
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="settings-modal" onclick="handleSettingsBackdropClick(event)">
+        <div class="settings-modal-content" onclick="event.stopPropagation()">
+            <img src="assets/leafframe.png" class="settings-frame-overlay" alt="Leaf Frame">
+            <div class="settings-modal-header">
+                <img src="assets/settings_button.png" alt="Settings" class="settings-header-img">
+                <h3>Settings</h3>
+            </div>
+            <div class="settings-modal-body">
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="settings-label-icon">🎵</span>
+                        <span>Background Music</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggle-bgm" checked onchange="toggleBGM(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="settings-row">
+                    <div class="settings-label">
+                        <span class="settings-label-icon">🔊</span>
+                        <span>Sound Effects</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggle-sfx" checked onchange="toggleSFX(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-modal-actions">
+                <button class="btn-settings-close" onclick="closeSettingsModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quit Confirmation Modal -->
+    <div id="quitModal" class="quit-modal" onclick="handleQuitModalBackdropClick(event)">
+        <div class="quit-modal-content" onclick="event.stopPropagation()">
+            <img src="assets/leafframe.png" class="quit-frame-overlay" alt="Leaf Frame">
+            <div class="quit-modal-header">
+                <h3>Quit Session?</h3>
+            </div>
+            <div class="quit-modal-body">
+                <p class="quit-modal-main-text">
+                    <strong>Are you sure you want to quit?</strong>
+                </p>
+                <p class="quit-modal-sub-text">
+                    Your session will end and your progress will be saved.
+                </p>
+            </div>
+            <div class="quit-modal-actions">
+                <button class="btn-quit-cancel" onclick="closeQuitModal()">Cancel</button>
+                <button class="btn-quit-confirm" onclick="confirmQuit()">
+                    <span>Quit</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assessment Choice Modal (Test Mode) -->
+    <div id="assessmentModal" class="assessment-modal">
+        <div class="assessment-modal-content">
+            <div class="assessment-modal-left">
+                <h3 class="assessment-modal-title">🗑️ Choose the correct bin:</h3>
+                <div class="assessment-modal-choices">
+                    <div class="category-item compostable assessment-choice" onclick="selectAssessmentChoice('Compostable')">
+                        <img src="assets/compostable_icon.png" alt="Compostable" class="cat-img">
+                        <span>Compostable</span>
+                    </div>
+                    <div class="category-item recyclable assessment-choice" onclick="selectAssessmentChoice('Recyclable')">
+                        <img src="assets/recyclable_icon.png" alt="Recyclable" class="cat-img">
+                        <span>Recyclable</span>
+                    </div>
+                    <div class="category-item non-recyclable assessment-choice" onclick="selectAssessmentChoice('Non-Recyclable')">
+                        <img src="assets/non_recyclable_icon.png" alt="Non-Recyclable" class="cat-img">
+                        <span>Non-Recyclable</span>
+                    </div>
+                    <div class="category-item special assessment-choice" onclick="selectAssessmentChoice('Special Waste')">
+                        <img src="assets/special_waste_icon.png" alt="Special Waste" class="cat-img">
+                        <span>Special Waste</span>
+                    </div>
+                </div>
+            </div>
+            <div class="assessment-modal-right">
+                <div class="assessment-modal-card-preview">
+                    <img id="assessment-card-image" class="assessment-card-img" src="" alt="Scanned Card">
+                </div>
+                <div class="assessment-modal-question">
+                    <p class="assessment-item-name" id="assessment-item-name">I see something!</p>
+                    <p class="assessment-prompt">What Category Is It?</p>
+                </div>
+                <div class="assessment-modal-binbin">
+                    <img id="assessment-binbin" src="assets/binbin_neutral.png" alt="Bin-Bin">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="success-sound" preload="auto"></audio>
+    <audio id="error-sound" preload="auto"></audio>
+    <audio id="background-music" preload="auto" loop></audio>
 
     <script src="js/script.js"></script>
     

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from flask_compress import Compress
 import cv2
@@ -10,6 +10,8 @@ import base64
 from datetime import datetime
 import hashlib
 import os
+import io
+from gtts import gTTS
 
 # --- CONFIGURATION ---
 DB_CONFIG = {
@@ -58,6 +60,7 @@ golden_dataset = []
 card_metadata = {}
 category_metadata = {}
 current_session_id = None
+current_session_mode = None
 
 def connect_db():
     """Get connection from pool for faster access"""
@@ -256,9 +259,10 @@ def classify():
         
         # Don't auto-log in assessment mode - wait for user choice
         if current_session_id and result['status'] == 'success':
-            # Only auto-log for instructional mode
+            # Auto-log for instructional mode only
             # Assessment mode will call /assessment/submit separately
-            pass
+            if current_session_mode == 'instructional':
+                log_scan_transaction(result)
         
         return jsonify(result)
         
@@ -328,7 +332,7 @@ def submit_assessment():
 @app.route('/session/start', methods=['POST'])
 def start_session():
     """Start a new student session"""
-    global current_session_id
+    global current_session_id, current_session_mode
     
     try:
         data = request.json
@@ -346,6 +350,7 @@ def start_session():
         conn.commit()
         
         current_session_id = cursor.lastrowid
+        current_session_mode = mode
         
         cursor.close()
         conn.close()
@@ -363,7 +368,7 @@ def start_session():
 @app.route('/session/end', methods=['POST'])
 def end_session():
     """End current session"""
-    global current_session_id
+    global current_session_id, current_session_mode
     
     if not current_session_id:
         return jsonify({"status": "error", "message": "No active session"})
@@ -393,6 +398,7 @@ def end_session():
         
         session_id = current_session_id
         current_session_id = None
+        current_session_mode = None
         
         return jsonify({
             "status": "success",
@@ -1405,6 +1411,42 @@ def serve_thumbnail(filename):
     
     # Fallback to regular asset serving
     return serve_assets(filename)
+
+# ============================================
+# TEXT-TO-SPEECH (Tagalog) via gTTS
+# ============================================
+
+@app.route('/tts', methods=['POST'])
+def text_to_speech():
+    """
+    Generate Tagalog speech audio from text using Google TTS.
+    Returns MP3 audio stream.
+    """
+    try:
+        data = request.get_json()
+        text = data.get('text', '')
+        lang = data.get('lang', 'tl')  # Default to Tagalog
+        
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+        
+        # Generate speech
+        tts = gTTS(text=text, lang=lang, slow=False)
+        
+        # Write to memory buffer
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        # Return as base64 JSON to prevent IDM from intercepting
+        audio_b64 = base64.b64encode(audio_buffer.read()).decode('utf-8')
+        return jsonify({
+            'status': 'success',
+            'audio': audio_b64
+        })
+    except Exception as e:
+        print(f"❌ TTS Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.after_request
 def add_cache_headers(response):
