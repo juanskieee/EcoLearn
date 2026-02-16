@@ -16,6 +16,8 @@ let isScanning = false;
 let assessmentStep = 'scan'; // 'scan', 'identify', 'waiting'
 let currentScanResult = null;
 let assessmentQuestion = null;
+let feedbackResetTimeout = null; // Track feedback timeout to cancel if needed
+let instructionalResetTimeout = null; // Track instructional feedback timeout
 
 // DOM Elements
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -169,10 +171,16 @@ function initializeWelcomeScreen() {
     modeRadios.forEach(radio => {
         radio.addEventListener('change', handleModeChange);
     });
+    
+    // Load preset nicknames on welcome screen
+    loadPresetNicknames();
 }
 
 async function loadPresetNicknames() {
     const presetSelect = document.getElementById('preset-nicknames');
+    
+    // Default nicknames as fallback
+    const defaultNicknames = ['Alice', 'Bob', 'Charlie', 'Diana', 'Emma', 'Frank', 'Grace', 'Henry'];
     
     try {
         const response = await fetch(`${API_URL}/admin/nicknames`);
@@ -183,17 +191,30 @@ async function loadPresetNicknames() {
         
         const data = await response.json();
         
+        let nicknamesToShow = [];
+        
+        // Use database nicknames if available, otherwise use defaults
         if (data.status === 'success' && data.nicknames && data.nicknames.length > 0) {
-            presetSelect.innerHTML = '<option value="">Choose a nickname...</option>' +
-                data.nicknames.map(item => {
-                    const nickname = typeof item === 'object' ? item.nickname : item;
-                    return `<option value="${nickname}">${nickname}</option>`;
-                }).join('');
+            nicknamesToShow = data.nicknames.map(item => 
+                typeof item === 'object' ? item.nickname : item
+            );
         } else {
-            presetSelect.innerHTML = '<option value="">No nicknames available - contact admin</option>';
+            nicknamesToShow = defaultNicknames;
+            console.log('No nicknames in database, using defaults');
         }
+        
+        presetSelect.innerHTML = '<option value="">Choose a nickname...</option>' +
+            nicknamesToShow.map(nickname => 
+                `<option value="${nickname}">${nickname}</option>`
+            ).join('');
+            
     } catch (error) {
-        presetSelect.innerHTML = '<option value="">Unable to load nicknames - contact admin</option>';
+        console.error('Failed to load nicknames:', error);
+        // Use default nicknames on error
+        presetSelect.innerHTML = '<option value="">Choose a nickname...</option>' +
+            defaultNicknames.map(nickname => 
+                `<option value="${nickname}">${nickname}</option>`
+            ).join('');
     }
 }
 
@@ -287,6 +308,9 @@ async function initCamera() {
 // ============================================
 
 async function startGame() {
+    // Stop any ongoing speech from previous session
+    stopSpeech();
+    
     // Get selected nickname from preset dropdown
     const presetSelect = document.getElementById('preset-nicknames');
     const name = presetSelect.value;
@@ -419,6 +443,9 @@ function handleQuitModalBackdropClick(event) {
 async function confirmQuit() {
     closeQuitModal();
     
+    // Stop any ongoing speech
+    stopSpeech();
+    
     // Clear saved session
     clearSessionStorage();
     
@@ -455,6 +482,9 @@ async function confirmQuit() {
 }
 
 function showResults(stats) {
+    // Stop any ongoing speech
+    stopSpeech();
+    
     gameScreen.classList.add('hidden');
     resultsScreen.classList.remove('hidden');
     
@@ -574,6 +604,16 @@ function escapeHtml(text) {
 async function captureAndIdentify() {
     if (isScanning) return;
     
+    // Cancel any pending feedback reset (rapid scanning)
+    if (feedbackResetTimeout) {
+        clearTimeout(feedbackResetTimeout);
+        feedbackResetTimeout = null;
+    }
+    if (instructionalResetTimeout) {
+        clearTimeout(instructionalResetTimeout);
+        instructionalResetTimeout = null;
+    }
+    
     isScanning = true;
     scanBtn.disabled = true;
     scanBtn.style.opacity = "0.6"; // Dim the button instead of changing text
@@ -628,11 +668,19 @@ async function captureAndIdentify() {
             
         } catch (err) {
             showErrorFeedback({ reason: 'connection_error' });
+            // Re-enable on error
+            isScanning = false;
+            scanBtn.disabled = false;
+            scanBtn.style.opacity = "1";
+        } finally {
+            // Only re-enable immediately in instructional mode
+            // Assessment mode will re-enable after user answers via resetAssessmentState()
+            if (sessionMode === 'instructional') {
+                isScanning = false;
+                scanBtn.disabled = false;
+                scanBtn.style.opacity = "1";
+            }
         }
-        
-        isScanning = false;
-        scanBtn.disabled = false;
-        scanBtn.style.opacity = "1"; // Restore button opacity
     }, 'image/jpeg', 0.95);
 }
 
@@ -677,7 +725,17 @@ function handleAssessmentMode(data) {
             assessmentStep = 'identify';
         } else {
             showErrorFeedback(data);
+            // Re-enable button on error
+            isScanning = false;
+            scanBtn.disabled = false;
+            scanBtn.style.opacity = "1";
         }
+    } else {
+        // Ignore scan if already in identify mode (user scanned too quickly)
+        console.log('Ignoring scan - already in identify mode');
+        isScanning = false;
+        scanBtn.disabled = false;
+        scanBtn.style.opacity = "1";
     }
 }
 
@@ -757,8 +815,9 @@ function showInstructionalFeedback(data) {
     speak('Ito ay isang ' + friendlyName + '! Ilagay ito sa ' + category + '.');
     
     // Auto-reset to default after a delay
-    setTimeout(function() {
+    instructionalResetTimeout = setTimeout(function() {
         resetInstructionalFeedback();
+        instructionalResetTimeout = null;
     }, 20000); // 20 seconds
 }
 
@@ -900,14 +959,22 @@ async function selectAssessmentChoice(selectedCategory) {
             showAssessmentIncorrect(selectedCategory, correctCategory);
         }
         
-        // Reset for next scan after 20 seconds
-        setTimeout(() => {
-            resetAssessmentState();
+        // IMMEDIATELY re-enable scanning for next card (kids have short attention spans!)
+        assessmentStep = 'scan';
+        currentScanResult = null;
+        isScanning = false;
+        scanBtn.disabled = false;
+        scanBtn.style.opacity = "1";
+        
+        // Keep feedback visible for 20 seconds, then reset UI
+        feedbackResetTimeout = setTimeout(() => {
+            resetAssessmentUI();
+            feedbackResetTimeout = null;
         }, 20000);
     }, 1200);
 }
 
-function showErrorFeedback(data) {
+function showAssessmentCorrect(selectedCategory) {
     const config = categories[selectedCategory];
     const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
     
@@ -991,13 +1058,29 @@ function showAssessmentIncorrect(selectedCategory, correctCategory) {
     // Hide old test-mode elements
     categoryDisplay.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+    
+    // Add to recent scans
+    if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, correctConfig.icon, correctCategory);
 }
 
 function resetAssessmentState() {
     assessmentStep = 'scan';
     currentScanResult = null;
     
-    // Reset UI - hide learn-mode elements used for feedback
+    // Re-enable scan button for next scan
+    isScanning = false;
+    scanBtn.disabled = false;
+    scanBtn.style.opacity = "1";
+    
+    // Reset UI
+    resetAssessmentUI();
+}
+
+function resetAssessmentUI() {
+    // Only reset visual elements - don't touch button or scanning state
+    // This is called after the 20-second feedback display
+    
+    // Hide learn-mode elements used for feedback
     const learnCardDisplay = document.getElementById('learn-card-display');
     const learnCatInfo = document.getElementById('learn-category-info');
     if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
@@ -1205,6 +1288,23 @@ function restoreBackgroundMusic() {
 // ============================================
 
 let currentTTSAudio = null;
+
+function stopSpeech() {
+    // Stop server-side gTTS audio
+    if (currentTTSAudio) {
+        currentTTSAudio.pause();
+        currentTTSAudio.currentTime = 0;
+        currentTTSAudio = null;
+    }
+    
+    // Stop browser speech synthesis
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+    }
+    
+    // Restore background music volume
+    restoreBackgroundMusic();
+}
 
 function speak(text) {
     // Stop any currently playing TTS audio

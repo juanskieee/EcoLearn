@@ -10,15 +10,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="animated-background">
-        <div class="floating-leaf leaf-1">🍃</div>
-        <div class="floating-leaf leaf-2">🌿</div>
-        <div class="floating-leaf leaf-3">♻️</div>
-        <div class="floating-leaf leaf-4">🌱</div>
-    </div>
-
     <div id="welcome-screen" class="welcome-screen">
         <div class="welcome-content">
+            <img src="assets/leafframe.png" class="welcome-frame-overlay" alt="Leaf Frame">
             <h1 class="bouncy-title">EcoLearn</h1>
             <div class="binbin-intro">
                 <img src="assets/binbin_happy.png" alt="Bin-Bin" class="binbin-large">
@@ -56,7 +50,7 @@
                     </div>
                 </div>
                 
-                <button class="btn-start" onclick="startGame()">🚀 PLAY!</button>
+                <button class="btn-start" onclick="startGame()">START!</button>
             </div>
         </div>
     </div>
@@ -65,6 +59,9 @@
         <header class="game-header">
             
             <div class="header-left-score">
+                <div class="score-icon-div">
+                    <img src="assets/scores.png" alt="Scores" class="score-icon">
+                </div>                
                 <div class="score-board">
                     <div class="score-item">
                         <span class="score-value" id="scan-count">0</span>
@@ -186,6 +183,7 @@
 
     <div id="results-screen" class="results-screen hidden">
         <div class="results-content">
+            <img src="assets/leafframe.png" class="results-frame-overlay" alt="Leaf Frame">
             <h1 class="results-title" id="results-title">Awesome!</h1>
             <div class="binbin-celebrate">
                 <img src="assets/binbin_happy.png" alt="Bin-Bin">
@@ -226,7 +224,7 @@
             </div>
 
             <button class="btn-restart" onclick="location.reload()">
-                🔄 Play Again
+                Play Again
             </button>
         </div>
     </div>
@@ -295,6 +293,7 @@
     <!-- Assessment Choice Modal (Test Mode) -->
     <div id="assessmentModal" class="assessment-modal">
         <div class="assessment-modal-content">
+            <img src="assets/leafframe.png" class="assessment-frame-overlay" alt="Leaf Frame">
             <div class="assessment-modal-left">
                 <h3 class="assessment-modal-title">🗑️ Choose the correct bin:</h3>
                 <div class="assessment-modal-choices">

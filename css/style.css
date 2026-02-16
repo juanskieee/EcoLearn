@@ -35,7 +35,8 @@
 
 body {
     font-family: 'Fredoka', 'Poppins', sans-serif;
-    background: var(--color-bg-offset) url('assets/background.jpg') no-repeat center/cover;
+    background: url('../assets/background.png') no-repeat center center fixed;
+    background-size: cover;
     color: var(--color-text);
     line-height: 1.5;
 }
@@ -56,36 +57,6 @@ button:active {
 }
 
 /* ============================================
-   ANIMATED BACKGROUND
-   ============================================ */
-
-.animated-background {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    background: radial-gradient(circle at 10% 10%, #E0F7FA 0%, transparent 40%),
-                radial-gradient(circle at 90% 90%, #FFF9C4 0%, transparent 40%),
-                radial-gradient(circle at 50% 50%, #E8F5E9 0%, transparent 50%);
-}
-
-.floating-leaf {
-    position: absolute;
-    font-size: 3rem;
-    opacity: 0.6;
-    animation: float 10s infinite ease-in-out;
-}
-
-.leaf-1 { top: 15%; left: 10%; animation-delay: 0s; font-size: 4rem; }
-.leaf-2 { top: 70%; left: 85%; animation-delay: 2s; color: var(--color-green); }
-.leaf-3 { top: 40%; left: 60%; animation-delay: 4s; font-size: 2.5rem; }
-.leaf-4 { top: 85%; left: 15%; animation-delay: 6s; }
-
-@keyframes float {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(10deg); }
-}
-
-/* ============================================
    WELCOME SCREEN
    ============================================ */
 
@@ -98,15 +69,17 @@ button:active {
 }
 
 .welcome-content {
-    background: white;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
     padding: 3rem 2.5rem;
     border-radius: 32px;
-    border: 2px solid var(--color-border);
-    box-shadow: 0 8px 0 var(--color-border);
+    border: 3px solid #A5D6A7;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15), 0 8px 0 #C8E6C9;
     text-align: center;
     max-width: 550px;
     width: 100%;
     animation: popIn 0.6s var(--bounce);
+    position: relative;
+    overflow: visible;
 }
 
 @keyframes popIn {
@@ -116,9 +89,11 @@ button:active {
 
 .bouncy-title {
     font-size: 3rem;
-    color: var(--color-green);
+    color: #2E7D32;
     margin-bottom: 1.5rem;
-    text-shadow: 2px 2px 0 var(--color-bg-offset);
+    text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
+    position: relative;
+    z-index: 20;
 }
 
 .binbin-intro {
@@ -127,6 +102,8 @@ button:active {
     justify-content: center;
     gap: 1.5rem;
     margin-bottom: 2.5rem;
+    position: relative;
+    z-index: 20;
 }
 
 .binbin-large {
@@ -142,6 +119,7 @@ button:active {
     position: relative;
     font-size: 1.1rem;
     box-shadow: 0 4px 0 var(--color-blue-dark);
+    z-index: 20;
 }
 
 .speech-bubble::before {
@@ -159,6 +137,8 @@ button:active {
     gap: 1rem;
     justify-content: center;
     margin-bottom: 1.5rem;
+    position: relative;
+    z-index: 20;
 }
 
 .mode-option {
@@ -177,7 +157,7 @@ button:active {
     flex-direction: column;
     align-items: center;
     padding: 1rem;
-    background: white;
+    background: rgba(255, 255, 255, 0.85);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-md);
     transition: all 0.2s;
@@ -212,19 +192,24 @@ button:active {
 
 .nickname-selection {
     margin-top: 2rem;
+    position: relative;
+    z-index: 20;
 }
 
 .nickname-selection label {
     display: block;
     margin-bottom: 1rem;
     font-weight: 700;
+    color: #2E7D32;
 }
 
 .mode-title {
     display: block;
     margin-bottom: 1rem;
     font-weight: 700;
-    color: var(--color-purple);
+    color: #2E7D32;
+    position: relative;
+    z-index: 20;
 }
 
 .nickname-selection select:focus {
@@ -245,6 +230,8 @@ button:active {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-top: 2rem;
+    position: relative;
+    z-index: 20;
 }
 
 /* ============================================
@@ -267,7 +254,6 @@ button:active {
     padding: 0.5rem 1.5rem;
     border-radius: var(--radius-md);
     border: 2px solid var(--color-border);
-    margin-top: 2.5rem;
 }
 
 .score-item {
@@ -408,7 +394,10 @@ button:active {
 
 .guide-frame-overlay,
 .feedback-frame-overlay,
-.leaderboard-frame-overlay {
+.leaderboard-frame-overlay,
+.welcome-frame-overlay,
+.results-frame-overlay,
+.assessment-frame-overlay {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -1154,7 +1143,7 @@ button:active {
 .results-screen {
     position: fixed;
     inset: 0;
-    background: rgba(255,255,255,0.95);
+    background: url('../assets/background.png') no-repeat center/cover;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1162,20 +1151,30 @@ button:active {
 }
 
 .results-content {
-    background: white;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
     padding: 3rem;
     border-radius: 32px;
-    border: 3px solid var(--color-border);
-    box-shadow: 0 10px 0 var(--color-border);
+    border: 3px solid #A5D6A7;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15), 0 10px 0 #C8E6C9;
     text-align: center;
     max-width: 600px;
     animation: popIn 0.5s var(--bounce);
+    position: relative;
+    overflow: visible;
 }
 
 .results-title {
     font-size: 3rem;
-    color: var(--color-green);
+    color: #2E7D32;
     margin-bottom: 1rem;
+    text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
+    position: relative;
+    z-index: 20;
+}
+
+.binbin-celebrate {
+    position: relative;
+    z-index: 20;
 }
 
 .binbin-celebrate img {
@@ -1187,20 +1186,24 @@ button:active {
     justify-content: center;
     gap: 2rem;
     margin: 2rem 0;
+    position: relative;
+    z-index: 20;
 }
 
 .stat-card {
-    background: var(--color-bg-offset);
+    background: rgba(255, 255, 255, 0.8);
     padding: 1.5rem 1rem;
     border-radius: var(--radius-md);
-    border: 2px solid var(--color-border);
+    border: 2px solid #A5D6A7;
     min-width: 120px;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.1);
 }
 
 .stat-card.highlight {
-    background: var(--color-green);
+    background: #2E7D32;
     color: white;
-    border-color: var(--color-green);
+    border-color: #2E7D32;
+    box-shadow: 0 4px 8px rgba(46, 125, 50, 0.3);
 }
 
 .stat-value {
@@ -1223,16 +1226,22 @@ button:active {
 
 .results-message {
     font-size: 1.3rem;
-    color: var(--color-text);
+    color: #2E7D32;
     margin: 1rem 0;
+    position: relative;
+    z-index: 20;
+    font-weight: 600;
 }
 
 /* Learn Mode Results */
 .learn-mode-message {
     font-size: 1.2rem;
-    color: var(--color-text);
+    color: #2E7D32;
     line-height: 1.6;
     margin: 1.5rem 0 1rem;
+    position: relative;
+    z-index: 20;
+    font-weight: 600;
 }
 
 .learn-results-badge {
@@ -1240,11 +1249,14 @@ button:active {
     align-items: center;
     gap: 0.8rem;
     padding: 1rem 2rem;
-    background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
-    border: 3px solid var(--color-green);
+    background: rgba(255, 255, 255, 0.9);
+    border: 3px solid #2E7D32;
     border-radius: 999px;
     margin: 1rem 0 1.5rem;
     animation: popIn 0.5s var(--bounce);
+    position: relative;
+    z-index: 20;
+    box-shadow: 0 4px 8px rgba(46, 125, 50, 0.2);
 }
 
 .learn-badge-icon {
@@ -1270,18 +1282,24 @@ button:active {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-top: 1rem;
+    position: relative;
+    z-index: 20;
 }
 
 .results-leaderboard {
     margin: 1.5rem 0;
     padding: 1.5rem;
-    background: var(--color-bg-offset);
+    background: rgba(255, 255, 255, 0.8);
     border-radius: var(--radius-md);
-    border: 2px solid var(--color-border);
+    border: 2px solid #A5D6A7;
+    position: relative;
+    z-index: 20;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.1);
 }
 
 .results-leaderboard .leaderboard-heading {
     margin-bottom: 1rem;
+    color: #2E7D32;
 }
 
 .results-leaderboard-list {
@@ -1367,13 +1385,13 @@ button:active {
 
 /* SCORE BOARD - LEFT SIDE (Test Mode) */
 .header-left-score {
-    position: absolute;
-    left: 2.5rem;
-    top: 50%;
-    transform: translateY(-50%);
     display: flex;
+    position: absolute;
     align-items: center;
+    left: 2.5rem;
+    gap: 2.5rem;
     z-index: 10;
+    margin-top: 2.5rem;
 }
 
 /* 1. LOGO STYLING (The Centering Fix) */
@@ -1463,6 +1481,29 @@ button:active {
     transform: translateY(-2px) rotate(5deg);
 }
 
+/* The Score Icon */
+.score-icon-div {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 80px; /* Mushroom Size */
+    transition: transform 0.1s;
+}
+
+.score-icon-div img {
+    width: 140%;
+    height: auto;
+    filter: drop-shadow(0 4px 0 rgba(0,0,0,0.15));
+}
+
+.score-icon-div:active {
+    transform: scale(0.9) translateY(4px);
+}
+
+.score-icon-div:hover {
+    transform: translateY(-2px) rotate(5deg);
+}
 .btn-settings-close {
     background: var(--color-green);
     color: white;

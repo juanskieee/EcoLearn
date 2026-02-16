@@ -311,7 +311,6 @@
     </div>
 
     <script>
-        // Check for error message in URL and clean URL
         const urlParams = new URLSearchParams(window.location.search);
         const error = urlParams.get('error');
         
@@ -324,10 +323,7 @@
                 errorMessage.textContent = '⚠️ Fill all fields';
                 errorMessage.style.display = 'block';
             }
-            // Removed logout success message
             errorMessage.classList.add('show');
-            
-            // Clean URL by removing query parameter
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
@@ -342,7 +338,6 @@
                 errorMessage.classList.add('show');
                 return false;
             }
-
             return true;
         }
 

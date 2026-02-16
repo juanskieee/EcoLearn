@@ -237,7 +237,6 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/js/sw.js')
             .then((registration) => {
-                console.log('✅ Service Worker registered - Offline Ready!');
                 // Image preloading disabled for performance
                 // Images will lazy-load as needed
             })
@@ -263,7 +262,6 @@ const OptimizedAdmin = {
                 const stored = localStorage.getItem(this.STORAGE_KEY);
                 if (stored) {
                     this.memoryCache = JSON.parse(stored);
-                    console.log('✅ Persistent cache loaded from localStorage');
                 }
             } catch (e) {
                 console.warn('⚠️ Cache load failed, starting fresh');
@@ -311,7 +309,6 @@ const OptimizedAdmin = {
         invalidateAll() {
             this.memoryCache = {};
             localStorage.removeItem(this.STORAGE_KEY);
-            console.log('🗑️ Cache cleared');
         }
     },
 
@@ -349,15 +346,11 @@ const OptimizedAdmin = {
             return this.cache.get('cards');
         }
         
-        console.log('🔄 Fetching cards...');
-        const startTime = performance.now();
-        
         try {
             const data = await this.api.fetch(`${API_URL}/admin/cards-minimal`);
             
             if (data.status === 'success') {
                 this.cache.set('cards', data.cards);
-                console.log(`✅ Cards loaded in ${(performance.now() - startTime).toFixed(0)}ms`);
                 return data.cards;
             }
         } catch (error) {
@@ -397,7 +390,6 @@ const OptimizedAdmin = {
             return this.cache.get('assets');
         }
         
-        console.log('🔄 Fetching assets...');
         try {
             const data = await this.api.fetch(`${API_URL}/admin/asset-repository`);
             
@@ -530,8 +522,6 @@ const OptimizedAdmin = {
             // Continue with next chunk if more cards remain
             if (currentIndex < cards.length) {
                 requestAnimationFrame(renderChunk);
-            } else {
-                console.log(`⚡ Gallery: ${cards.length} cards rendered in ${(performance.now() - startTime).toFixed(0)}ms (chunked)`);
             }
         };
         
@@ -637,7 +627,6 @@ const PerfMonitor = {
         const start = this.marks.get(label);
         if (start) {
             const duration = performance.now() - start;
-            console.log(`⏱️ ${label}: ${duration.toFixed(1)}ms`);
             this.marks.delete(label);
             return duration;
         }
@@ -671,16 +660,4 @@ document.addEventListener('visibilitychange', () => {
         requestAnimationFrame(() => setTimeout(() => {}, 100));
     }
 });
-
-console.log(`
-⚡ EcoLearn Admin - Optimized for Alt-Tab
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ Native lazy loading (no preload)
-✓ content-visibility: auto (GPU-friendly)
-✓ LocalStorage cache (5 min TTL)
-✓ Service Worker offline support
-✓ Chunked rendering (10 cards/frame)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Target: Intel i5, 8GB RAM
-`);
 

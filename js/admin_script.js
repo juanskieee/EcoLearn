@@ -112,9 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function loadDashboard() {
-    // Show loading state
-    console.log('🔄 Loading dashboard...');
-    
     try {
         // Load all data in parallel for faster load time
         // AppState.loadAll() pre-renders Card Manager AND Asset Repository
@@ -126,8 +123,6 @@ async function loadDashboard() {
             AppState.loadAll(),  // Single Source of Truth - renders BOTH views
             loadSystemConfig()
         ]);
-        
-        console.log('✅ Dashboard loaded successfully');
     } catch (error) {
         console.error('❌ Dashboard load error:', error);
     }
@@ -172,8 +167,6 @@ function showTab(tabId) {
     // NO DATA FETCHING HERE!
     // Card Manager and Asset Repository are already pre-rendered by AppState
     // This is pure CSS visibility switching = INSTANT
-    
-    console.log(`📑 Tab switched: ${tabId} (instant - no fetch)`);
 }
 
 // ============================================
