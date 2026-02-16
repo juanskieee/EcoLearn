@@ -73,43 +73,12 @@
 body {
     font-family: 'Fredoka', sans-serif;
     color: var(--color-text);
+    background: url('../assets/background.png') no-repeat center center fixed;
+    background-size: cover;
 }
 
 h1, h2, h3, h4, .stat-value {
     font-family: 'Fredoka', sans-serif;
-}
-
-/* ============================================
-   BACKGROUND ANIMATION
-   ============================================ */
-.animated-background {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    background: radial-gradient(circle at 10% 10%, #E0F7FA 0%, transparent 40%),
-                radial-gradient(circle at 90% 90%, #F1F8E9 0%, transparent 40%),
-                #FFFFFF;
-}
-
-.floating-leaf {
-    position: absolute;
-    font-size: 3rem;
-    opacity: 0.6;
-    animation: float 10s infinite ease-in-out;
-    filter: drop-shadow(0 4px 0 rgba(0,0,0,0.1));
-}
-
-.leaf-1 { top: 15%; left: 30%; animation-delay: 0s; font-size: 4rem; }
-.leaf-2 { top: 70%; left: 85%; animation-delay: 2s; color: var(--color-green); }
-.leaf-3 { top: 40%; left: 60%; animation-delay: 4s; font-size: 2.5rem; }
-.leaf-4 { top: 85%; left: 35%; animation-delay: 6s; }
-
-@keyframes float {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(10deg); }
 }
 
 /* ============================================
@@ -142,7 +111,9 @@ h1, h2, h3, h4, .stat-value {
 }
 
 .logo-icon {
-    font-size: 2.5rem;
+    height: 60px;
+    width: auto;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
 .nav-links {
@@ -255,17 +226,32 @@ h1, h2, h3, h4, .stat-value {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    padding: 0.5rem 0;
+    margin-bottom: 1rem;
+}
+
+.top-header h1 {
+    font-size: 2rem;
+    color: #2E7D32;
+    margin: 0;
+    font-weight: 700;
 }
 
 .admin-badge {
-    background: var(--color-purple);
+    background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
     color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 24px;
+    font-size: 0.9rem;
     font-weight: 600;
-    box-shadow: 0 2px 0 #a85ce0;
+    box-shadow: 0 3px 0 #6D28D9, 0 4px 12px rgba(124, 58, 237, 0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.admin-badge:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 0 #6D28D9, 0 6px 16px rgba(124, 58, 237, 0.4);
 }
 
 /* ============================================
@@ -297,66 +283,6 @@ h1, h2, h3, h4, .stat-value {
     color: var(--color-text-light);
     margin-bottom: 1.5rem;
     margin-top: -1rem;
-}
-
-/* ============================================
-   STATS GRID
-   ============================================ */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.stat-card {
-    padding: 1.5rem;
-    border-radius: var(--radius-card);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    border-bottom: 4px solid rgba(0,0,0,0.1);
-}
-
-.stat-card.blue { background: #E0F2FE; color: var(--color-blue); }
-.stat-card.green { background: #DCFCE7; color: var(--color-green); }
-.stat-card.purple { background: #F3E8FF; color: var(--color-purple); }
-.stat-card.yellow { background: #FEF3C7; color: #D97706; }
-
-.stat-icon {
-    font-size: 2.5rem;
-    background: rgba(255,255,255,0.5);
-    width: 60px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-}
-
-.stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    opacity: 0.8;
-    text-transform: uppercase;
-}
-
-/* ============================================
-   CHARTS
-   ============================================ */
-.chart-wrapper {
-    margin-top: 2rem;
-}
-
-.chart-container {
-    height: 300px;
-    width: 100%;
 }
 
 /* ============================================
@@ -1969,6 +1895,129 @@ h1, h2, h3, h4, .stat-value {
 #remove-nickname-modal .btn-confirm-save { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
 #remove-nickname-modal .btn-confirm-save:hover { box-shadow: 0 4px 0 #DC2626; }
 #remove-nickname-modal .btn-confirm-save:active { transform: translateY(3px); box-shadow: none; }
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+/* Category Accuracy Grid Spacing */
+.category-accuracy-grid {
+    margin-top: 1.5rem;
+}
+
+/* Search Clear Button Hidden */
+.search-clear-btn.hidden {
+    display: none;
+}
+
+/* Filter Buttons Spacing */
+.filter-buttons {
+    margin-bottom: 1.5rem;
+    margin-top: 0.5rem;
+}
+
+/* Empty State Loading Text */
+.empty-state small {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+/* Modal Display None (Initial State) */
+.cards-modal[style*="display:none"],
+.add-card-modal[style*="display:none"] {
+    display: none;
+}
+
+/* Confirmation Modal Text Styles */
+.confirmation-body p {
+    font-size: 1.1rem;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.confirmation-body p strong {
+    font-weight: 700;
+}
+
+#remove-nickname-name {
+    color: var(--color-text);
+    font-size: 1.2rem;
+    text-align: center;
+    font-weight: 700;
+    margin: 1rem 0;
+}
+
+.confirmation-body .text-muted {
+    color: #64748b;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* Form small text helper */
+.form-group small,
+.form-helper-text {
+    color: #64748b;
+    font-size: 0.8rem;
+    display: block;
+    margin-top: 0.3rem;
+}
+
+/* Button Variations */
+.btn-add.full-width {
+    width: 100%;
+    padding: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.btn-confirm-save.danger {
+    background: #EF4444;
+    box-shadow: 0 3px 0 #DC2626;
+}
+
+.btn-confirm-save.danger:hover {
+    box-shadow: 0 4px 0 #DC2626;
+}
+
+/* Result Message Styles */
+.result-message {
+    margin-top: 1rem;
+    display: none;
+}
+
+.result-message.show {
+    display: block;
+}
+
+/* Confirmation Text Styles */
+.confirmation-warning {
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--color-red);
+}
+
+.confirmation-text {
+    font-size: 1.1rem;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+/* Config Changes Warning */
+.config-changes-warning {
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--color-red);
+}
+
+/* File Input Padding */
+.form-group input[type="file"] {
+    padding: 8px;
+}
+
+/* Button Hidden State */
+.btn-confirm-cancel.hidden,
+#cancel-replace-btn[style*="display:none"] {
+    display: none;
+}
 
 /* ============================================
    RESPONSIVE

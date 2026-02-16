@@ -1,0 +1,282 @@
+/* ============================================
+   ECOLEARN - ADMIN LOGIN STYLES
+   ============================================ */
+
+body {
+    font-family: 'Fredoka', 'Poppins', sans-serif;
+    background: url('../assets/background.png') no-repeat center center fixed;
+    background-size: cover;
+}
+
+.login-wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 1rem;
+}
+
+.login-card {
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    border: 3px solid #A5D6A7;
+    border-radius: 32px;
+    padding: 3rem 2.5rem;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.15), 0 8px 0 #C8E6C9;
+    position: relative;
+    z-index: 10;
+    animation: popIn 0.6s cubic-bezier(0.47, 1.64, 0.41, 0.8);
+    overflow: visible;
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.login-frame-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -49%);
+    z-index: 10;
+    pointer-events: none;
+    width: 108%;
+    height: 120%;
+    object-fit: fill;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15));
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    position: relative;
+    z-index: 20;
+}
+
+.login-logo {
+    height: 100px;
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 1rem;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+}
+
+.login-header h1 {
+    font-family: 'Fredoka', sans-serif;
+    font-size: 2.5rem;
+    color: #2E7D32;
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
+    position: relative;
+    z-index: 20;
+}
+
+.login-header p {
+    color: #2E7D32;
+    font-size: 1rem;
+    font-weight: 600;
+    position: relative;
+    z-index: 20;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: relative;
+    z-index: 20;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    position: relative;
+    z-index: 20;
+}
+
+.form-group label {
+    font-weight: 700;
+    color: #2E7D32;
+    font-size: 1rem;
+    font-family: 'Fredoka', sans-serif;
+}
+
+.input-wrapper {
+    position: relative;
+    z-index: 20;
+}
+
+.input-icon {
+    position: absolute;
+    left: 1.2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.4rem;
+    z-index: 21;
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 3px solid var(--color-border);
+    border-radius: 16px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    background: #FAFAFA;
+    box-shadow: 0 2px 0 var(--color-border);
+    position: relative;
+    z-index: 20;
+}
+
+.password-wrapper {
+    position: relative;
+    z-index: 20;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 1.3rem;
+    user-select: none;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    z-index: 21;
+}
+
+.password-toggle:hover {
+    opacity: 1;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--color-green);
+    background: white;
+    box-shadow: 0 2px 0 var(--color-green), 0 0 0 4px rgba(88, 204, 2, 0.1);
+    transform: translateY(-1px);
+}
+
+.form-input::placeholder {
+    color: #999;
+    font-weight: 500;
+}
+
+.btn-login {
+    background: var(--color-green);
+    color: white;
+    border: none;
+    padding: 0.9rem 2rem;
+    border-radius: 16px;
+    font-weight: 700;
+    font-size: 1rem;
+    font-family: 'Fredoka', sans-serif;
+    cursor: pointer;
+    transition: all 0.1s;
+    box-shadow: 0 4px 0 #46a302;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 20;
+}
+
+.btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #46a302;
+}
+
+.btn-login:active {
+    transform: translateY(4px);
+    box-shadow: none;
+}
+
+.error-message {
+    background: #FEE2E2;
+    color: #991B1B;
+    padding: 0.6rem 0.9rem;
+    border-radius: 10px;
+    border: 2px solid #FCA5A5;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-align: center;
+    display: none;
+    animation: slideIn 0.3s ease;
+    font-family: 'Fredoka', sans-serif;
+    margin-bottom: 0.5rem;
+    position: relative;
+    z-index: 20;
+}
+
+.error-message.show {
+    display: block;
+}
+
+.error-message.success {
+    background: #DCFCE7;
+    color: #065F46;
+    border-color: #86EFAC;
+}
+
+.forgot-link {
+    text-align: right;
+    margin-top: 0.5rem;
+    position: relative;
+    z-index: 20;
+}
+
+.forgot-link a {
+    color: var(--color-text-light);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+
+.forgot-link a:hover {
+    color: var(--color-green);
+}
+
+.back-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    position: relative;
+    z-index: 20;
+}
+
+.back-link a {
+    color: var(--color-green);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 1rem;
+    font-family: 'Fredoka', sans-serif;
+    transition: all 0.2s;
+    display: inline-block;
+}
+
+.back-link a:hover {
+    color: #46a302;
+    transform: translateX(-5px);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

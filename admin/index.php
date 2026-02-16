@@ -6,8 +6,10 @@ require_once 'check_session.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="../assets/binbin.ico">
     <title>EcoLearn Admin Dashboard</title>
     <link rel="stylesheet" href="../css/admin_style.css">
+    <link rel="stylesheet" href="../css/admin_overview_styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
@@ -17,18 +19,10 @@ require_once 'check_session.php';
 </head>
 <body>
 
-    <div class="animated-background">
-        <div class="floating-leaf leaf-1">🍃</div>
-        <div class="floating-leaf leaf-2">🌿</div>
-        <div class="floating-leaf leaf-3">♻️</div>
-        <div class="floating-leaf leaf-4">🌱</div>
-    </div>
-
     <div class="admin-wrapper">
         <nav class="sidebar">
             <div class="sidebar-header">
-                <div class="logo-icon">🌱</div>
-                <h2>EcoLearn<br><span style="font-size:0.8rem; opacity:0.7;">Admin Panel</span></h2>
+                <img src="../assets/logo.png" class="logo-icon" alt="EcoLearn Logo">
             </div>
             
             <ul class="nav-links">
@@ -93,7 +87,7 @@ require_once 'check_session.php';
                 </div>
             </header>
 
-            <section id="overview" class="section-card tab-content active">
+            <section id="overview" class="section-card scrollable tab-content active">
                 <h3 class="section-title">Performance at a Glance</h3>
                 <div class="stats-grid">
                     <div class="stat-card blue">
@@ -146,7 +140,7 @@ require_once 'check_session.php';
                     <div class="loading-cell"><div class="spinner"></div> Loading matrix data...</div>
                 </div>
                 
-                <div id="category-accuracy" class="category-accuracy-grid" style="margin-top: 1.5rem;"></div>
+                <div id="category-accuracy" class="category-accuracy-grid"></div>
             </section>
 
             <!-- STUDENT LEADERBOARD SECTION -->
@@ -163,10 +157,9 @@ require_once 'check_session.php';
                                    id="leaderboard-search" 
                                    placeholder="🔍 Search students..."
                                    oninput="searchLeaderboard(this.value)">
-                            <button class="search-clear-btn" 
+                            <button class="search-clear-btn hidden" 
                                     id="leaderboard-search-clear" 
-                                    onclick="clearLeaderboardSearch()" 
-                                    style="display: none;">
+                                    onclick="clearLeaderboardSearch()">
                                 ✕
                             </button>
                         </div>
@@ -279,10 +272,9 @@ require_once 'check_session.php';
                                 class="card-search-input" 
                                 placeholder="🔍 Search cards by name..." 
                                 oninput="searchCards(this.value)">
-                            <button class="search-clear-btn" 
+                            <button class="search-clear-btn hidden" 
                                     id="card-search-clear" 
-                                    onclick="clearSearch()" 
-                                    style="display:none;">
+                                    onclick="clearSearch()">
                                 ✕
                             </button>
                         </div>
@@ -292,7 +284,7 @@ require_once 'check_session.php';
                     </div>
                 </div>
                 
-                <div class="filter-buttons" style="margin-bottom: 1.5rem; margin-top: 0.5rem;">
+                <div class="filter-buttons">
                     <button class="filter-btn active" onclick="filterCardGallery('all')">All Cards</button>
                     <button class="filter-btn" onclick="filterCardGallery('Compostable')">🌱 Compostable</button>
                     <button class="filter-btn" onclick="filterCardGallery('Recyclable')">♻️ Recyclable</button>
@@ -301,7 +293,7 @@ require_once 'check_session.php';
                 </div>
                 
                 <div id="card-gallery" class="card-gallery-new">
-                    <div class="empty-state">Loading cards...<br><small style="font-size: 0.85rem; opacity: 0.7;">Please wait while cards are being fetched</small></div>
+                    <div class="empty-state">Loading cards...<br><small>Please wait while cards are being fetched</small></div>
                 </div>
             </section>
 
@@ -350,7 +342,7 @@ require_once 'check_session.php';
                     <div class="confirmation-body">
                         <p>You are about to save the following configuration changes:</p>
                         <div id="configChangesList" class="config-changes-list"></div>
-                        <p style="margin-top: 1rem; font-weight: 600; color: var(--color-red);">
+                        <p class="config-changes-warning">
                             ⚠️ These changes will take effect immediately and may affect system behavior.
                         </p>
                     </div>
@@ -371,16 +363,16 @@ require_once 'check_session.php';
                         <h3>Confirm Logout</h3>
                     </div>
                     <div class="confirmation-body">
-                        <p style="font-size: 1.1rem; text-align: center; margin: 1.5rem 0;">
+                        <p class="confirmation-text">
                             <strong>Are you sure you want to logout?</strong>
                         </p>
-                        <p style="color: #64748b; font-size: 0.9rem; text-align: center;">
+                        <p class="text-muted">
                             You will need to login again to access the admin dashboard.
                         </p>
                     </div>
                     <div class="confirmation-actions">
                         <button class="btn-confirm-cancel" onclick="closeLogoutModal()">Cancel</button>
-                        <button class="btn-confirm-save" onclick="confirmLogout()" style="background: #EF4444;">
+                        <button class="btn-confirm-save danger" onclick="confirmLogout()">
                             <span>Logout</span>
                         </button>
                     </div>
@@ -432,10 +424,9 @@ require_once 'check_session.php';
                                    id="nickname-search" 
                                    placeholder="🔍 Search students..."
                                    oninput="searchNicknames(this.value)">
-                            <button class="search-clear-btn" 
+                            <button class="search-clear-btn hidden" 
                                     id="nickname-search-clear" 
-                                    onclick="clearNicknameSearch()" 
-                                    style="display: none;">
+                                    onclick="clearNicknameSearch()">
                                 ✕
                             </button>
                         </div>
@@ -454,7 +445,7 @@ require_once 'check_session.php';
             </section>
 
             <!-- Add Student Nickname Modal -->
-            <div id="add-nickname-modal" class="add-card-modal" style="display:none;">
+            <div id="add-nickname-modal" class="add-card-modal">
                 <div class="add-card-modal-content">
                     <div class="modal-header">
                         <h4>👤 Add Student Nickname</h4>
@@ -464,12 +455,12 @@ require_once 'check_session.php';
                         <div class="form-group">
                             <label>📝 Student Nickname:</label>
                             <input type="text" id="modal-nickname-input" placeholder="e.g., Little Explorer, Green Hero" maxlength="30">
-                            <small style="color: #64748b; font-size: 0.8rem; display: block; margin-top: 0.3rem;">Enter a fun, memorable name (max 30 characters)</small>
+                            <small class="form-helper-text">Enter a fun, memorable name (max 30 characters)</small>
                         </div>
-                        <button class="btn-add" onclick="submitNickname()" style="width:100%; padding:14px; font-size: 1rem; font-weight: 600;">
+                        <button class="btn-add full-width" onclick="submitNickname()">
                             ✅ Add Student
                         </button>
-                        <div id="nickname-result" class="result-message" style="margin-top:1rem; display:none;"></div>
+                        <div id="nickname-result" class="result-message"></div>
                     </div>
                 </div>
             </div>
@@ -482,19 +473,19 @@ require_once 'check_session.php';
                         <h3>Remove Student</h3>
                     </div>
                     <div class="confirmation-body">
-                        <p style="font-size: 1.1rem; text-align: center; margin: 1.5rem 0;">
+                        <p class="confirmation-text">
                             <strong>Are you sure you want to remove this student?</strong>
                         </p>
-                        <p id="remove-nickname-name" style="color: var(--color-text); font-size: 1.2rem; text-align: center; font-weight: 700; margin: 1rem 0;">
+                        <p id="remove-nickname-name">
                             <!-- Nickname will be inserted here -->
                         </p>
-                        <p style="color: #64748b; font-size: 0.9rem; text-align: center;">
+                        <p class="text-muted">
                             This action cannot be undone.
                         </p>
                     </div>
                     <div class="confirmation-actions">
                         <button class="btn-confirm-cancel" onclick="closeRemoveNicknameModal()">Cancel</button>
-                        <button class="btn-confirm-save" onclick="confirmRemoveNickname()" style="background: #EF4444;">
+                        <button class="btn-confirm-save danger" onclick="confirmRemoveNickname()">
                             <span>🗑️</span>
                             <span>Remove Student</span>
                         </button>
@@ -506,7 +497,7 @@ require_once 'check_session.php';
     </div>
 
     <!-- Modal for viewing cards (placed outside admin-wrapper for full viewport positioning) -->
-    <div id="cards-modal" class="cards-modal" style="display:none;">
+    <div id="cards-modal" class="cards-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h4 id="modal-title">Cards</h4>
@@ -517,7 +508,7 @@ require_once 'check_session.php';
     </div>
 
     <!-- Add New Card Modal -->
-    <div id="add-card-modal" class="add-card-modal" style="display:none;">
+    <div id="add-card-modal" class="add-card-modal">
         <div class="add-card-modal-content">
             <div class="modal-header">
                 <h4 id="form-title">➕ Add New Card</h4>
@@ -529,7 +520,7 @@ require_once 'check_session.php';
                     <div class="form-group">
                         <label>📝 Card Name:</label>
                         <input type="text" id="one-shot-name" placeholder="e.g., Coffee Sachet, Banana Peel" maxlength="50">
-                        <small style="color: #64748b; font-size: 0.8rem; display: block; margin-top: 0.3rem;">Enter a descriptive name for the card</small>
+                        <small class="form-helper-text">Enter a descriptive name for the card</small>
                     </div>
                     <div class="form-group">
                         <label>🗂️ Waste Category:</label>
@@ -539,24 +530,24 @@ require_once 'check_session.php';
                             <option value="3">🗑️ Non-Recyclable (Red Bin)</option>
                             <option value="4">⚠️ Special Waste (Yellow Bin)</option>
                         </select>
-                        <small style="color: #64748b; font-size: 0.8rem; display: block; margin-top: 0.3rem;">Select the correct waste classification</small>
+                        <small class="form-helper-text">Select the correct waste classification</small>
                     </div>
                     <div class="form-group">
                         <label>📸 Card Image:</label>
-                        <input type="file" id="one-shot-image" accept="image/*" onchange="previewCardImage()" style="padding: 8px;">
+                        <input type="file" id="one-shot-image" accept="image/*" onchange="previewCardImage()">
                         <div id="image-preview" class="image-preview">
                             <div class="image-preview-placeholder">Upload an image to preview</div>
                         </div>
                     </div>
                     <div class="modal-button-row" id="modal-buttons">
-                        <button class="btn-confirm-cancel" id="cancel-replace-btn" onclick="cancelCardEdit()" style="display:none;">
+                        <button class="btn-confirm-cancel hidden" id="cancel-replace-btn" onclick="cancelCardEdit()">
                             Cancel
                         </button>
                         <button class="btn-add" id="submit-card-btn" onclick="submitOneShotLearning()">
                             🚀 <span id="submit-btn-text">Register New Card</span>
                         </button>
                     </div>
-                    <div id="one-shot-result" class="result-message" style="margin-top:1rem; display:none;"></div>
+                    <div id="one-shot-result" class="result-message"></div>
                 </div>
             </div>
         </div>
