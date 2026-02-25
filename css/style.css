@@ -2,6 +2,10 @@
    ECOLEARN - CLEAN MODERN DESIGN
    ============================================ */
 
+/* ============================================
+   CSS CUSTOM PROPERTIES
+   ============================================ */
+
 :root {
     --color-green: #58CC02;
     --color-green-dark: #46a302;
@@ -13,19 +17,26 @@
     --color-yellow-dark: #cc9f00;
     --color-purple: #CE82FF;
     --color-purple-dark: #a85ce0;
-    
+
+    /* Neutral Colors */
     --color-text: #3C3C3C;
     --color-text-light: #777777;
     --color-bg: #FFFFFF;
     --color-bg-offset: #F7F7F7;
     --color-border: #E5E5E5;
-    
+
+    /* Border Radii */
     --radius-lg: 24px;
     --radius-md: 16px;
     --radius-sm: 12px;
-    
+
+    /* Easing */
     --bounce: cubic-bezier(0.47, 1.64, 0.41, 0.8);
 }
+
+/* ============================================
+   GLOBAL RESET & BASE
+   ============================================ */
 
 * {
     margin: 0;
@@ -57,6 +68,20 @@ button:active {
 }
 
 /* ============================================
+   KEYFRAME ANIMATIONS
+   ============================================ */
+
+@keyframes popIn {
+    0%   { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes scanMove {
+    0%   { top: 0;    opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+
+/* ============================================
    WELCOME SCREEN
    ============================================ */
 
@@ -80,11 +105,6 @@ button:active {
     animation: popIn 0.6s var(--bounce);
     position: relative;
     overflow: visible;
-}
-
-@keyframes popIn {
-    0% { transform: scale(0.8); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
 }
 
 .bouncy-title {
@@ -246,6 +266,10 @@ button:active {
     background-attachment: fixed;
 }
 
+/* ============================================
+   SCORE BOARD
+   ============================================ */
+
 .score-board {
     display: flex;
     align-items: center;
@@ -283,8 +307,10 @@ button:active {
     background: var(--color-border);
 }
 
+/* ============================================
+   GAME CONTAINER & LAYOUT
+   ============================================ */
 
-/* Game Container */
 .game-container {
     max-width: 1700px;
     width: 100%;
@@ -304,7 +330,11 @@ button:active {
     width: 100%;
 }
 
-/* Hide leaderboard in Learn Mode - add 'learn-mode' class to game-screen */
+/* ============================================
+   GAME LAYOUT — LEARN MODE
+   ============================================ */
+
+/* Hide leaderboard in Learn Mode — add class 'learn-mode' to .game-screen */
 .game-screen.learn-mode .leaderboard-card {
     display: none;
 }
@@ -313,7 +343,11 @@ button:active {
     grid-template-columns: 1.3fr 2fr 1.3fr;
 }
 
-/* Test Mode: Hide guide-card, 3-col = leaderboard | camera | feedback */
+/* ============================================
+   GAME LAYOUT — TEST MODE
+   ============================================ */
+
+/* Hide guide-card; layout = leaderboard | camera | feedback */
 .game-screen:not(.learn-mode) .guide-card {
     display: none;
 }
@@ -338,7 +372,7 @@ button:active {
     grid-row: 1;
 }
 
-/* Test Mode: Make leaderboard-card match feedback-card styling */
+/* In Test Mode, leaderboard-card matches feedback-card styling */
 .game-screen:not(.learn-mode) .leaderboard-card {
     position: relative;
     overflow: visible;
@@ -576,22 +610,23 @@ button:active {
     transition: transform 0.2s;
 }
 
-/* Main Game Area - all cards in one row */
+/* ============================================
+   CAMERA CARD
+   ============================================ */
+
 .camera-card {
     padding: 1rem;
     position: relative;
 }
 
-/* Camera Card */
 .camera-display {
     position: relative;
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow: visible;
     background: #1a1a1a;
     aspect-ratio: 4/3;
     margin-bottom: 2rem;
     border: 3px solid var(--color-border);
-    overflow: visible;
 }
 
 #webcam {
@@ -610,9 +645,8 @@ button:active {
     z-index: 10;
     pointer-events: none;
     
-    width: 115%;  
-    height: 125%; 
-    
+    width: 115%;
+    height: 125%;
     object-fit: fill;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
@@ -620,6 +654,7 @@ button:active {
     filter: contrast(1.1) drop-shadow(0 4px 6px rgba(0,0,0,0.3));
 }
 
+/* ROI targeting corners */
 .roi-box {
     position: absolute;
     top: 50%;
@@ -669,6 +704,7 @@ button:active {
     border-radius: 0 0 4px 0;
 }
 
+/* Scan line animation */
 .scan-line {
     position: absolute;
     top: 0;
@@ -685,11 +721,7 @@ button:active {
     animation: scanMove 1s ease-in-out;
 }
 
-@keyframes scanMove {
-    0% { top: 0; opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-}
-
+/* Live indicator */
 .live-indicator {
     position: absolute;
     left: 50%;
@@ -706,20 +738,17 @@ button:active {
     animation: pulseLive 2s ease-in-out infinite;
 }
 
+/* Scan button */
 .btn-scan-main {
     background: transparent;
     border: none;
     padding: 0;
     cursor: pointer;
     display: block;
-    margin: 0 auto; /* Center it */
+    margin: 0 auto;
     width: 100%;
-    max-width: 280px; /* Control the max size here */
-    
-    /* Smooth animation for the click */
+    max-width: 280px;
     transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
-    
-    /* Remove the blue highlight on mobile when tapped */
     -webkit-tap-highlight-color: transparent;
 }
 
@@ -727,31 +756,28 @@ button:active {
     width: 100%;
     height: auto;
     display: block;
-    
-    /* Optional: Add a subtle drop shadow for depth */
     filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
 }
 
-/* 3. The "Juicy" Click Effect */
+.btn-scan-main:hover {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 15px 20px rgba(0,0,0,0.3));
+}
+
 .btn-scan-main:active {
-    /* Shrink slightly to simulate being pressed down */
     transform: scale(0.95) translateY(4px);
-    
-    /* Reduce shadow to make it look closer to the ground */
     filter: drop-shadow(0 2px 5px rgba(0,0,0,0.2));
 }
 
-/* 4. (Optional) Hover Effect for Desktop */
-.btn-scan-main:hover {
-    transform: translateY(-2px);
-    filter: drop-shadow(0 15px 20px rgba(0,0,0,0.3)); /* Bigger shadow */
-}
 .btn-scan-main:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
 
-/* Feedback Card */
+/* ============================================
+   FEEDBACK CARD
+   ============================================ */
+
 .binbin-mascot {
     text-align: center;
     margin-bottom: 0.3rem;
@@ -791,7 +817,10 @@ button:active {
     font-weight: 600;
 }
 
-/* Learn Mode: Eco-card image display */
+/* ============================================
+   FEEDBACK CARD — LEARN MODE
+   ============================================ */
+
 .learn-card-display {
     display: flex;
     align-items: center;
@@ -820,13 +849,12 @@ button:active {
     animation: popIn 0.6s var(--bounce);
 }
 
-/* Dynamic border color set by category */
+/* Dynamic border color per category */
 .learn-card-display.cat-compostable .learn-card-image { border-color: #10B981; }
 .learn-card-display.cat-recyclable .learn-card-image { border-color: #3B82F6; }
 .learn-card-display.cat-non-recyclable .learn-card-image { border-color: #EF4444; }
 .learn-card-display.cat-special .learn-card-image { border-color: #F59E0B; }
 
-/* Learn Mode: Category info label */
 .learn-category-info {
     display: flex;
     align-items: center;
@@ -950,6 +978,10 @@ button:active {
 }
 
 /* ============================================
+   FEEDBACK CARD — TEST MODE (result badge)
+   ============================================ */
+
+/* ============================================
    ASSESSMENT CHOICE MODAL (Test Mode)
    ============================================ */
 .assessment-modal {
@@ -990,7 +1022,7 @@ button:active {
     transform: scale(1);
 }
 
-/* Left: Category Choices */
+/* Left panel — category choices */
 .assessment-modal-left {
     flex: 1.2;
     display: flex;
@@ -1011,7 +1043,6 @@ button:active {
     gap: 0.8rem;
 }
 
-/* Make category-item clickable in modal */
 .assessment-choice {
     cursor: pointer !important;
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
@@ -1047,7 +1078,7 @@ button:active {
     background: rgba(255, 200, 0, 0.15);
 }
 
-/* Correct / Incorrect flash */
+/* Correct / incorrect feedback states */
 .assessment-choice.choice-correct {
     border-color: var(--color-green) !important;
     background: rgba(88, 204, 2, 0.3) !important;
@@ -1067,7 +1098,7 @@ button:active {
     pointer-events: none;
 }
 
-/* Right: Bin-Bin + Card Preview + Question */
+/* Right panel — card preview + Bin-Bin */
 .assessment-modal-right {
     flex: 0.8;
     display: flex;
@@ -1118,22 +1149,6 @@ button:active {
     font-size: 1rem;
     color: var(--color-text-light);
     font-weight: 600;
-}
-
-/* Modal responsive */
-@media (max-width: 650px) {
-    .assessment-modal-content {
-        flex-direction: column-reverse;
-        padding: 1.5rem;
-        gap: 1.2rem;
-    }
-    .assessment-modal-binbin img {
-        width: 100px;
-    }
-    .assessment-modal-choices .cat-img {
-        width: 80px;
-        height: 80px;
-    }
 }
 
 /* ============================================
@@ -1233,7 +1248,7 @@ button:active {
     font-weight: 600;
 }
 
-/* Learn Mode Results */
+/* Learn Mode */
 .learn-mode-message {
     font-size: 1.2rem;
     color: #2E7D32;
@@ -1316,6 +1331,23 @@ button:active {
    RESPONSIVE
    ============================================ */
 
+@media (max-width: 650px) {
+    .assessment-modal-content {
+        flex-direction: column-reverse;
+        padding: 1.5rem;
+        gap: 1.2rem;
+    }
+
+    .assessment-modal-binbin img {
+        width: 100px;
+    }
+
+    .assessment-modal-choices .cat-img {
+        width: 80px;
+        height: 80px;
+    }
+}
+
 @media (max-width: 1200px) {
     .game-layout {
         grid-template-columns: 1fr 1fr;
@@ -1376,14 +1408,14 @@ button:active {
 .game-header {
     display: flex;
     align-items: center;
-    justify-content: flex-end; /* Pushes everything to the right by default */
+    justify-content: flex-end;
     padding: 15px 40px;
     height: 110px;
-    position: relative; /* Critical for centering */
+    position: relative;
     z-index: 100;
 }
 
-/* SCORE BOARD - LEFT SIDE (Test Mode) */
+/* Left: Score board */
 .header-left-score {
     display: flex;
     position: absolute;
@@ -1394,13 +1426,13 @@ button:active {
     margin-top: 2.5rem;
 }
 
-/* 1. LOGO STYLING (The Centering Fix) */
+/* Center: Logo */
 .header-left {
-    position: absolute;       /* Ignore other items */
-    left: 50%;                /* Move to middle */
-    transform: translateX(-50%); /* Center it perfectly */
-    top: 50%;                 /* Move to vertical middle */
-    margin-top: -45px;        /* Half of the logo height (90px/2) to center vertically */
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 50%;
+    margin-top: -45px;
 }
 
 .logo-img {
@@ -1414,7 +1446,7 @@ button:active {
     transform: scale(1.05) rotate(-3deg);
 }
 
-/* 2. RIGHT CONTROLS GROUP */
+/* Right: Controls group */
 .header-right {
     display: flex;
     align-items: center;
@@ -1422,10 +1454,10 @@ button:active {
     margin-right: 2.5rem;
     gap: 2.5rem;
     position: relative;
-    z-index: 10; /* Ensure buttons are clickable over the logo */
+    z-index: 10;
 }
 
-/* The Greeting Widget (Sun + Name) */
+/* Greeting widget */
 .greeting-widget {
     position: relative;
     display: flex;
@@ -1457,7 +1489,7 @@ button:active {
     text-align: center;
 }
 
-/* The Mushroom Button */
+/* Quit button */
 .img-btn-quit {
     background: transparent;
     border: none;
@@ -1481,7 +1513,7 @@ button:active {
     transform: translateY(-2px) rotate(5deg);
 }
 
-/* The Score Icon */
+/* Score icon */
 .score-icon-div {
     background: transparent;
     border: none;
@@ -1504,6 +1536,8 @@ button:active {
 .score-icon-div:hover {
     transform: translateY(-2px) rotate(5deg);
 }
+
+/* Settings close button */
 .btn-settings-close {
     background: var(--color-green);
     color: white;
@@ -1528,7 +1562,7 @@ button:active {
     box-shadow: none;
 }
 
-/* Settings Gear Button */
+/* Settings button */
 .btn-settings {
     background: transparent;
     border: none;
@@ -1873,4 +1907,3 @@ button:active {
     position: relative;
     z-index: 1;
 }
-

@@ -6,6 +6,7 @@
 const API_URL = 'http://localhost:5000';
 let allLogs = [];
 let chartInstance = null;
+let categoryChartInstance = null;
 let allCards = []; // For card gallery
 let currentFilter = 'all';
 let currentSearchTerm = '';
@@ -162,6 +163,30 @@ function showTab(tabId) {
     if (event && event.target) {
         const navItem = event.target.closest('.nav-item');
         if (navItem) navItem.classList.add('active');
+    }
+
+    // Update top-header title based on active tab
+    const tabTitles = {
+        'overview':         'Overview',
+        'confusion-matrix': 'Confusion Matrix',
+        'leaderboard':      'Leaderboard',
+        'asset-repository': 'Asset Repository',
+        'one-shot':         'Card Manager',
+        'config':           'System Config',
+        'logs':             'Scan Logs',
+        'nicknames':        'Students'
+    };
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle && tabTitles[tabId]) {
+        pageTitle.textContent = tabTitles[tabId];
+    }
+
+    // Re-trigger popIn animation on the top-header
+    const header = document.querySelector('.top-header');
+    if (header) {
+        header.style.animation = 'none';
+        header.offsetHeight; // force reflow
+        header.style.animation = '';
     }
     
     // NO DATA FETCHING HERE!
@@ -662,33 +687,103 @@ async function checkHealth() {
 // ============================================
 
 function updateChart(data) {
+    // --- Activity Trends (line chart) ---
     const ctx = document.getElementById('performanceChart');
-    if (!ctx) return;
-    
-    // If we were tracking history, we'd update datasets here.
-    // For now, initializing a dummy chart if null
-    if (!chartInstance) {
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['10m ago', '5m ago', 'Now'],
-                datasets: [{
-                    label: 'Scans per minute',
-                    data: [2, 5, 3], // Dummy data
-                    borderColor: '#1CB0F6',
-                    tension: 0.4,
-                    fill: true,
-                    backgroundColor: 'rgba(28, 176, 246, 0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { y: { beginAtZero: true } }
-            }
-        });
+    if (ctx) {
+        if (!chartInstance) {
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['10m ago', '5m ago', 'Now'],
+                    datasets: [{
+                        label: 'Scans per minute',
+                        data: [2, 5, 3],
+                        borderColor: '#1CB0F6',
+                        tension: 0.4,
+                        fill: true,
+                        backgroundColor: 'rgba(28, 176, 246, 0.1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
     }
+
+    // --- Category Distribution (doughnut chart) ---
+    const ctxCat = document.getElementById('categoryChart');
+    if (!ctxCat) return;
+
+    const logs = data.recent_logs || [];
+    const counts = { 'Compostable': 0, 'Recyclable': 0, 'Non-Recyclable': 0, 'Special Waste': 0 };
+    logs.forEach(log => {
+        const cat = log.category;
+        if (cat && counts.hasOwnProperty(cat)) counts[cat]++;
+        else if (cat) counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    const labels = Object.keys(counts);
+    const values = Object.values(counts);
+    const colors = {
+        'Compostable':    '#10B981',
+        'Recyclable':     '#3B82F6',
+        'Non-Recyclable': '#EF4444',
+        'Special Waste':  '#F59E0B'
+    };
+    const bgColors = labels.map(l => colors[l] || '#94A3B8');
+    const borderColors = bgColors.map(c => c);
+
+    const total = values.reduce((a, b) => a + b, 0);
+
+    if (categoryChartInstance) {
+        categoryChartInstance.data.labels = labels;
+        categoryChartInstance.data.datasets[0].data = values;
+        categoryChartInstance.update();
+        return;
+    }
+
+    categoryChartInstance = new Chart(ctxCat, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data: values,
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 2,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        font: { family: 'Fredoka', size: 13 },
+                        padding: 12,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const val = ctx.parsed;
+                            const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                            return ` ${ctx.label}: ${val} scan${val !== 1 ? 's' : ''} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 // ============================================
@@ -713,6 +808,13 @@ async function loadConfusionMatrix() {
         const { categories, matrix, category_stats } = data;
         
         // Build confusion matrix table
+        const catImg = {
+            'Compostable':    '../assets/compostable_icon.png',
+            'Recyclable':     '../assets/recyclable_icon.png',
+            'Non-Recyclable': '../assets/non_recyclable_icon.png',
+            'Special Waste':  '../assets/special_waste_icon.png'
+        };
+
         let html = `
             <table class="confusion-matrix-table">
                 <thead>
@@ -744,15 +846,22 @@ async function loadConfusionMatrix() {
         
         // Build per-category accuracy cards
         if (accuracyContainer && category_stats) {
-            accuracyContainer.innerHTML = category_stats.map(stat => `
-                <div class="category-stat-card" style="border-left: 4px solid ${getCategoryColor(stat.category)};">
-                    <div class="cat-name">${stat.category}</div>
-                    <div class="cat-accuracy">${stat.accuracy}%</div>
-                    <div class="cat-detail">${stat.correct}/${stat.total} correct</div>
+            accuracyContainer.innerHTML = category_stats.map(stat => {
+            const categoryClass = stat.category === 'Compostable' ? 'compostable' 
+                : stat.category === 'Recyclable' ? 'recyclable'
+                : stat.category === 'Non-Recyclable' ? 'non-recyclable'
+                : 'special';
+            
+            return `
+                <div class="category-stat-card ${categoryClass}">
+                <img src="${catImg[stat.category] || ''}" alt="${stat.category}" class="cat-stat-img">
+                <div class="cat-name">${stat.category}</div>
+                <div class="cat-accuracy">${stat.accuracy}%</div>
+                <div class="cat-detail">${stat.correct}/${stat.total} correct</div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
-        
     } catch (error) {
         console.error('Confusion matrix error:', error);
         container.innerHTML = '<div class="empty-state">Error loading confusion matrix.</div>';
@@ -774,14 +883,17 @@ function getCategoryColor(category) {
 // ============================================
 
 async function loadLeaderboard() {
-    const tbody = document.getElementById('leaderboard-body');
+    const tbody    = document.getElementById('leaderboard-body');
+    const podium   = document.getElementById('lb-podium');
+    const tableWrap = document.getElementById('lb-table-wrapper');
     if (!tbody) return;
-    
+
     try {
         const response = await fetch(`${API_URL}/admin/student-proficiency`);
         const data = await response.json();
-        
+
         if (data.status !== 'success' || !data.leaderboard || data.leaderboard.length === 0) {
+            if (podium) podium.innerHTML = '';
             tbody.innerHTML = `<tr>
                 <td colspan="7" class="empty-state-cell">
                     <div class="table-empty-state">
@@ -793,25 +905,58 @@ async function loadLeaderboard() {
             </tr>`;
             return;
         }
-        
-        tbody.innerHTML = data.leaderboard.map(student => `
-            <tr>
-                <td class="rank-cell">
-                    ${student.rank <= 3 ? ['🥇', '🥈', '🥉'][student.rank - 1] : student.rank}
-                </td>
-                <td><strong>${student.nickname}</strong></td>
-                <td>${student.sessions}</td>
-                <td>${student.total_scans}</td>
-                <td>${student.correct}</td>
-                <td>
-                    <span class="accuracy-badge" style="background: ${getAccuracyColor(student.avg_accuracy)}">
-                        ${student.avg_accuracy}%
-                    </span>
-                </td>
-                <td>${student.best_accuracy}%</td>
-            </tr>
-        `).join('');
-        
+
+        const lb = data.leaderboard;
+
+        // ---- Podium (top 3) ----
+        if (podium) {
+            // order: 1st | 2nd | 3rd  top-to-bottom vertical column
+            const slots = [
+                { data: lb[0], rank: 1, medal: '🥇', cls: 'lb-podium-gold',   baseCls: 'lb-base-1' },
+                { data: lb[1], rank: 2, medal: '🥈', cls: 'lb-podium-silver', baseCls: 'lb-base-2' },
+                { data: lb[2], rank: 3, medal: '🥉', cls: 'lb-podium-bronze', baseCls: 'lb-base-3' },
+            ];
+            podium.innerHTML = slots.map(slot => {
+                if (!slot.data) return `<div class="lb-podium-slot ${slot.cls}"><div class="lb-podium-card empty">—</div><div class="lb-podium-base ${slot.baseCls}">${slot.rank}${slot.rank===1?'st':slot.rank===2?'nd':'rd'}</div></div>`;
+                const acc = parseFloat(slot.data.avg_accuracy);
+                return `
+                <div class="lb-podium-slot ${slot.cls}">
+                    <div class="lb-podium-card">
+                        <div class="lb-podium-medal">${slot.medal}</div>
+                        <div class="lb-podium-name">${slot.data.nickname}</div>
+                        <div class="lb-podium-score">${slot.data.best_accuracy}%</div>
+                        <div class="lb-podium-meta">
+                            <span>${slot.data.sessions} sessions</span>
+                            <span class="accuracy-badge" style="background:${getAccuracyColor(acc)}">${acc}% avg</span>
+                        </div>
+                    </div>
+                    <div class="lb-podium-base ${slot.baseCls}">${slot.rank}${slot.rank===1?'st':slot.rank===2?'nd':'rd'}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ---- Table (rank 4+) ----
+        const rest = lb.slice(3);
+        if (rest.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#558B2F;font-weight:600;">Top 3 shown at the podium</td></tr>`;
+        } else {
+            tbody.innerHTML = rest.map(student => `
+                <tr>
+                    <td class="rank-cell">${student.rank}</td>
+                    <td><strong>${student.nickname}</strong></td>
+                    <td>${student.sessions}</td>
+                    <td>${student.total_scans}</td>
+                    <td>${student.correct}</td>
+                    <td>
+                        <div class="lb-acc-bar-wrap">
+                            <div class="lb-acc-bar-fill" style="width:${student.avg_accuracy}%;background:${getAccuracyColor(student.avg_accuracy)}"></div>
+                            <span class="lb-acc-label">${student.avg_accuracy}%</span>
+                        </div>
+                    </td>
+                    <td><span class="accuracy-badge" style="background:${getAccuracyColor(student.best_accuracy)}">${student.best_accuracy}%</span></td>
+                </tr>`).join('');
+        }
+
     } catch (error) {
         console.error('Leaderboard error:', error);
         tbody.innerHTML = `<tr>

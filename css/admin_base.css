@@ -151,7 +151,13 @@ button:active {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0;
+    background: var(--card-bg);
+    border: var(--card-border);
+    border-radius: var(--card-radius) var(--card-radius) 0 0;
+    border-bottom: 2px solid rgba(165, 214, 167, 0.5);
+    padding: 1rem 1.5rem;
+    margin-bottom: 0;
+    animation: popIn 0.6s var(--bounce);
 }
 
 .top-header h1 {
@@ -186,7 +192,8 @@ button:active {
 .section-card {
     background: var(--card-bg);
     border: var(--card-border);
-    border-radius: var(--card-radius);
+    border-top: none;
+    border-radius: 0 0 var(--card-radius) var(--card-radius);
     padding: 2rem;
     box-shadow: var(--card-shadow);
     animation: popIn 0.6s var(--bounce);
@@ -197,7 +204,7 @@ button:active {
 .section-card.scrollable.active {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 160px);
+    height: calc(100vh - 180px);
     overflow-y: auto;
     overflow-x: hidden;
 }

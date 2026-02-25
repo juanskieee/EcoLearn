@@ -16,7 +16,7 @@ const CORE_ASSETS = [
     '/js/admin_optimized.js',
     '/js/script.js',
     '/js/sw.js',
-    '/css/admin_style.css',
+    '/css/admin_base.css',
     '/css/style.css',
     '/assets/binbin_neutral.png'
 ];

@@ -28,10 +28,13 @@
     background: rgba(255, 255, 255, 0.5);
     border-radius: 16px;
     border: 2px solid rgba(165, 214, 167, 0.3);
+    width: 100%;
+    height: 100%;
 }
 
 .confusion-matrix-table {
     width: 100%;
+    height: 100%;
     border-collapse: separate;
     border-spacing: 0;
     font-family: 'Fredoka', sans-serif;
@@ -82,6 +85,41 @@
     border: 2px solid #A5D6A7;
 }
 
+/* --- Category label inside matrix headers --- */
+.matrix-cat-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.matrix-cat-img {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+    transition: transform 0.2s;
+}
+
+.pred-header:hover .matrix-cat-img,
+.actual-header:hover .matrix-cat-img {
+    transform: scale(1.12) translateY(-2px);
+}
+
+/* --- Icon on category stat cards --- */
+.cat-stat-img {
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.15));
+    transition: transform 0.2s;
+    align-self: center;
+}
+
+.category-stat-card:hover .cat-stat-img {
+    transform: scale(1.1) translateY(-3px);
+}
+
 .confusion-matrix-table .cell-correct {
     background: linear-gradient(135deg, #a5d6a7 0%, #81c784 100%);
     color: #1b5e20;
@@ -90,14 +128,15 @@
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
+
 .confusion-matrix-table .cell-correct:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 12px rgba(129, 199, 132, 0.3);
 }
 
 .confusion-matrix-table .cell-error {
-    background: linear-gradient(135deg, #ffcc80 0%, #ffb74d 100%);
-    color: #e65100;
+    background: linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%);
+    color: #a55e48;
     font-weight: 700;
     font-size: 1rem;
 }
@@ -137,8 +176,14 @@
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 0.75rem;
 }
+
+.category-stat-card.compostable    { background: linear-gradient(135deg, rgba(236, 253, 245, 0.9) 0%, rgba(255, 255, 255, 0.85) 100%);}
+.category-stat-card.recyclable    { background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.85) 100%);}
+.category-stat-card.non-recyclable { background: linear-gradient(135deg, rgba(254, 242, 242, 0.9) 0%, rgba(255, 255, 255, 0.85) 100%);}
+.category-stat-card.special        { background: linear-gradient(135deg, rgba(255, 251, 235, 0.9) 0%, rgba(255, 255, 255, 0.85) 100%);}
 
 .category-stat-card:hover {
     transform: translateY(-4px);

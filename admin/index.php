@@ -78,9 +78,6 @@ require_once 'check_session.php';
             </ul>
 
             <div class="sidebar-footer">
-                <a href="../index.html" class="btn-back-game">
-                    Back to Game
-                </a>
                 <a href="javascript:void(0)" class="btn-logout" onclick="showLogoutModal()">
                     Logout
                 </a>
@@ -92,18 +89,17 @@ require_once 'check_session.php';
 
         <main class="main-content">
             
-            <header class="top-header">
-                <h1>Dashboard</h1>
-                <div class="user-profile">
-                    <img src="../assets/admin.png" class="admin-badge" alt="Admin">
-                </div>
-            </header>
+                <header class="top-header">
+                    <h1 id="page-title">Overview</h1>
+                    <div class="user-profile">
+                        <img src="../assets/admin.png" class="admin-badge" alt="Admin">
+                    </div>
+                </header>       
 
             <section id="overview" class="section-card scrollable tab-content active">
-                <h3 class="section-title">Performance at a Glance</h3>
                 <div class="stats-grid">
                     <div class="stat-card blue">
-                        <div class="stat-icon">📸</div>
+                        <div class="stat-icon"><img src="../assets/camera_icon.png" alt="Total Scans"></div>
                         <div class="stat-details">
                             <div class="stat-value" id="stat-total">0</div>
                             <div class="stat-label">Total Scans</div>
@@ -111,7 +107,7 @@ require_once 'check_session.php';
                     </div>
                     
                     <div class="stat-card green">
-                        <div class="stat-icon">✅</div>
+                        <div class="stat-icon"><img src="../assets/check_icon.png" alt="Accuracy"></div>
                         <div class="stat-details">
                             <div class="stat-value" id="stat-accuracy">0%</div>
                             <div class="stat-label">Accuracy</div>
@@ -119,7 +115,7 @@ require_once 'check_session.php';
                     </div>
                     
                     <div class="stat-card purple">
-                        <div class="stat-icon">🎯</div>
+                        <div class="stat-icon"><img src="../assets/target_icon.png" alt="Active Cards"></div>
                         <div class="stat-details">
                             <div class="stat-value" id="stat-cards">46</div>
                             <div class="stat-label">Active Cards</div>
@@ -127,7 +123,7 @@ require_once 'check_session.php';
                     </div>
                     
                     <div class="stat-card yellow">
-                        <div class="stat-icon">🎓</div>
+                        <div class="stat-icon"><img src="../assets/graduate_icon.png" alt="Sessions"></div>
                         <div class="stat-details">
                             <div class="stat-value" id="stat-sessions">0</div>
                             <div class="stat-label">Sessions</div>
@@ -135,18 +131,24 @@ require_once 'check_session.php';
                     </div>
                 </div>
 
-                <div class="chart-wrapper">
-                    <h4>Activity Trends</h4>
-                    <div class="chart-container">
-                        <canvas id="performanceChart"></canvas>
+                <div class="charts-row">
+                    <div class="chart-wrapper">
+                        <h4>📈 Activity Trends</h4>
+                        <div class="chart-container">
+                            <canvas id="performanceChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <h4>🗂️ Category Distribution</h4>
+                        <div class="chart-container chart-container--doughnut">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
                     </div>
                 </div>
             </section>
 
             <!-- CONFUSION MATRIX SECTION -->
             <section id="confusion-matrix" class="section-card scrollable tab-content">
-                <h3 class="section-title">🔢 Confusion Matrix</h3>
-                
                 <div id="confusion-matrix-container" class="matrix-container">
                     <div class="loading-cell"><div class="spinner"></div> Loading matrix data...</div>
                 </div>
@@ -156,60 +158,70 @@ require_once 'check_session.php';
 
             <!-- STUDENT LEADERBOARD SECTION -->
             <section id="leaderboard" class="section-card scrollable tab-content">
-                <div class="card-manager-header">
-                    <div class="card-manager-header-left">
-                        <h3 class="section-title">🏆 Comparative Performance Dashboard</h3>
-                        <p class="subtitle">Student proficiency rankings based on assessment scores (using pseudonyms for privacy).</p>
-                    </div>
-                    <div class="card-manager-header-right">
-                        <div class="search-bar-container">
-                            <input type="text" 
-                                   class="card-search-input" 
-                                   id="leaderboard-search" 
-                                   placeholder="🔍 Search students..."
-                                   oninput="searchLeaderboard(this.value)">
-                            <button class="search-clear-btn hidden" 
-                                    id="leaderboard-search-clear" 
-                                    onclick="clearLeaderboardSearch()">
-                                ✕
-                            </button>
+                <div class="lb-layout">
+
+                    <!-- Left: search header + table -->
+                    <div class="lb-left">
+                        <div class="card-manager-header">
+                            <div class="card-manager-header-left">
+                                <p class="subtitle">Student proficiency rankings based on assessment scores.</p>
+                            </div>
+                            <div class="card-manager-header-right">
+                                <div class="search-bar-container">
+                                    <input type="text" 
+                                           class="card-search-input" 
+                                           id="leaderboard-search" 
+                                           placeholder="🔍 Search students..."
+                                           oninput="searchLeaderboard(this.value)">
+                                    <button class="search-clear-btn hidden" 
+                                            id="leaderboard-search-clear" 
+                                            onclick="clearLeaderboardSearch()">
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lb-table-wrapper" id="lb-table-wrapper">
+                            <div class="table-responsive leaderboard-table-container">
+                                <table class="modern-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Nickname</th>
+                                            <th>Sessions</th>
+                                            <th>Total Scans</th>
+                                            <th>Correct</th>
+                                            <th>Avg Accuracy</th>
+                                            <th>Best Score</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaderboard-body">
+                                        <tr>
+                                            <td colspan="7" class="loading-cell">
+                                                <div class="spinner"></div> Loading leaderboard...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="table-responsive leaderboard-table-container">
-                    <table class="modern-table">
-                        <thead>
-                            <tr>
-                                <th>Rank</th>
-                                <th>Nickname</th>
-                                <th>Sessions</th>
-                                <th>Total Scans</th>
-                                <th>Correct</th>
-                                <th>Avg Accuracy</th>
-                                <th>Best Score</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboard-body">
-                            <tr>
-                                <td colspan="7" class="loading-cell">
-                                    <div class="spinner"></div> Loading leaderboard...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+
+                    <!-- Right: podium -->
+                    <div class="lb-right">
+                        <div class="lb-podium" id="lb-podium"></div>
+                    </div>
+
                 </div>
             </section>
 
             <!-- ASSET REPOSITORY SECTION -->
-            <section id="asset-repository" class="section-card scrollable tab-content">
-                <h3 class="section-title">🖼️ Asset Repository</h3>
-                <p class="subtitle">Standardized Printable Eco-Cards (4×5 inch, 300 DPI). Download PDFs by category.</p>
-                
+            <section id="asset-repository" class="section-card scrollable tab-content">                
                 <div class="asset-category-list">
                     <div class="asset-category-row compostable">
                         <div class="category-info">
-                            <div class="category-icon">🌱</div>
+                            <div class="category-icon"><img src="../assets/compostable_icon.png" alt="Compostable"></div>
                             <div class="category-details">
                                 <h4>Compostable</h4>
                                 <p class="card-count" id="count-compostable">-- cards</p>
@@ -224,7 +236,7 @@ require_once 'check_session.php';
                     
                     <div class="asset-category-row recyclable">
                         <div class="category-info">
-                            <div class="category-icon">♻️</div>
+                            <div class="category-icon"><img src="../assets/recyclable_icon.png" alt="Recyclable"></div>
                             <div class="category-details">
                                 <h4>Recyclable</h4>
                                 <p class="card-count" id="count-recyclable">-- cards</p>
@@ -239,7 +251,7 @@ require_once 'check_session.php';
                     
                     <div class="asset-category-row non-recyclable">
                         <div class="category-info">
-                            <div class="category-icon">🗑️</div>
+                            <div class="category-icon"><img src="../assets/non_recyclable_icon.png" alt="Non-Recyclable"></div>
                             <div class="category-details">
                                 <h4>Non-Recyclable</h4>
                                 <p class="card-count" id="count-non-recyclable">-- cards</p>
@@ -254,7 +266,7 @@ require_once 'check_session.php';
                     
                     <div class="asset-category-row special">
                         <div class="category-info">
-                            <div class="category-icon">⚠️</div>
+                            <div class="category-icon"><img src="../assets/special_waste_icon.png" alt="Special Waste"></div>
                             <div class="category-details">
                                 <h4>Special Waste</h4>
                                 <p class="card-count" id="count-special">-- cards</p>
@@ -273,7 +285,6 @@ require_once 'check_session.php';
             <section id="one-shot" class="section-card scrollable tab-content">
                 <div class="card-manager-header">
                     <div class="card-manager-header-left">
-                        <h3 class="section-title">📸 Card Manager</h3>
                         <p class="subtitle">Manage Eco-Cards using One-Shot Learning.</p>
                     </div>
                     <div class="card-manager-header-right">
@@ -312,7 +323,6 @@ require_once 'check_session.php';
             <section id="config" class="section-card scrollable tab-content">
                 <div class="config-header-row">
                     <div class="config-header-left">
-                        <h3 class="section-title">⚙️ System Configuration</h3>
                         <p class="subtitle">Modify ORB-KNN algorithm parameters without changing source code.</p>
                     </div>
                     <div class="config-warning-box">
@@ -392,7 +402,6 @@ require_once 'check_session.php';
 
             <section id="logs" class="section-card scrollable tab-content">
                 <div class="card-header">
-                    <h3 class="section-title">Recent Activity</h3>
                     <div class="filter-pills">
                         <button class="pill active" onclick="filterLogs('all', this)">All</button>
                         <button class="pill" onclick="filterLogs('correct', this)">✅ Correct</button>
@@ -425,7 +434,6 @@ require_once 'check_session.php';
             <section id="nicknames" class="section-card scrollable tab-content">
                 <div class="card-manager-header">
                     <div class="card-manager-header-left">
-                        <h3 class="section-title">👥 Class Roster</h3>
                         <p class="subtitle">Manage student nicknames for easy login</p>
                     </div>
                     <div class="card-manager-header-right">

@@ -565,24 +565,43 @@ const OptimizedAdmin = {
     async updateAssetCounts() {
         const data = await this.loadCountsFast();
         if (!data || !data.counts) return;
-        
-        // Update category counts
+
+        // Update category counts and animated progress bars
         const countMap = {
-            'Compostable': 'count-compostable',
-            'Recyclable': 'count-recyclable',
-            'Non-Recyclable': 'count-non-recyclable',
-            'Special Waste': 'count-special'
+            'Compostable':    { countId: 'count-compostable',    barId: 'bar-compostable' },
+            'Recyclable':     { countId: 'count-recyclable',     barId: 'bar-recyclable' },
+            'Non-Recyclable': { countId: 'count-non-recyclable', barId: 'bar-non-recyclable' },
+            'Special Waste':  { countId: 'count-special',        barId: 'bar-special' }
         };
-        
-        for (const [cat, elId] of Object.entries(countMap)) {
-            const el = document.getElementById(elId);
-            if (el && data.counts[cat] !== undefined) {
-                el.textContent = `${data.counts[cat]} cards`;
+
+        const total = data.total_cards || 1; // avoid division by zero
+
+        for (const [cat, ids] of Object.entries(countMap)) {
+            const count = data.counts[cat];
+            if (count === undefined) continue;
+
+            // Text count
+            const countEl = document.getElementById(ids.countId);
+            if (countEl) countEl.textContent = `${count} cards`;
+
+            // Animated progress bar (% of total)
+            const barEl = document.getElementById(ids.barId);
+            if (barEl) {
+                const pct = Math.round((count / total) * 100);
+                // Small delay so CSS transition fires after element is visible
+                requestAnimationFrame(() => {
+                    setTimeout(() => { barEl.style.width = pct + '%'; }, 60);
+                });
             }
         }
-        
+
+        // Total Assets badge on Asset Repository page
+        const totalBadgeEl = document.getElementById('asset-total-count');
+        if (totalBadgeEl) totalBadgeEl.textContent = total;
+
+        // Overview stat card
         const cardCountEl = document.getElementById('stat-cards');
-        if (cardCountEl) cardCountEl.textContent = data.total_cards;
+        if (cardCountEl) cardCountEl.textContent = total;
     }
 };
 
