@@ -225,17 +225,19 @@ async function loadStats() {
 
 function renderLogs(logs) {
     const tbody = document.getElementById('logs-body');
-    
+    const container = document.querySelector('.logs-table-container');
+
+    // Remove any existing empty overlay
+    container && container.querySelectorAll('.logs-empty').forEach(el => el.remove());
+
     if (!logs || logs.length === 0) {
-        tbody.innerHTML = `<tr>
-            <td colspan="5" class="empty-state-cell">
-                <div class="table-empty-state">
-                    <span class="empty-icon">📋</span>
-                    <span class="empty-text">No recent scans found</span>
-                    <span class="empty-hint">Scans will appear here when students start scanning</span>
-                </div>
-            </td>
-        </tr>`;
+        tbody.innerHTML = '';
+        if (container) container.insertAdjacentHTML('beforeend', `
+            <div class="empty-state logs-empty">
+                <span class="empty-icon">📋</span>
+                <strong>No recent scans found</strong>
+                <small>Scans will appear here when students start scanning</small>
+            </div>`);
         return;
     }
     
@@ -256,7 +258,7 @@ function renderLogs(logs) {
 
 function filterLogs(filterType, btnElement) {
     // UI toggle
-    document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.logs-pill').forEach(b => b.classList.remove('active'));
     btnElement.classList.add('active');
     
     // Logic
@@ -348,13 +350,21 @@ async function loadNicknames() {
                 `).join('');
             }
         } else {
-            list.innerHTML = '<div class="empty-state">No students added yet<br><small style="font-size: 0.85rem; opacity: 0.7;">Click "Add Student" to get started</small></div>';
+            list.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">👥</span>
+                <strong>No students added yet</strong>
+                <small>Click "Add Student" to get started</small>
+            </div>`;
         }
     } catch (e) {
         console.error(e);
         const list = document.getElementById('nickname-list');
         if (list) {
-            list.innerHTML = '<div class="empty-state">Error loading students<br><small style="font-size: 0.85rem; opacity: 0.7;">Please refresh the page</small></div>';
+            list.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">⚠️</span>
+                <strong>Error loading students</strong>
+                <small>Please refresh the page</small>
+            </div>`;
         }
     }
 }
@@ -553,10 +563,10 @@ function searchNicknames(searchTerm) {
         if (!emptyState) {
             emptyState = document.createElement('div');
             emptyState.className = 'empty-state';
-            emptyState.innerHTML = 'No students match your search<br><small style="font-size: 0.85rem; opacity: 0.7;">Try different keywords</small>';
+            emptyState.innerHTML = '<span class="empty-icon">🔍</span><strong>No students match your search</strong><small>Try different keywords</small>';
             list.appendChild(emptyState);
         }
-        emptyState.style.display = 'block';
+        emptyState.style.display = 'flex';
     } else if (emptyState) {
         emptyState.style.display = 'none';
     }
@@ -591,7 +601,7 @@ function searchLeaderboard(searchTerm) {
     }
     
     // Skip if only empty state row exists
-    if (rows.length === 0 || (rows.length === 1 && rows[0].querySelector('.table-empty-state'))) {
+    if (rows.length === 0 || (rows.length === 1 && rows[0].querySelector('.empty-state'))) {
         return;
     }
     
@@ -600,7 +610,7 @@ function searchLeaderboard(searchTerm) {
     
     rows.forEach(row => {
         // Skip empty state rows
-        if (row.querySelector('.table-empty-state') || row.querySelector('.empty-state-cell')) {
+        if (row.querySelector('.empty-state') || row.querySelector('.empty-state-cell')) {
             return;
         }
         
@@ -623,16 +633,16 @@ function searchLeaderboard(searchTerm) {
             emptyRow.className = 'search-empty-row';
             emptyRow.innerHTML = `
                 <td colspan="7" class="empty-state-cell">
-                    <div class="table-empty-state">
+                    <div class="empty-state">
                         <span class="empty-icon">🔍</span>
-                        <span class="empty-text">No students match "${searchTerm}"</span>
-                        <span class="empty-hint">Try different keywords</span>
+                        <strong>No students match "${searchTerm}"</strong>
+                        <small>Try different keywords</small>
                     </div>
                 </td>
             `;
             tbody.appendChild(emptyRow);
         } else {
-            emptyRow.querySelector('.empty-text').textContent = `No students match "${searchTerm}"`;
+            emptyRow.querySelector('strong').textContent = `No students match "${searchTerm}"`;
             emptyRow.style.display = '';
         }
     } else if (emptyRow) {
@@ -801,7 +811,11 @@ async function loadConfusionMatrix() {
         const data = await response.json();
         
         if (data.status !== 'success') {
-            container.innerHTML = '<div class="empty-state">No classification data available yet.</div>';
+            container.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">📊</span>
+                <strong>No classification data available yet</strong>
+                <small>Data will appear after students complete scanning sessions</small>
+            </div>`;
             return;
         }
         
@@ -864,7 +878,11 @@ async function loadConfusionMatrix() {
         }
     } catch (error) {
         console.error('Confusion matrix error:', error);
-        container.innerHTML = '<div class="empty-state">Error loading confusion matrix.</div>';
+        container.innerHTML = `<div class="empty-state">
+            <span class="empty-icon">⚠️</span>
+            <strong>Error loading confusion matrix</strong>
+            <small>Please refresh the page or check your connection</small>
+        </div>`;
     }
 }
 
@@ -893,20 +911,35 @@ async function loadLeaderboard() {
         const data = await response.json();
 
         if (data.status !== 'success' || !data.leaderboard || data.leaderboard.length === 0) {
-            if (podium) podium.innerHTML = '';
-            tbody.innerHTML = `<tr>
-                <td colspan="7" class="empty-state-cell">
-                    <div class="table-empty-state">
-                        <span class="empty-icon">🏆</span>
-                        <span class="empty-text">No rankings yet</span>
-                        <span class="empty-hint">Students need to complete sessions in Assessment Mode to appear on the leaderboard</span>
-                    </div>
-                </td>
-            </tr>`;
+            if (podium) {
+                const emptySlots = [
+                    { rank: 1, medal: '🥇', cls: 'lb-podium-gold',   baseCls: 'lb-base-1', suffix: 'st' },
+                    { rank: 2, medal: '🥈', cls: 'lb-podium-silver', baseCls: 'lb-base-2', suffix: 'nd' },
+                    { rank: 3, medal: '🥉', cls: 'lb-podium-bronze', baseCls: 'lb-base-3', suffix: 'rd' },
+                ];
+                podium.innerHTML = emptySlots.map(s => `
+                    <div class="lb-podium-slot ${s.cls}">
+                        <div class="lb-podium-card lb-podium-card--empty">
+                            <div class="lb-podium-empty-slot-icon">${s.medal}</div>
+                            <div class="lb-podium-empty-slot-label">No entry</div>
+                        </div>
+                        <div class="lb-podium-base ${s.baseCls}">${s.rank}${s.suffix}</div>
+                    </div>`).join('');
+            }
+            tbody.innerHTML = '';
+            if (tableWrap) tableWrap.insertAdjacentHTML('beforeend', `
+                <div class="empty-state lb-table-empty">
+                    <span class="empty-icon">🏆</span>
+                    <strong>No rankings yet</strong>
+                    <small>Students need to complete sessions in Assessment Mode to appear on the leaderboard</small>
+                </div>`);
             return;
         }
 
         const lb = data.leaderboard;
+
+        // Clear any existing empty overlay
+        tableWrap && tableWrap.querySelectorAll('.lb-table-empty').forEach(el => el.remove());
 
         // ---- Podium (top 3) ----
         if (podium) {
@@ -917,7 +950,14 @@ async function loadLeaderboard() {
                 { data: lb[2], rank: 3, medal: '🥉', cls: 'lb-podium-bronze', baseCls: 'lb-base-3' },
             ];
             podium.innerHTML = slots.map(slot => {
-                if (!slot.data) return `<div class="lb-podium-slot ${slot.cls}"><div class="lb-podium-card empty">—</div><div class="lb-podium-base ${slot.baseCls}">${slot.rank}${slot.rank===1?'st':slot.rank===2?'nd':'rd'}</div></div>`;
+                if (!slot.data) return `
+                <div class="lb-podium-slot ${slot.cls}">
+                    <div class="lb-podium-card lb-podium-card--empty">
+                        <div class="lb-podium-empty-slot-icon">${slot.medal}</div>
+                        <div class="lb-podium-empty-slot-label">No entry</div>
+                    </div>
+                    <div class="lb-podium-base ${slot.baseCls}">${slot.rank}${slot.rank===1?'st':slot.rank===2?'nd':'rd'}</div>
+                </div>`;
                 const acc = parseFloat(slot.data.avg_accuracy);
                 return `
                 <div class="lb-podium-slot ${slot.cls}">
@@ -935,39 +975,33 @@ async function loadLeaderboard() {
             }).join('');
         }
 
-        // ---- Table (rank 4+) ----
-        const rest = lb.slice(3);
-        if (rest.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#558B2F;font-weight:600;">Top 3 shown at the podium</td></tr>`;
-        } else {
-            tbody.innerHTML = rest.map(student => `
-                <tr>
-                    <td class="rank-cell">${student.rank}</td>
-                    <td><strong>${student.nickname}</strong></td>
-                    <td>${student.sessions}</td>
-                    <td>${student.total_scans}</td>
-                    <td>${student.correct}</td>
-                    <td>
-                        <div class="lb-acc-bar-wrap">
-                            <div class="lb-acc-bar-fill" style="width:${student.avg_accuracy}%;background:${getAccuracyColor(student.avg_accuracy)}"></div>
-                            <span class="lb-acc-label">${student.avg_accuracy}%</span>
-                        </div>
-                    </td>
-                    <td><span class="accuracy-badge" style="background:${getAccuracyColor(student.best_accuracy)}">${student.best_accuracy}%</span></td>
-                </tr>`).join('');
-        }
+        // ---- Table (ALL students) ----
+        const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+        tbody.innerHTML = lb.map(student => `
+            <tr>
+                <td class="rank-cell">${medals[student.rank] || student.rank}</td>
+                <td class="lb-name-cell"><strong>${student.nickname}</strong></td>
+                <td class="lb-num-cell">${student.sessions}</td>
+                <td class="lb-num-cell">${student.total_scans}</td>
+                <td class="lb-num-cell">${student.correct}</td>
+                <td>
+                    <div class="lb-acc-bar-wrap">
+                        <div class="lb-acc-bar-fill" style="width:${student.avg_accuracy}%;background:${getAccuracyColor(student.avg_accuracy)}"></div>
+                        <span class="lb-acc-label">${student.avg_accuracy}%</span>
+                    </div>
+                </td>
+                <td><span class="accuracy-badge" style="background:${getAccuracyColor(student.best_accuracy)}">${student.best_accuracy}%</span></td>
+            </tr>`).join('');
 
     } catch (error) {
         console.error('Leaderboard error:', error);
-        tbody.innerHTML = `<tr>
-            <td colspan="7" class="empty-state-cell">
-                <div class="table-empty-state">
-                    <span class="empty-icon">⚠️</span>
-                    <span class="empty-text">Error loading leaderboard</span>
-                    <span class="empty-hint">Please refresh the page or check your connection</span>
-                </div>
-            </td>
-        </tr>`;
+        tbody.innerHTML = '';
+        if (tableWrap) tableWrap.insertAdjacentHTML('beforeend', `
+            <div class="empty-state lb-table-empty">
+                <span class="empty-icon">⚠️</span>
+                <strong>Error loading leaderboard</strong>
+                <small>Please refresh the page or check your connection</small>
+            </div>`);
     }
 }
 
@@ -1259,12 +1293,12 @@ function getCategoryColorRGB(category) {
 
 function getCategoryIcon(category) {
     const icons = {
-        'Compostable': '🌱',
-        'Recyclable': '♻️',
-        'Non-Recyclable': '🗑️',
-        'Special Waste': '⚠️'
+        'Compostable': '',
+        'Recyclable': '',
+        'Non-Recyclable': '',
+        'Special Waste': ''
     };
-    return icons[category] || '📦';
+    return icons[category] || '';
 }
 
 async function generatePDF(cardId, cardName) {
@@ -1340,17 +1374,25 @@ function previewCard(cardId, cardName, category, imagePath) {
         modal.className = 'card-preview-modal';
         modal.innerHTML = `
             <div class="preview-modal-content">
-                <button class="preview-close" onclick="closeCardPreview()">✕</button>
-                <div class="preview-image">
-                    <img id="preview-modal-img" src="" alt="">
+                <img src="/assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+                <div class="preview-modal-header">
+                    <h4 id="preview-modal-name"></h4>
+                    <button class="preview-modal-close" onclick="closeCardPreview()">✕</button>
                 </div>
-                <div class="preview-info">
-                    <h3 id="preview-modal-name"></h3>
-                    <p id="preview-modal-category"></p>
-                    <div class="preview-actions">
-                        <button class="btn-replace" id="preview-modal-replace-btn">
-                            🔄 Replace This Card
-                        </button>
+                <div class="preview-modal-body">
+                    <div class="preview-image">
+                        <img id="preview-modal-img" src="" alt="">
+                    </div>
+                    <div class="preview-info">
+                        <span id="preview-modal-category" class="preview-cat-badge"></span>
+                        <div class="preview-actions">
+                            <button class="btn-replace" id="preview-modal-replace-btn">
+                                ✏️                            
+                            </button>
+                            <button class="btn-delete" id="preview-modal-delete-btn">
+                                🗑️                            
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1374,15 +1416,94 @@ function previewCard(cardId, cardName, category, imagePath) {
     img.alt = cardName;
     img.onerror = function() { this.onerror=null; this.src = '/assets/binbin_neutral.png'; };
     nameEl.textContent = cardName;
-    categoryEl.innerHTML = `<span style="color: ${getCategoryColor(category)}">${getCategoryIcon(category)} ${category}</span>`;
+    categoryEl.textContent = `${getCategoryIcon(category)} ${category}`;
+    categoryEl.style.background = getCategoryColor(category);
     replaceBtn.onclick = () => {
         closeCardPreview();
         selectCardForReplacement(cardId, cardName, category, imagePath);
+    };
+
+    const deleteBtn = document.getElementById('preview-modal-delete-btn');
+    deleteBtn.onclick = () => {
+        closeCardPreview();
+        showDeleteCardModal(cardId, cardName);
     };
     
     // Show modal immediately
     modal.style.display = 'flex';
     requestAnimationFrame(() => modal.classList.add('active'));
+}
+
+// ============================================
+// DELETE CARD
+// ============================================
+
+function showDeleteCardModal(cardId, cardName) {
+    let modal = document.getElementById('delete-card-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'delete-card-modal';
+        modal.className = 'confirmation-modal';
+        modal.innerHTML = `
+            <div class="confirmation-content" onclick="event.stopPropagation()">
+                <div class="confirmation-header">
+                    <h3>🗑️ Delete Card</h3>
+                </div>
+                <div class="confirmation-body">
+                    <p>Are you sure you want to delete <strong id="delete-card-name"></strong>?</p>
+                    <p style="font-size:0.85rem; color:#ef4444; margin-top:0.5rem;">This will permanently remove the card and its recognition data.</p>
+                </div>
+                <div class="confirmation-actions">
+                    <button class="btn-confirm-cancel" onclick="closeDeleteCardModal()">Cancel</button>
+                    <button class="btn-confirm-save danger" id="delete-card-confirm-btn">🗑️ Delete</button>
+                </div>
+            </div>
+        `;
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeDeleteCardModal();
+        });
+        document.body.appendChild(modal);
+    }
+
+    document.getElementById('delete-card-name').textContent = `"${cardName}"`;
+    document.getElementById('delete-card-confirm-btn').onclick = () => confirmDeleteCard(cardId, cardName);
+
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+}
+
+function closeDeleteCardModal() {
+    const modal = document.getElementById('delete-card-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.style.display = 'none', 200);
+    }
+}
+
+async function confirmDeleteCard(cardId, cardName) {
+    closeDeleteCardModal();
+    showNotification('Deleting card...', 'info');
+
+    try {
+        const response = await fetch(`${API_URL}/admin/cards/${cardId}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            showNotification(`🗑️ "${cardName}" deleted`, 'success');
+            // Bust caches and re-render gallery
+            if (typeof invalidateAllCaches === 'function') invalidateAllCaches();
+            if (typeof OptimizedAdmin !== 'undefined') {
+                await OptimizedAdmin.loadCardsFast(true);
+                await OptimizedAdmin.loadAssets(true);
+                OptimizedAdmin.renderCardGallery(currentFilter, currentSearchTerm);
+            }
+        } else {
+            showNotification(`❌ ${data.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Delete card error:', error);
+        showNotification('❌ Error deleting card', 'error');
+    }
 }
 
 function closeCardPreview() {
@@ -1436,7 +1557,7 @@ function selectCardForReplacement(cardId, cardName, category, imagePath) {
 
 function resetCardForm() {
     // Reset form to default "Add New Card" state
-    document.getElementById('form-title').innerHTML = '➕ Add New Card';
+    document.getElementById('form-title').innerHTML = 'Add New Card';
     document.getElementById('replace-card-id').value = '';
     document.getElementById('one-shot-name').value = '';
     document.getElementById('one-shot-image').value = '';
@@ -1611,7 +1732,11 @@ async function loadSystemConfig() {
         const data = await response.json();
         
         if (data.status !== 'success' || !data.config) {
-            container.innerHTML = '<div class="empty-state">Unable to load configuration.</div>';
+            container.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">⚙️</span>
+                <strong>Unable to load configuration</strong>
+                <small>Please refresh the page or check your connection</small>
+            </div>`;
             return;
         }
         

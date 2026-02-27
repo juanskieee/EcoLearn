@@ -106,7 +106,11 @@ const AppState = {
         }
         
         if (this.cards.length === 0) {
-            gallery.innerHTML = '<div class="empty-state">No cards available<br><small style="font-size: 0.85rem; opacity: 0.7;">Add cards to get started</small></div>';
+            gallery.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">🃏</span>
+                <strong>No cards available</strong>
+                <small>Add cards to get started</small>
+            </div>`;
             return;
         }
         
@@ -452,7 +456,7 @@ const OptimizedAdmin = {
                 if (!emptyState) {
                     emptyState = document.createElement('div');
                     emptyState.className = 'empty-state';
-                    emptyState.innerHTML = 'No cards match your search<br><small style="font-size: 0.85rem; opacity: 0.7;">Try different keywords</small>';
+                    emptyState.innerHTML = `<span class="empty-icon">🔍</span><strong>No cards match your search</strong><small>Try different keywords</small>`;
                     gallery.appendChild(emptyState);
                 }
                 emptyState.style.display = '';
@@ -466,7 +470,11 @@ const OptimizedAdmin = {
         // INITIAL LOAD: Create cards for the first time
         let cards = await this.loadCardsFast();
         if (!cards) {
-            gallery.innerHTML = '<div class="empty-state">Error loading cards.</div>';
+            gallery.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">⚠️</span>
+                <strong>Error loading cards</strong>
+                <small>Please refresh the page or check your connection</small>
+            </div>`;
             return;
         }
         
@@ -480,7 +488,11 @@ const OptimizedAdmin = {
         }));
         
         if (cards.length === 0) {
-            gallery.innerHTML = '<div class="empty-state">No cards available<br><small style="font-size: 0.85rem; opacity: 0.7;">Add cards to get started</small></div>';
+            gallery.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">🃏</span>
+                <strong>No cards available</strong>
+                <small>Add cards to get started</small>
+            </div>`;
             return;
         }
         
@@ -541,7 +553,11 @@ const OptimizedAdmin = {
         // Use cached assets - this WON'T fetch again if cache is valid
         const data = await this.loadAssets();
         if (!data || !data.categories[category]) {
-            grid.innerHTML = '<div class="empty-state">No cards in this category<br><small style="font-size: 0.85rem; opacity: 0.7;">Cards will appear here once added</small></div>';
+            grid.innerHTML = `<div class="empty-state">
+                <span class="empty-icon">🃏</span>
+                <strong>No cards in this category</strong>
+                <small>Cards will appear here once added</small>
+            </div>`;
             return;
         }
         

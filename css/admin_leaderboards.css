@@ -7,7 +7,6 @@
     width: 100%;
     border-collapse: collapse;
 }
-
 .modern-table th {
     text-align: left;
     padding: 1rem;
@@ -27,9 +26,15 @@
 /* --- Table Containers (scrollable inside section-card) --- */
 .logs-table-container,
 .leaderboard-table-container {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+}
+
+.logs-table-container {
+    background: rgba(255, 255, 255, 0.712);
+    border-radius: 0;
 }
 
 .logs-table-container::-webkit-scrollbar,
@@ -43,37 +48,6 @@
 
 .logs-table-container::-webkit-scrollbar-thumb:hover,
 .leaderboard-table-container::-webkit-scrollbar-thumb:hover { background: rgba(46, 125, 50, 0.35); }
-
-/* --- Table Empty State --- */
-.table-empty-state {
-    padding: 3rem 2rem !important;
-    text-align: center;
-    background: rgba(255, 255, 255, 0.4);
-    border-radius: 12px;
-}
-
-.table-empty-state .empty-state-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.table-empty-state .empty-icon {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-}
-
-.table-empty-state strong {
-    font-size: 1.1rem;
-    color: #2E7D32;
-}
-
-.table-empty-state small {
-    font-size: 0.9rem;
-    color: #558B2F;
-    max-width: 400px;
-}
 
 /* --- Leaderboard Specifics --- */
 .rank-cell {
@@ -118,6 +92,72 @@
 .dot.err { background: var(--color-red); }
 
 /* ============================================
+   LOGS PAGE - FILTER HEADER
+   ============================================ */
+
+/* --- Logs card: mirrors lb-left structure --- */
+.logs-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+}
+
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.712);
+    border-bottom: 2px solid rgba(165, 214, 167, 0.5);
+    padding: 1rem 1.5rem;
+}
+
+.logs-header-left  { flex: 1; }
+
+.logs-header-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.logs-subtitle {
+    font-size: 1rem;
+    color: #558B2F;
+    margin: 0;
+    font-weight: 600;
+}
+
+.logs-filter-pills {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.logs-pill {
+    background: rgba(255, 255, 255, 0.7);
+    border: 2px solid rgba(165, 214, 167, 0.5);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #558B2F;
+    transition: all 0.2s;
+}
+
+.logs-pill:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: #A5D6A7;
+}
+
+.logs-pill.active {
+    background: #2E7D32;
+    color: white;
+    border-color: #2E7D32;
+}
+
+/* ============================================
    LEADERBOARD - PODIUM & TABLE
    ============================================ */
 
@@ -140,16 +180,85 @@
     overflow: hidden;
 }
 
-/* --- Leaderboard header: top half of combined card --- */
-.lb-left .card-manager-header {
-    background: rgba(255, 255, 255, 0.85);
+/* --- Leaderboard section header --- */
+.lb-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.712);
     border: none;
     border-bottom: 2px solid rgba(165, 214, 167, 0.5);
     border-radius: 0;
     padding: 1rem 1.5rem;
     margin-bottom: 0;
+}
+.lb-subtitle {
+    font-size: 1rem;
+    color: #558B2F;
+    margin: 0;
+    font-weight: 600;
+}
+
+.lb-section-header-left { flex: 1; }
+
+.lb-section-header-right {
+    display: flex;
+    gap: 1rem;
     align-items: center;
 }
+
+/* --- Leaderboard search bar --- */
+.lb-search-container {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+}
+
+.lb-search-input {
+    width: 100%;
+    padding: 12px 40px 12px 16px;
+    border: 2px solid rgba(165, 214, 167, 0.6);
+    border-radius: var(--radius-btn);
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.lb-search-input:focus {
+    outline: none;
+    border-color: #2E7D32;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
+}
+
+.lb-search-input::placeholder { color: #9CA3AF; }
+
+.lb-search-clear-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #F3F4F6;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #6B7280;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+}
+
+.lb-search-clear-btn:hover {
+    background: #E5E7EB;
+    color: #374151;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.lb-search-clear-btn.hidden { display: none; }
 
 .lb-right {
     width: 260px;
@@ -268,9 +377,10 @@
 
 /* --- Table Wrapper: bottom half of combined card --- */
 .lb-table-wrapper {
+    position: relative;
     flex: 1;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.712);
     border-radius: 0;
     border: none;
     display: flex;
@@ -281,7 +391,7 @@
 /* --- Accuracy progress bar in table --- */
 .lb-acc-bar-wrap {
     position: relative;
-    background: rgba(165, 214, 167, 0.2);
+    background: rgb(190, 214, 191);
     border-radius: 20px;
     height: 22px;
     min-width: 100px;
@@ -307,6 +417,50 @@
     font-weight: 700;
     color: #1b5e20;
     padding-left: 0.6rem;
+}
+
+/* --- Leaderboard table cell colors --- */
+.lb-name-cell strong {
+    color: #2E7D32;
+    font-weight: 700;
+}
+
+.lb-num-cell {
+    color: #558B2F;
+    font-weight: 600;
+}
+
+/* --- Leaderboard table empty state: no blur --- */
+.lb-table-empty,
+.logs-empty {
+    backdrop-filter: none;
+    background: transparent;
+}
+
+/* --- Individual empty podium slot card --- */
+.lb-podium-card--empty {
+    background: rgba(255, 255, 255, 0.45) !important;
+    border: 2px dashed rgba(165, 214, 167, 0.55) !important;
+    box-shadow: none !important;
+    gap: 0.5rem;
+}
+
+.lb-podium-card--empty:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.lb-podium-empty-slot-icon {
+    font-size: 2rem;
+    filter: grayscale(1) opacity(0.35);
+    line-height: 1;
+}
+
+.lb-podium-empty-slot-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #B0BEC5;
+    letter-spacing: 0.3px;
 }
 
 /* --- Responsive --- */

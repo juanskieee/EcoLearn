@@ -1292,6 +1292,67 @@ def one_shot_learning():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)})
 
+@app.route('/admin/cards/<int:card_id>', methods=['DELETE'])
+def delete_card(card_id):
+    """Soft-delete a card: deactivate it and remove from the recognition dataset.
+    Soft-delete preserves foreign-key integrity with TBL_SCAN_TRANSACTIONS."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+
+        # Fetch card info
+        cursor.execute("""
+            SELECT ca.card_name, ca.image_path
+            FROM TBL_CARD_ASSETS ca
+            WHERE ca.card_id = %s AND ca.is_active = 1
+        """, (card_id,))
+        card = cursor.fetchone()
+
+        if not card:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Card not found or already deleted"})
+
+        card_name, image_path = card
+
+        # Soft-delete: deactivate in TBL_CARD_ASSETS
+        cursor.execute("UPDATE TBL_CARD_ASSETS SET is_active = 0 WHERE card_id = %s", (card_id,))
+
+        # Hard-delete from TBL_GOLDEN_DATASET (no FK restriction here)
+        cursor.execute("DELETE FROM TBL_GOLDEN_DATASET WHERE card_id = %s", (card_id,))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Remove from in-memory recognition dataset
+        global golden_dataset, card_metadata
+        golden_dataset = [item for item in golden_dataset if item['card_id'] != card_id]
+        if card_id in card_metadata:
+            del card_metadata[card_id]
+
+        # Delete image files
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if image_path:
+            webp_full = os.path.join(base_dir, image_path)
+            if os.path.exists(webp_full):
+                os.remove(webp_full)
+                print(f"🗑️ Removed WebP: {webp_full}")
+            # Derive PNG training image path (assets/ -> assets_png/, .webp -> .png)
+            png_rel = image_path.replace('assets/', 'assets_png/', 1)
+            png_rel = png_rel.rsplit('.', 1)[0] + '.png'
+            png_full = os.path.join(base_dir, png_rel)
+            if os.path.exists(png_full):
+                os.remove(png_full)
+                print(f"🗑️ Removed PNG: {png_full}")
+
+        print(f"🗑️ Card deleted: {card_name} (ID: {card_id})")
+        return jsonify({"status": "success", "message": f"Card '{card_name}' deleted successfully"})
+
+    except Exception as e:
+        print(f"❌ Card delete error: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+
 @app.route('/admin/card-performance', methods=['GET'])
 def get_card_performance():
     """

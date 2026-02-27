@@ -5,7 +5,7 @@
 .config-header-row {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 2rem;
     margin-bottom: 1.5rem;
 }
@@ -25,6 +25,13 @@
     align-items: flex-start;
     max-width: fit-content;
     gap: 0.5rem;
+}
+
+.config-subtitle {
+    font-size: 1rem;
+    color: #558B2F;
+    margin: 0;
+    font-weight: 600;
 }
 
 .config-warning-box .warning-icon {
@@ -54,7 +61,8 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     overflow: auto;
-    max-width: 100%;
+    width: 100%;
+    height: 100%;
     gap: 1.5rem;
 }
 

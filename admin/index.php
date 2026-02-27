@@ -12,7 +12,7 @@ require_once 'check_session.php';
     <link rel="stylesheet" href="../css/admin_base.css">
     <link rel="stylesheet" href="../css/admin_sidebar.css">
     <link rel="stylesheet" href="../css/admin_overview.css">
-    <link rel="stylesheet" href="../css/admin_tables.css">
+    <link rel="stylesheet" href="../css/admin_leaderboards.css">
     <link rel="stylesheet" href="../css/admin_matrix.css">
     <link rel="stylesheet" href="../css/admin_assets.css">
     <link rel="stylesheet" href="../css/admin_cards.css">
@@ -162,18 +162,18 @@ require_once 'check_session.php';
 
                     <!-- Left: search header + table -->
                     <div class="lb-left">
-                        <div class="card-manager-header">
-                            <div class="card-manager-header-left">
-                                <p class="subtitle">Student proficiency rankings based on assessment scores.</p>
+                        <div class="lb-section-header">
+                            <div class="lb-section-header-left">
+                                <p class="lb-subtitle">Student proficiency rankings based on assessment scores.</p>
                             </div>
-                            <div class="card-manager-header-right">
-                                <div class="search-bar-container">
+                            <div class="lb-section-header-right">
+                                <div class="lb-search-container">
                                     <input type="text" 
-                                           class="card-search-input" 
+                                           class="lb-search-input" 
                                            id="leaderboard-search" 
                                            placeholder="🔍 Search students..."
                                            oninput="searchLeaderboard(this.value)">
-                                    <button class="search-clear-btn hidden" 
+                                    <button class="lb-search-clear-btn hidden" 
                                             id="leaderboard-search-clear" 
                                             onclick="clearLeaderboardSearch()">
                                         ✕
@@ -285,7 +285,13 @@ require_once 'check_session.php';
             <section id="one-shot" class="section-card scrollable tab-content">
                 <div class="card-manager-header">
                     <div class="card-manager-header-left">
-                        <p class="subtitle">Manage Eco-Cards using One-Shot Learning.</p>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" onclick="filterCardGallery('all')">All Cards</button>
+                            <button class="filter-btn" onclick="filterCardGallery('Compostable')"><img src="../assets/compostable_icon.png" class="filter-btn-icon" alt="">Compostable</button>
+                            <button class="filter-btn" onclick="filterCardGallery('Recyclable')"><img src="../assets/recyclable_icon.png" class="filter-btn-icon" alt="">Recyclable</button>
+                            <button class="filter-btn" onclick="filterCardGallery('Non-Recyclable')"><img src="../assets/non_recyclable_icon.png" class="filter-btn-icon" alt="">Non-Recyclable</button>
+                            <button class="filter-btn" onclick="filterCardGallery('Special Waste')"><img src="../assets/special_waste_icon.png" class="filter-btn-icon" alt="">Special Waste</button>
+                         </div>
                     </div>
                     <div class="card-manager-header-right">
                             <div class="search-bar-container">
@@ -305,17 +311,7 @@ require_once 'check_session.php';
                         </button>
                     </div>
                 </div>
-                
-                <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterCardGallery('all')">All Cards</button>
-                    <button class="filter-btn" onclick="filterCardGallery('Compostable')">🌱 Compostable</button>
-                    <button class="filter-btn" onclick="filterCardGallery('Recyclable')">♻️ Recyclable</button>
-                    <button class="filter-btn" onclick="filterCardGallery('Non-Recyclable')">🗑️ Non-Recyclable</button>
-                    <button class="filter-btn" onclick="filterCardGallery('Special Waste')">⚠️ Special</button>
-                </div>
-                
                 <div id="card-gallery" class="card-gallery-new">
-                    <div class="empty-state">Loading cards...<br><small>Please wait while cards are being fetched</small></div>
                 </div>
             </section>
 
@@ -323,7 +319,7 @@ require_once 'check_session.php';
             <section id="config" class="section-card scrollable tab-content">
                 <div class="config-header-row">
                     <div class="config-header-left">
-                        <p class="subtitle">Modify ORB-KNN algorithm parameters without changing source code.</p>
+                        <p class="config-subtitle">Modify ORB-KNN algorithm parameters without changing source code.</p>
                     </div>
                     <div class="config-warning-box">
                         <span class="warning-icon">⚠️</span>
@@ -401,64 +397,69 @@ require_once 'check_session.php';
             </div>
 
             <section id="logs" class="section-card scrollable tab-content">
-                <div class="card-header">
-                    <div class="filter-pills">
-                        <button class="pill active" onclick="filterLogs('all', this)">All</button>
-                        <button class="pill" onclick="filterLogs('correct', this)">✅ Correct</button>
-                        <button class="pill" onclick="filterLogs('incorrect', this)">⚠️ Issues</button>
+                <div class="logs-card">
+                    <div class="logs-header">
+                        <div class="logs-header-left">
+                            <p class="logs-subtitle">Comprehensive overview of recent scan activity & system results</p>
+                        </div>
+                        <div class="logs-header-right">
+                            <div class="logs-filter-pills">
+                                <button class="logs-pill active" onclick="filterLogs('all', this)">All</button>
+                                <button class="logs-pill" onclick="filterLogs('correct', this)">✅ Correct</button>
+                                <button class="logs-pill" onclick="filterLogs('incorrect', this)">⚠️ Issues</button>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="table-responsive logs-table-container">
-                    <table class="modern-table">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Student</th>
-                                <th>Item Scanned</th>
-                                <th>Confidence</th>
-                                <th>Result</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logs-body">
-                            <tr>
-                                <td colspan="5" class="loading-cell">
-                                    <div class="spinner"></div> Loading data...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+
+                    <div class="table-responsive logs-table-container">
+                        <table class="modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Student</th>
+                                    <th>Item Scanned</th>
+                                    <th>Confidence</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-body">
+                                <tr>
+                                    <td colspan="5" class="loading-cell">
+                                        <div class="spinner"></div> Loading data...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
             <section id="nicknames" class="section-card scrollable tab-content">
-                <div class="card-manager-header">
-                    <div class="card-manager-header-left">
-                        <p class="subtitle">Manage student nicknames for easy login</p>
-                    </div>
-                    <div class="card-manager-header-right">
-                        <div class="search-bar-container">
-                            <input type="text" 
-                                   class="card-search-input" 
-                                   id="nickname-search" 
-                                   placeholder="🔍 Search students..."
-                                   oninput="searchNicknames(this.value)">
-                            <button class="search-clear-btn hidden" 
-                                    id="nickname-search-clear" 
-                                    onclick="clearNicknameSearch()">
-                                ✕
+                <div class="nn-card">
+                    <div class="nn-header">
+                        <div class="nn-header-left">
+                            <p class="nn-subtitle">Manage student nicknames for easy login</p>
+                        </div>
+                        <div class="nn-header-right">
+                            <div class="nn-search-container">
+                                <input type="text" 
+                                       class="nn-search-input" 
+                                       id="nickname-search" 
+                                       placeholder="🔍 Search students..."
+                                       oninput="searchNicknames(this.value)">
+                                <button class="nn-search-clear-btn hidden" 
+                                        id="nickname-search-clear" 
+                                        onclick="clearNicknameSearch()">
+                                    ✕
+                                </button>
+                            </div>
+                            <button class="btn-add-student" onclick="openAddNicknameModal()">
+                                Add Student
                             </button>
                         </div>
-                        <button class="btn-add-new-card" onclick="openAddNicknameModal()">
-                            Add Student
-                        </button>
                     </div>
-                </div>
-                
-                <div class="nickname-manager">
-                    
+
                     <div class="nickname-grid" id="nickname-list">
-                        <div class="empty-state">Loading roster...</div>
                     </div>
                 </div>
             </section>
@@ -530,7 +531,7 @@ require_once 'check_session.php';
     <div id="add-card-modal" class="add-card-modal">
         <div class="add-card-modal-content">
             <div class="modal-header">
-                <h4 id="form-title">➕ Add New Card</h4>
+                <h4 id="form-title">Add New Card</h4>
                 <button class="modal-close" onclick="closeAddCardModal()">✕</button>
             </div>
             <div class="modal-body">
