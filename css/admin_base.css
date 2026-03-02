@@ -261,6 +261,16 @@ button:active {
 .badge-correct { color: #166534; background: #DCFCE7; padding: 4px 8px; border-radius: 4px; font-weight: 600; }
 .badge-error   { color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; font-weight: 600; }
 
+/* Confidence-based result badges */
+.badge-excellent { color: #065F46; background: #A7F3D0; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-great     { color: #166534; background: #DCFCE7; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-good      { color: #3B6B1E; background: #E8F5E9; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-fair      { color: #92400E; background: #FEF3C7; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-miss      { color: #9A3412; background: #FFEDD5; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-bad       { color: #991B1B; background: #FEE2E2; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-worse     { color: #7F1D1D; background: #FECACA; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-worst     { color: #450A0A; background: #FCA5A5; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+
 /* --- Empty State (overlay, centers to nearest position:relative parent) --- */
 .empty-state {
     position: absolute;

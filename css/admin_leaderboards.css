@@ -92,6 +92,67 @@
 .dot.err { background: var(--color-red); }
 
 /* ============================================
+   LOGS TABLE - CARD THUMBNAIL
+   ============================================ */
+
+.log-item-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.log-card-thumb {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid rgba(165, 214, 167, 0.5);
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.7);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.log-card-thumb:hover {
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: #A5D6A7;
+    z-index: 2;
+}
+
+.log-card-thumb--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    background: rgba(200, 230, 201, 0.4);
+    border: 2px dashed rgba(165, 214, 167, 0.5);
+}
+
+.log-nickname {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.log-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.log-item-info p {
+    font-size: 0.9rem;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.log-item-category {
+    font-size: 0.75rem;
+    color: #6B7280;
+    font-weight: 500;
+}
+
+/* ============================================
    LOGS PAGE - FILTER HEADER
    ============================================ */
 
@@ -414,19 +475,19 @@
     position: relative;
     z-index: 1;
     font-size: 0.82rem;
-    font-weight: 700;
-    color: #1b5e20;
+    color: #1f2937;
+    font-weight: 600;
     padding-left: 0.6rem;
 }
 
 /* --- Leaderboard table cell colors --- */
 .lb-name-cell strong {
-    color: #2E7D32;
-    font-weight: 700;
+    color: #1f2937;
+    font-weight: 600;
 }
 
 .lb-num-cell {
-    color: #558B2F;
+    color: #1f2937;
     font-weight: 600;
 }
 

@@ -483,7 +483,8 @@ def get_admin_stats():
                 cat.category_name, 
                 t.confidence_score,
                 t.is_correct,
-                s.student_nickname
+                s.student_nickname,
+                c.image_path
             FROM TBL_SCAN_TRANSACTIONS t
             JOIN TBL_CARD_ASSETS c ON t.card_id = c.card_id
             JOIN TBL_CATEGORIES cat ON c.category_id = cat.category_id
@@ -502,7 +503,8 @@ def get_admin_stats():
                 "category": log['category_name'],
                 "confidence": int(log['confidence_score'] * 100),
                 "correct": bool(log['is_correct']),
-                "nickname": log['student_nickname'] or 'Guest'
+                "nickname": log['student_nickname'] or 'Guest',
+                "image_path": log['image_path'] or ''
             })
         
         cursor.close()

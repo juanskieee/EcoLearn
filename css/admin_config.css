@@ -81,7 +81,7 @@
 
 .config-card .config-icon  { font-size: 2rem; margin-bottom: 0.5rem; }
 .config-card .config-title { font-weight: 700; font-size: 1rem; color: #2E7D32; margin-bottom: 0.25rem; }
-.config-card .config-desc  { font-size: 0.8rem; color: #558B2F; margin-bottom: 1rem; }
+.config-card .config-desc  { font-size: 0.8rem; color: #1f2937; margin-bottom: 1rem; }
 
 .config-card .config-control {
     display: flex;

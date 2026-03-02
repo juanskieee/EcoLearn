@@ -13,11 +13,10 @@ let correctScans = 0;
 let isScanning = false;
 
 // Assessment Mode State
-let assessmentStep = 'scan'; // 'scan', 'identify', 'waiting'
+let assessmentStep = 'scan'; // 'scan' | 'identify'
 let currentScanResult = null;
-let assessmentQuestion = null;
-let feedbackResetTimeout = null; // Track feedback timeout to cancel if needed
-let instructionalResetTimeout = null; // Track instructional feedback timeout
+let feedbackResetTimeout = null;
+let instructionalResetTimeout = null;
 
 // DOM Elements
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -37,7 +36,6 @@ const scanEffect = document.getElementById('scan-effect');
 
 const scanCountEl = document.getElementById('scan-count');
 const correctCountEl = document.getElementById('correct-count');
-const accuracyEl = document.getElementById('accuracy');
 const binBadge = document.getElementById('bin-badge');
 const binBadgeLabel = document.getElementById('bin-badge-label');
 const confidenceKidsEl = document.getElementById('confidence-kids');
@@ -138,10 +136,9 @@ function setupSessionEndOnUnload() {
         }
     });
     
-    // End session only when actually leaving the page (navigation away)
+    // End session only when actually leaving the page
     window.addEventListener('pagehide', function() {
-        // Session will be restored on page load if user refreshes
-        // So we don't end it here
+        // Session state is saved in beforeunload; restore on next page load
     });
 }
 
@@ -685,34 +682,10 @@ async function captureAndIdentify() {
 }
 
 function handleInstructionalMode(data) {
-    // In instructional mode, backend auto-logs scan transactions in /classify
     if (data.status === 'success') {
         showInstructionalFeedback(data);
     } else {
         showErrorFeedback(data);
-    }
-}
-
-async function logInstructionalScan(data) {
-    if (!sessionId) return;
-    
-    try {
-        const response = await fetch(`${API_URL}/assessment/submit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                selected_category: data.category, // In instructional mode, system answer is always "correct"
-                correct_category: data.category,
-                card_id: data.card_id,
-                confidence: data.confidence
-            })
-        });
-        
-        if (response.ok) {
-            // Scan logged successfully
-        }
-    } catch (error) {
-        // Failed to log scan
     }
 }
 
@@ -945,8 +918,6 @@ async function selectAssessmentChoice(selectedCategory) {
         correctScans++;
         correctCountEl.textContent = correctScans;
     }
-    const accuracy = totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 100;
-    if (accuracyEl) accuracyEl.textContent = accuracy + '%';
     saveSessionToStorage();
     
     // 4. After brief flash, close modal and show result in feedback card
@@ -1019,7 +990,7 @@ function showAssessmentCorrect(selectedCategory) {
 }
 
 function showAssessmentIncorrect(selectedCategory, correctCategory) {
-    var correctConfig = categories[correctCategory];
+    const correctConfig = categories[correctCategory];
     const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
     
     binbinImg.src = 'assets/binbin_warning.png';
@@ -1372,7 +1343,7 @@ function speak(text) {
 // ============================================
 
 document.addEventListener('keydown', (e) => {
-    // ESC to close quit modal
+    // ESC closes the quit modal
     if (e.code === 'Escape') {
         const quitModal = document.getElementById('quitModal');
         if (quitModal && quitModal.classList.contains('active')) {
@@ -1380,15 +1351,7 @@ document.addEventListener('keydown', (e) => {
             return;
         }
     }
-    
-    // Space or Enter to scan
-    if ((e.code === 'Space' || e.code === 'Enter') && !welcomeScreen.classList.contains('hidden')) {
-        e.preventDefault();
-        if (studentNameInput.value.trim()) {
-            startGame();
-        }
-    }
-    
+
     // Space to scan during game
     if (e.code === 'Space' && !gameScreen.classList.contains('hidden')) {
         e.preventDefault();

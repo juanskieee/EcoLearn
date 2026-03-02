@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // ADMIN DASHBOARD LOGIC
 // EcoLearn - Interactive Waste Segregation Tool
 // ============================================
@@ -232,28 +232,66 @@ function renderLogs(logs) {
 
     if (!logs || logs.length === 0) {
         tbody.innerHTML = '';
-        if (container) container.insertAdjacentHTML('beforeend', `
-            <div class="empty-state logs-empty">
-                <span class="empty-icon">📋</span>
-                <strong>No recent scans found</strong>
-                <small>Scans will appear here when students start scanning</small>
-            </div>`);
+        if (container) {
+            const activePill = document.querySelector('.logs-pill.active');
+            const activeFilter = activePill ? activePill.getAttribute('data-filter') : 'all';
+            const emptyMessages = {
+                'all':    { icon: '📋', title: 'No scan logs yet',             sub: 'Scans will appear here when students start scanning' },
+                'high':   { icon: '🟢', title: 'No high-confidence scans yet', sub: 'No scans with ≥80% confidence have been recorded' },
+                'medium': { icon: '🟡', title: 'No medium-confidence scans',   sub: 'No scans between 60–79% confidence have been recorded' },
+                'low':    { icon: '🔴', title: 'No low-confidence scans',      sub: 'No scans below 60% confidence have been recorded' },
+            };
+            const msg = emptyMessages[activeFilter] || emptyMessages['all'];
+            container.insertAdjacentHTML('beforeend', `
+                <div class="empty-state logs-empty">
+                    <span class="empty-icon">${msg.icon}</span>
+                    <strong>${msg.title}</strong>
+                    <small>${msg.sub}</small>
+                </div>`);
+        }
         return;
     }
     
-    tbody.innerHTML = logs.map(log => `
+    tbody.innerHTML = logs.map(log => {
+        const conf = parseFloat(log.confidence);
+        let resultBadge;
+        if (conf >= 90)      resultBadge = '<span class="badge-excellent">Excellent</span>';
+        else if (conf >= 80) resultBadge = '<span class="badge-great">Great</span>';
+        else if (conf >= 60) resultBadge = '<span class="badge-good">Good</span>';
+        else if (conf >= 45) resultBadge = '<span class="badge-fair">Fair</span>';
+        else if (conf >= 30) resultBadge = '<span class="badge-bad">Weak</span>';
+        else if (conf >= 15) resultBadge = '<span class="badge-worse">Poor</span>';
+        else                 resultBadge = '<span class="badge-worst">Very Poor</span>';
+        const timeStr = log.time || '—';
+        // Build image thumbnail (image_path is relative to htdocs, e.g. assets/Recyclable/bottle.webp)
+        const imgSrc = log.image_path
+            ? `../${log.image_path}`
+            : null;
+        const thumbHtml = imgSrc
+            ? `<img src="${imgSrc}" alt="${log.card}" class="log-card-thumb"
+                    onerror="this.style.display='none'">`
+            : `<div class="log-card-thumb log-card-thumb--placeholder">📦</div>`;
+        return `
         <tr>
-            <td>${new Date(log.time).toLocaleTimeString()}</td>
-            <td>${log.nickname || 'Guest'}</td>
-            <td><strong>${log.card}</strong> <span style="font-size:0.8em; color:#888">(${log.category})</span></td>
-            <td>${log.confidence}%</td>
+            <td>${timeStr}</td>
             <td>
-                ${log.correct 
-                    ? '<span class="badge-correct">Correct</span>' 
-                    : '<span class="badge-error">Error</span>'}
+                <span class="log-nickname">
+                    ${log.nickname || 'Guest'}
+                </span>
             </td>
-        </tr>
-    `).join('');
+            <td>
+                <div class="log-item-cell">
+                    ${thumbHtml}
+                    <div class="log-item-info">
+                        <p>${log.card}</p>
+                        <span class="log-item-category">${log.category}</span>
+                    </div>
+                </div>
+            </td>
+            <td>${log.confidence}%</td>
+            <td>${resultBadge}</td>
+        </tr>`;
+    }).join('');
 }
 
 function filterLogs(filterType, btnElement) {
@@ -261,10 +299,11 @@ function filterLogs(filterType, btnElement) {
     document.querySelectorAll('.logs-pill').forEach(b => b.classList.remove('active'));
     btnElement.classList.add('active');
     
-    // Logic
+    // Filter by confidence tier
     let filtered = allLogs;
-    if (filterType === 'correct') filtered = allLogs.filter(l => l.correct);
-    if (filterType === 'incorrect') filtered = allLogs.filter(l => !l.correct);
+    if (filterType === 'high')   filtered = allLogs.filter(l => parseFloat(l.confidence) >= 80);
+    if (filterType === 'medium') filtered = allLogs.filter(l => parseFloat(l.confidence) >= 60 && parseFloat(l.confidence) < 80);
+    if (filterType === 'low')    filtered = allLogs.filter(l => parseFloat(l.confidence) < 60);
     
     renderLogs(filtered);
 }
@@ -325,7 +364,7 @@ async function loadNicknames() {
                             <span class="tag-stats">
                                 <span class="stat-chip sessions">📊 ${student.sessions || 0} session${student.sessions !== 1 ? 's' : ''}</span>
                                 <span class="stat-chip accuracy">🎯 ${student.accuracy ? student.accuracy + '%' : '0 accuracy'}</span>
-                                <span class="stat-chip created">🕗 ${createdTime || 'N/A'}</span>
+                                <span class="stat-chip created">� ${createdTime || 'N/A'}</span>
                                 ${isNew ? '<span class="stat-chip new">✨ New</span>' : ''}
                             </span>
                         </div>
@@ -341,7 +380,7 @@ async function loadNicknames() {
                             <span class="tag-stats">
                                 <span class="stat-chip sessions">📊 0 sessions</span>
                                 <span class="stat-chip accuracy">🎯 N/A</span>
-                                <span class="stat-chip created">🕗 N/A</span>
+                                <span class="stat-chip created">� N/A</span>
                                 <span class="stat-chip new">✨ New</span>
                             </span>
                         </div>
@@ -984,12 +1023,7 @@ async function loadLeaderboard() {
                 <td class="lb-num-cell">${student.sessions}</td>
                 <td class="lb-num-cell">${student.total_scans}</td>
                 <td class="lb-num-cell">${student.correct}</td>
-                <td>
-                    <div class="lb-acc-bar-wrap">
-                        <div class="lb-acc-bar-fill" style="width:${student.avg_accuracy}%;background:${getAccuracyColor(student.avg_accuracy)}"></div>
-                        <span class="lb-acc-label">${student.avg_accuracy}%</span>
-                    </div>
-                </td>
+                <td class="lb-num-cell">${student.avg_accuracy}%</td>
                 <td><span class="accuracy-badge" style="background:${getAccuracyColor(student.best_accuracy)}">${student.best_accuracy}%</span></td>
             </tr>`).join('');
 
@@ -1008,7 +1042,7 @@ async function loadLeaderboard() {
 function getAccuracyColor(accuracy) {
     if (accuracy >= 90) return '#10B981';
     if (accuracy >= 75) return '#3B82F6';
-    if (accuracy >= 50) return '#F59E0B';
+    if (accuracy >= 50) return '#eeb148';
     return '#EF4444';
 }
 

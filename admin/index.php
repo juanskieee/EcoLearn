@@ -404,9 +404,10 @@ require_once 'check_session.php';
                         </div>
                         <div class="logs-header-right">
                             <div class="logs-filter-pills">
-                                <button class="logs-pill active" onclick="filterLogs('all', this)">All</button>
-                                <button class="logs-pill" onclick="filterLogs('correct', this)">✅ Correct</button>
-                                <button class="logs-pill" onclick="filterLogs('incorrect', this)">⚠️ Issues</button>
+                                <button class="logs-pill active" data-filter="all"    onclick="filterLogs('all', this)">All</button>
+                                <button class="logs-pill"        data-filter="high"   onclick="filterLogs('high', this)">🟢 High</button>
+                                <button class="logs-pill"        data-filter="medium" onclick="filterLogs('medium', this)">🟡 Medium</button>
+                                <button class="logs-pill"        data-filter="low"    onclick="filterLogs('low', this)">🔴 Low</button>
                             </div>
                         </div>
                     </div>

@@ -136,7 +136,7 @@
     transition: all 0.2s;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
     color: #1F2937;
-    min-width: 420px;
+    min-width: 100px;
 }
 
 .tag:hover {
@@ -173,8 +173,9 @@
     font-weight: 600;
     padding: 0.4rem 0.75rem;
     border-radius: 20px;
-    background: rgba(232, 245, 225, 0.6);
-    color: #475569;
+    background: rgba(220, 237, 200, 0.55);
+    border: 1.5px solid rgba(165, 214, 167, 0.45);
+    color: #3a5c2e;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -183,10 +184,16 @@
     text-align: center;
 }
 
-.stat-chip.new      { background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%); color: #92400E; }
-.stat-chip.sessions { background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 100%); color: #0369A1; }
-.stat-chip.accuracy { background: linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 100%); color: #166534; }
-.stat-chip.created  { background: linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%); color: #7C3AED; }
+/* All chips share the same neutral green — only "New" gets a soft highlight */
+.stat-chip.sessions,
+.stat-chip.accuracy,
+.stat-chip.created  { /* inherits base */ }
+
+.stat-chip.new {
+    background: rgba(254, 243, 199, 0.7);
+    border-color: rgba(251, 191, 36, 0.35);
+    color: #92400E;
+}
 
 .tag .remove {
     cursor: pointer;

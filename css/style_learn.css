@@ -1,0 +1,126 @@
+/* ============================================
+   ECOLEARN — LEARN (INSTRUCTIONAL) MODE
+   ============================================ */
+
+/* ============================================
+   GAME LAYOUT — LEARN MODE
+   ============================================ */
+
+/* Hide leaderboard card in learn mode */
+.game-screen.learn-mode .leaderboard-card {
+    display: none;
+}
+
+.game-screen.learn-mode .game-layout {
+    grid-template-columns: 1.3fr 2fr 1.3fr;
+}
+
+@media (max-width: 1200px) {
+    .game-screen.learn-mode .game-layout {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .game-screen.learn-mode .game-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ============================================
+   FEEDBACK CARD — LEARN MODE
+   ============================================ */
+
+/* Card image + category icon displayed side by side */
+.learn-card-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-bottom: 0.3rem;
+    animation: popIn 0.4s var(--bounce);
+}
+
+.learn-card-image {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    border-radius: 18px;
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.15));
+    background: transparent;
+    padding: 0;
+    border: none;
+}
+
+.learn-category-icon {
+    width: 150px;
+    height: 150px;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.15));
+    animation: popIn 0.6s var(--bounce);
+}
+
+/* Dynamic card border color per waste category */
+.learn-card-display.cat-compostable .learn-card-image    { border-color: #10B981; }
+.learn-card-display.cat-recyclable .learn-card-image     { border-color: #3B82F6; }
+.learn-card-display.cat-non-recyclable .learn-card-image { border-color: #EF4444; }
+.learn-card-display.cat-special .learn-card-image        { border-color: #F59E0B; }
+
+/* Category name label shown below card image */
+.learn-category-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.2rem;
+    padding: 0.3rem 0;
+    background: transparent;
+    border: none;
+    animation: popIn 0.5s var(--bounce);
+}
+
+.learn-category-label {
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+/* ============================================
+   RESULTS SCREEN — LEARN MODE
+   ============================================ */
+
+.learn-mode-message {
+    font-size: 1.2rem;
+    color: #2E7D32;
+    line-height: 1.6;
+    margin: 1.5rem 0 1rem;
+    position: relative;
+    z-index: 20;
+    font-weight: 600;
+}
+
+.learn-results-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 1rem 2rem;
+    background: rgba(255, 255, 255, 0.9);
+    border: 3px solid #2E7D32;
+    border-radius: 999px;
+    margin: 1rem 0 1.5rem;
+    animation: popIn 0.5s var(--bounce);
+    position: relative;
+    z-index: 20;
+    box-shadow: 0 4px 8px rgba(46, 125, 50, 0.2);
+}
+
+.learn-badge-icon {
+    font-size: 2.5rem;
+}
+
+.learn-badge-text {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--color-green-dark);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
