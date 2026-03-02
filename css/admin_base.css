@@ -198,6 +198,7 @@ button:active {
     box-shadow: var(--card-shadow);
     animation: popIn 0.6s var(--bounce);
     position: relative;
+        overflow: visible;
 }
 
 /* Scrollable variant (Card Manager, Logs, etc.) */

@@ -37,42 +37,42 @@ require_once 'check_session.php';
             <ul class="nav-links">
                 <li>
                     <a href="javascript:void(0)" class="nav-item active" onclick="showTab('overview')">
-                        Overview
+                        📊 Overview
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('confusion-matrix')">
-                        Confusion Matrix
+                        🧠 Confusion Matrix
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('leaderboard')">
-                        Leaderboard
+                        🏆 Leaderboard
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('asset-repository')">
-                        Asset Repository
+                        🗃️ Asset Repository
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('one-shot')">
-                        Card Manager
+                        📚 Card Manager
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('config')">
-                        System Config
+                        ⚙️ System Config
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('logs')">
-                        Scan Logs
+                        🔍 Scan Logs
                     </a>
                 </li>
                 <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('nicknames')">
-                        Students
+                        🎓 Students
                     </a>
                 </li>
             </ul>
