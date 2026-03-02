@@ -77,21 +77,22 @@
 .asset-category-row .category-details { flex: 1; }
 
 .asset-category-row .category-details h4 {
-    font-size: 1.4rem;
+    font-size: var(--fs-xl);
     margin: 0 0 0.3rem 0;
-    color: #2E7D32;
+    color: var(--text-heading);
+    font-weight: var(--fw-bold);
 }
 
 .asset-category-row .card-count {
-    color: var(--color-green);
-    font-size: 1.05rem;
-    font-weight: 600;
+    color: var(--text-heading);
+    font-size: var(--fs-base);
+    font-weight: var(--fw-bold);
     margin: 0 0 0.25rem 0;
 }
 
 .asset-category-row .category-desc {
-    color: #1f2937;
-    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
     margin: 0;
 }
 
@@ -101,7 +102,7 @@
     border: none;
     border-radius: var(--radius-btn);
     font-family: 'Fredoka', sans-serif;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -150,8 +151,8 @@
 .asset-category-card.special        { border-color: #F59E0B; background: linear-gradient(135deg, #FFFBEB 0%, white 100%); }
 
 .asset-category-card .category-icon { font-size: 3rem; margin-bottom: 0.5rem; }
-.asset-category-card h4 { font-size: 1.25rem; margin-bottom: 0.25rem; color: #2E7D32; }
-.asset-category-card .card-count { color: #558B2F; font-size: 0.9rem; margin-bottom: 1rem; }
+.asset-category-card h4 { font-size: var(--fs-lg); margin-bottom: 0.25rem; color: var(--text-heading); font-weight: var(--fw-bold); }
+.asset-category-card .card-count { color: var(--text-heading); font-size: var(--fs-sm); font-weight: var(--fw-semibold); margin-bottom: 1rem; }
 
 .asset-category-card .category-actions {
     display: flex;
@@ -165,7 +166,7 @@
     border: none;
     border-radius: var(--radius-btn);
     font-family: 'Fredoka', sans-serif;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     cursor: pointer;
     transition: all 0.2s;
 }

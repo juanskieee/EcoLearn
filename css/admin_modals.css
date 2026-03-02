@@ -5,9 +5,11 @@
    ============================================ */
 
 /* ============================================
-   CARDS MODAL (View Category Cards)
+   SHARED MODAL OVERLAY BASE
    ============================================ */
-.cards-modal {
+.cards-modal,
+.add-card-modal,
+.confirmation-modal {
     position: fixed;
     top: 0;
     left: 0;
@@ -20,56 +22,108 @@
     align-items: center;
     justify-content: center;
     padding: 2rem;
-    transition: background 0.2s ease, backdrop-filter 0.2s ease;
+    transition: background 0.25s ease, backdrop-filter 0.25s ease;
     will-change: background, backdrop-filter;
 }
 
-.cards-modal.active {
+.cards-modal.active,
+.add-card-modal.active,
+.confirmation-modal.active {
     display: flex !important;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(12px);
 }
 
-.cards-modal .modal-content {
+.confirmation-modal { z-index: 10001; }
+
+/* ============================================
+   SHARED MODAL CONTENT BASE
+   ============================================ */
+.cards-modal .modal-content,
+.add-card-modal-content,
+.confirmation-content {
     background: white;
     border-radius: var(--radius-card);
-    max-width: 900px;
-    width: 95%;
-    max-height: 85vh;
-    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    position: relative;
+    overflow: visible;
+    opacity: 0;
+    transform: scale(0.95) translateY(12px);
+    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
+    will-change: transform, opacity;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-    opacity: 0;
-    transform: scale(0.95) translateY(10px);
-    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
-    position: relative;
-    will-change: transform, opacity;
 }
 
-.cards-modal.active .modal-content {
+.cards-modal.active .modal-content,
+.add-card-modal.active .add-card-modal-content,
+.confirmation-modal.active .confirmation-content {
     opacity: 1;
     transform: scale(1) translateY(0);
 }
 
-.cards-modal .modal-header {
+/* ============================================
+   SHARED LEAF FRAME OVERLAY
+   Defined here for use across all modals;
+   position is relative to the nearest header
+   ============================================ */
+.preview-frame-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -49%);
+    z-index: 10;
+    pointer-events: none;
+    width: 108%;
+    height: 120%;
+    object-fit: fill;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.15));
+}
+
+/* ============================================
+   SHARED MODAL HEADER
+   ============================================ */
+.cards-modal .modal-header,
+.add-card-modal .modal-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     padding: 1.25rem 1.5rem;
     background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
     border-bottom: 2px solid #A5D6A7;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    flex-shrink: 0;
+    position: relative;
 }
 
-.cards-modal .modal-header h4 {
-    font-size: 1.4rem;
-    color: #2E7D32;
+.cards-modal .modal-header h4,
+.add-card-modal .modal-header h4 {
+    margin: 0;
+    font-size: var(--fs-xl);
+    color: var(--text-heading);
+    font-family: 'Fredoka', sans-serif;
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.cards-modal .modal-close {
+/* All direct sections of modal content sit above the leaf frame overlay (z-index: 10) */
+.cards-modal .modal-content > *:not(.preview-frame-overlay):not(.modal-close),
+.add-card-modal-content > *:not(.preview-frame-overlay):not(.modal-close),
+.confirmation-content > *:not(.preview-frame-overlay),
+.preview-modal-content > *:not(.preview-frame-overlay):not(.preview-modal-close) {
+    position: relative;
+    z-index: 1;
+}
+
+/* ============================================
+   SHARED MODAL CLOSE BUTTON
+   ============================================ */
+.cards-modal .modal-close,
+.add-card-modal .modal-close,
+.preview-modal-close {
     background: white;
     border: 2px solid #A5D6A7;
     width: 36px;
@@ -77,18 +131,34 @@
     border-radius: 50%;
     font-size: 1.2rem;
     cursor: pointer;
-    color: #558B2F;
+    color: var(--text-heading);
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    position: absolute;
+    top: 1.25rem;
+    right: 1.5rem;
+    z-index: 20;
 }
 
-.cards-modal .modal-close:hover {
+.cards-modal .modal-close:hover,
+.add-card-modal .modal-close:hover,
+.preview-modal-close:hover {
     background: var(--color-red);
     border-color: var(--color-red);
     color: white;
     transform: rotate(90deg);
+}
+
+/* ============================================
+   CARDS MODAL (View Category Cards)
+   ============================================ */
+.cards-modal .modal-content {
+    max-width: 900px;
+    width: 95%;
+    max-height: 85vh;
 }
 
 .cards-modal .modal-cards-grid {
@@ -97,13 +167,14 @@
     gap: 1rem;
     padding: 1.5rem;
     overflow-y: auto;
-    background: #fafafa;
+    background: rgba(250, 250, 250, 0.95);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 
 .cards-modal .modal-cards-grid::-webkit-scrollbar       { width: 8px; }
-.cards-modal .modal-cards-grid::-webkit-scrollbar-track  { background: #f1f1f1; border-radius: 4px; }
-.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb  { background: #ccc; border-radius: 4px; }
-.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb:hover { background: #aaa; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-track  { background: rgba(200, 230, 201, 0.3); border-radius: 4px; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb  { background: rgba(46, 125, 50, 0.2); border-radius: 4px; }
+.cards-modal .modal-cards-grid::-webkit-scrollbar-thumb:hover { background: rgba(46, 125, 50, 0.35); }
 
 /* --- Modal Card Item --- */
 .modal-card-item {
@@ -142,7 +213,7 @@
 
 .modal-card-item .card-name {
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -154,7 +225,7 @@
     margin-top: 0.5rem;
     padding: 0.5rem 0.85rem;
     font-size: 0.8rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     background: var(--color-green);
     color: white;
     border: none;
@@ -171,207 +242,142 @@
 /* ============================================
    ADD CARD MODAL
    ============================================ */
-.add-card-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-    padding: 2rem;
-    backdrop-filter: blur(5px);
-    overflow: hidden;
-}
-
-.add-card-modal.active {
-    opacity: 1;
-    pointer-events: auto;
-}
-
 .add-card-modal-content {
-    background: white;
-    border-radius: 16px;
     max-width: 500px;
     width: 100%;
     max-height: 90vh;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    position: relative;
-    transform: scale(0.9) translateY(20px);
-    opacity: 0;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.add-card-modal.active .add-card-modal-content {
-    transform: scale(1) translateY(0);
-    opacity: 1;
-}
-
-.add-card-modal .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.25rem 1.5rem;
-    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
-    border-bottom: 2px solid #A5D6A7;
-    border-radius: 16px 16px 0 0;
-    flex-shrink: 0;
 }
 
 .add-card-modal .modal-body {
-    padding: 1.5rem;
+    padding: 1.5rem 1.75rem;
     overflow-y: auto;
     flex: 1;
+    background: linear-gradient(135deg, #F0FDF4 0%, #F8FFF4 100%);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 
-.add-card-modal .modal-header h4 {
-    margin: 0;
-    font-size: 1.4rem;
-    color: #2E7D32;
-}
-
-.add-card-modal .modal-close {
-    background: white;
-    border: 2px solid #A5D6A7;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: #558B2F;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.add-card-modal .modal-close:hover {
-    background: var(--color-red);
-    border-color: var(--color-red);
-    color: white;
-    transform: rotate(90deg);
-}
+.add-card-modal .modal-body::-webkit-scrollbar       { width: 6px; }
+.add-card-modal .modal-body::-webkit-scrollbar-track  { background: rgba(200, 230, 201, 0.3); border-radius: 4px; }
+.add-card-modal .modal-body::-webkit-scrollbar-thumb  { background: rgba(46, 125, 50, 0.2); border-radius: 4px; }
+.add-card-modal .modal-body::-webkit-scrollbar-thumb:hover { background: rgba(46, 125, 50, 0.35); }
 
 /* ============================================
    CONFIRMATION MODAL (Config Save, Logout, Remove)
    ============================================ */
-.confirmation-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
-    z-index: 10001;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    transition: background 0.2s ease, backdrop-filter 0.2s ease;
-}
-
-.confirmation-modal.active {
-    display: flex !important;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(12px);
-}
-
 .confirmation-content {
-    background: white;
-    border-radius: 16px;
-    max-width: 500px;
+    max-width: 480px;
     width: 95%;
-    padding: 2rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
 }
 
-.confirmation-modal.active .confirmation-content {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-}
-
+/* --- Confirmation Header (green gradient, matches other modals) --- */
 .confirmation-header {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: 0.85rem;
+    padding: 1.25rem 1.75rem;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    border-bottom: 2px solid #A5D6A7;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    flex-shrink: 0;
+    position: relative;
 }
 
-.confirmation-header .icon { font-size: 3rem; }
-.confirmation-header h3    { margin: 0; font-size: 1.5rem; color: #2E7D32; }
+.confirmation-header .icon {
+    font-size: 2rem;
+    line-height: 1;
+}
 
-.confirmation-body { margin-bottom: 2rem; }
-.confirmation-body p { margin: 0 0 1rem 0; color: #558B2F; line-height: 1.6; font-size: 1.1rem; text-align: center; }
-.confirmation-body p strong { font-weight: 700; color: #2E7D32; }
+.confirmation-header h3 {
+    margin: 0;
+    font-size: var(--fs-xl);
+    color: var(--text-heading);
+    font-family: 'Fredoka', sans-serif;
+}
+
+/* --- Confirmation Body --- */
+.confirmation-body {
+    padding: 1.75rem 1.75rem 0.5rem;
+}
+
+.confirmation-body p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: var(--fs-md);
+    text-align: center;
+}
+
+.confirmation-body p strong { font-weight: var(--fw-bold); color: var(--text-heading); }
 
 .confirmation-body .text-muted {
-    color: #64748b;
-    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
 }
 
 .confirmation-text {
-    font-size: 1.1rem;
+    font-size: 1rem;
     text-align: center;
-    margin: 1.5rem 0;
+    margin: 0.5rem 0 1rem;
 }
 
 .confirmation-warning,
 .config-changes-warning {
-    margin-top: 1rem;
-    font-weight: 600;
+    margin-top: 0.75rem;
+    font-weight: var(--fw-semibold);
+    font-size: 0.875rem;
     color: var(--color-red);
+    text-align: center;
 }
 
 /* --- Config Changes List --- */
 .config-changes-list {
-    background: #F9FAFB;
+    background: rgba(249, 250, 251, 0.9);
     border: 2px solid #E5E7EB;
-    border-radius: 8px;
-    padding: 1rem;
-    max-height: 200px;
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    max-height: 180px;
     overflow-y: auto;
+    margin-bottom: 0.5rem;
 }
+
+.config-changes-list::-webkit-scrollbar       { width: 6px; }
+.config-changes-list::-webkit-scrollbar-track  { background: rgba(200, 230, 201, 0.3); border-radius: 4px; }
+.config-changes-list::-webkit-scrollbar-thumb  { background: rgba(46, 125, 50, 0.2); border-radius: 4px; }
+.config-changes-list::-webkit-scrollbar-thumb:hover { background: rgba(46, 125, 50, 0.35); }
 
 .config-change-item {
     display: flex;
     justify-content: space-between;
-    padding: 0.5rem 0;
+    padding: 0.4rem 0;
     border-bottom: 1px solid #E5E7EB;
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
+    gap: 0.5rem;
 }
 
 .config-change-item:last-child { border-bottom: none; }
-.config-change-item .key   { font-weight: 600; color: var(--color-text); }
-.config-change-item .value { color: #2E7D32; font-weight: 700; }
+.config-change-item .key   { font-weight: var(--fw-semibold); color: var(--text-body); font-size: var(--fs-sm); }
+.config-change-item .value { color: var(--text-heading); font-weight: var(--fw-bold); font-size: var(--fs-sm); }
 
 /* --- Confirmation Actions --- */
 .confirmation-actions {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     justify-content: flex-end;
+    padding: 1.25rem 1.75rem 1.5rem;
+    background: linear-gradient(0deg, #f5fbee 0%, transparent 100%);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 
 .btn-confirm-cancel {
-    background: #F3F4F6;
-    color: #6B7280;
+    background: rgba(243, 244, 246, 0.9);
+    color: var(--text-secondary);
     border: 2px solid #E5E7EB;
     padding: 0.75rem 1.5rem;
     border-radius: var(--radius-btn);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
+    font-size: var(--fs-md);
+    font-family: 'Fredoka', sans-serif;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -383,9 +389,11 @@
     background: var(--color-green);
     color: white;
     border: none;
-    padding: 0.75rem 2rem;
+    padding: 0.75rem 1.75rem;
     border-radius: var(--radius-btn);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
+    font-size: var(--fs-md);
+    font-family: 'Fredoka', sans-serif;
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 3px 0 var(--color-green-dark);
@@ -403,26 +411,113 @@
     box-shadow: 0 3px 0 #DC2626;
 }
 
-.btn-confirm-save.danger:hover  { box-shadow: 0 4px 0 #DC2626; }
+.btn-confirm-save.danger:hover  { transform: translateY(-1px); box-shadow: 0 4px 0 #DC2626; }
 .btn-confirm-save.danger:active { transform: translateY(3px); box-shadow: none; }
 
 /* --- Logout Modal specifics --- */
-#logoutModal .confirmation-header .icon { color: #EF4444; }
-#logoutModal .confirmation-header h3    { color: var(--color-text); }
-#logoutModal .btn-confirm-save { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
-#logoutModal .btn-confirm-save:hover { box-shadow: 0 4px 0 #DC2626; }
+#logoutModal .confirmation-header .icon { font-size: 2rem; }
+#logoutModal .confirmation-header h3    { color: var(--text-body); }
+#logoutModal .btn-confirm-save          { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
+#logoutModal .btn-confirm-save:hover    { box-shadow: 0 4px 0 #DC2626; }
 
 /* --- Remove Nickname Modal specifics --- */
-#remove-nickname-modal .confirmation-header .icon { color: #EF4444; }
-#remove-nickname-modal .confirmation-header h3    { color: var(--color-text); }
-#remove-nickname-modal .btn-confirm-save { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
-#remove-nickname-modal .btn-confirm-save:hover  { box-shadow: 0 4px 0 #DC2626; }
-#remove-nickname-modal .btn-confirm-save:active { transform: translateY(3px); box-shadow: none; }
+#remove-nickname-modal .confirmation-header .icon { font-size: 2rem; }
+#remove-nickname-modal .confirmation-header h3    { color: var(--text-body); }
+#remove-nickname-modal .btn-confirm-save          { background: #EF4444; box-shadow: 0 3px 0 #DC2626; }
+#remove-nickname-modal .btn-confirm-save:hover    { box-shadow: 0 4px 0 #DC2626; }
+#remove-nickname-modal .btn-confirm-save:active   { transform: translateY(3px); box-shadow: none; }
 
 #remove-nickname-name {
-    color: var(--color-text);
-    font-size: 1.2rem;
+    color: var(--text-heading);
+    font-size: var(--fs-lg);
     text-align: center;
-    font-weight: 700;
-    margin: 1rem 0;
+    font-weight: var(--fw-bold);
+    margin: 0.25rem 0 0.75rem;
+    font-family: 'Fredoka', sans-serif;
+}
+
+/* ============================================
+   CARD PREVIEW MODAL
+   Moved here from admin_cards.css
+   ============================================ */
+.card-preview-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    z-index: 10001;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    transition: background 0.25s ease, backdrop-filter 0.25s ease;
+    will-change: background, backdrop-filter;
+}
+
+.card-preview-modal.active {
+    display: flex !important;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+}
+
+.preview-modal-content {
+    background: white;
+    border-radius: var(--radius-card);
+    max-width: 500px;
+    height: 600px;
+    width: 100%;
+    overflow: visible;
+    position: relative;
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
+    will-change: transform, opacity;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+}
+
+.card-preview-modal.active .preview-modal-content {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+/* --- Preview Modal Header --- */
+.preview-modal-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
+    border-bottom: 2px solid #A5D6A7;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    position: relative;
+}
+
+.preview-modal-header h4 {
+    margin: 0;
+    font-size: var(--fs-xl);
+    color: var(--text-heading);
+    font-family: 'Fredoka', sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+/* --- Preview Modal Body --- */
+.preview-modal-body {
+    background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1.25rem;
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
+    flex: 1;
+    overflow-y: auto;
 }

@@ -352,6 +352,7 @@ require_once 'check_session.php';
             <!-- Confirmation Modal -->
             <div id="confirmationModal" class="confirmation-modal" onclick="handleModalBackdropClick(event)">
                 <div class="confirmation-content" onclick="event.stopPropagation()">
+                    <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
                     <div class="confirmation-header">
                         <span class="icon">⚠️</span>
                         <h3>Confirm Changes</h3>
@@ -375,6 +376,7 @@ require_once 'check_session.php';
             <!-- Logout Confirmation Modal -->
             <div id="logoutModal" class="confirmation-modal" onclick="handleLogoutModalBackdropClick(event)">
                 <div class="confirmation-content" onclick="event.stopPropagation()">
+                    <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
                     <div class="confirmation-header">
                         <span class="icon">🚪</span>
                         <h3>Confirm Logout</h3>
@@ -466,22 +468,25 @@ require_once 'check_session.php';
             </section>
 
             <!-- Add Student Nickname Modal -->
-            <div id="add-nickname-modal" class="add-card-modal">
-                <div class="add-card-modal-content">
+            <div id="add-nickname-modal" class="add-card-modal" onclick="if(event.target===this)closeAddNicknameModal()">
+                <div class="add-card-modal-content" onclick="event.stopPropagation()">
+                    <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+                    <button class="modal-close" onclick="closeAddNicknameModal()">✕</button>
                     <div class="modal-header">
                         <h4>👤 Add Student Nickname</h4>
-                        <button class="modal-close" onclick="closeAddNicknameModal()">✕</button>
                     </div>
-                    <div class="one-shot-form">
-                        <div class="form-group">
-                            <label>📝 Student Nickname:</label>
-                            <input type="text" id="modal-nickname-input" placeholder="e.g., Little Explorer, Green Hero" maxlength="30">
-                            <small class="form-helper-text">Enter a fun, memorable name (max 30 characters)</small>
+                    <div class="modal-body">
+                        <div class="one-shot-form">
+                            <div class="form-group">
+                                <label>📝 Student Nickname:</label>
+                                <input type="text" id="modal-nickname-input" placeholder="e.g., Little Explorer, Green Hero" maxlength="30">
+                                <small class="form-helper-text">Enter a fun, memorable name (max 30 characters)</small>
+                            </div>
+                            <button class="btn-add full-width" onclick="submitNickname()">
+                                ✅ Add Student
+                            </button>
+                            <div id="nickname-result" class="result-message"></div>
                         </div>
-                        <button class="btn-add full-width" onclick="submitNickname()">
-                            ✅ Add Student
-                        </button>
-                        <div id="nickname-result" class="result-message"></div>
                     </div>
                 </div>
             </div>
@@ -489,6 +494,7 @@ require_once 'check_session.php';
             <!-- Remove Student Confirmation Modal -->
             <div id="remove-nickname-modal" class="confirmation-modal" onclick="handleRemoveNicknameBackdropClick(event)">
                 <div class="confirmation-content" onclick="event.stopPropagation()">
+                    <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
                     <div class="confirmation-header">
                         <span class="icon">🗑️</span>
                         <h3>Remove Student</h3>
@@ -518,22 +524,24 @@ require_once 'check_session.php';
     </div>
 
     <!-- Modal for viewing cards (placed outside admin-wrapper for full viewport positioning) -->
-    <div id="cards-modal" class="cards-modal">
-        <div class="modal-content">
+    <div id="cards-modal" class="cards-modal" onclick="if(event.target===this)closeCardsModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+            <button class="modal-close" onclick="closeCardsModal()">✕</button>
             <div class="modal-header">
                 <h4 id="modal-title">Cards</h4>
-                <button class="modal-close" onclick="closeCardsModal()">✕</button>
             </div>
             <div id="modal-cards-grid" class="modal-cards-grid"></div>
         </div>
     </div>
 
     <!-- Add New Card Modal -->
-    <div id="add-card-modal" class="add-card-modal">
-        <div class="add-card-modal-content">
+    <div id="add-card-modal" class="add-card-modal" onclick="if(event.target===this)closeAddCardModal()">
+        <div class="add-card-modal-content" onclick="event.stopPropagation()">
+            <img src="../assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+            <button class="modal-close" onclick="closeAddCardModal()">✕</button>
             <div class="modal-header">
                 <h4 id="form-title">Add New Card</h4>
-                <button class="modal-close" onclick="closeAddCardModal()">✕</button>
             </div>
             <div class="modal-body">
                 <div class="one-shot-form">

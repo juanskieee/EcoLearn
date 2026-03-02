@@ -17,11 +17,34 @@
     --color-purple: #CE82FF;
     --color-purple-dark: #a85ce0;
 
-    --color-text: #3C3C3C;
-    --color-text-light: #777777;
+    --color-text: #1F2937;
+    --color-text-light: #6B7280;
     --color-bg: #FFFFFF;
     --color-bg-offset: #F7F7F7;
     --color-border: #E5E5E5;
+
+    /* ---- Typography tokens ---- */
+    --text-heading:   #2E7D32;   /* Green – titles, labels, icons */
+    --text-body:      #1F2937;   /* Primary body text             */
+    --text-secondary: #4B5563;   /* Descriptions, subtitles       */
+    --text-muted:     #6B7280;   /* Helper text, captions         */
+
+    /* ---- Font scale ---- */
+    --fs-xs:   0.8rem;    /* badge labels, metadata, table-header uppercase */
+    --fs-sm:   0.875rem;  /* helper text, secondary content                 */
+    --fs-base: 0.95rem;   /* body text, inputs, table cells, tags           */
+    --fs-md:   1rem;      /* labels, buttons, subtitles                     */
+    --fs-lg:   1.25rem;   /* card / modal sub-section titles                */
+    --fs-xl:   1.4rem;    /* modal headers, section card headers            */
+    --fs-2xl:  1.5rem;    /* section titles                                 */
+    --fs-3xl:  2rem;      /* page title, hero values                        */
+
+    /* ---- Font weights ---- */
+    --fw-normal:   400;   /* body text, descriptions                        */
+    --fw-medium:   500;   /* secondary labels, helper text                  */
+    --fw-semibold: 600;   /* subtitles, table cells, tags                   */
+    --fw-bold:     700;   /* headings, buttons, stat values                 */
+    --fw-black:    900;   /* hero numbers, page title                       */
 
     --radius-lg: 24px;
     --radius-md: 16px;
@@ -91,7 +114,8 @@ button:active {
 .loading-cell {
     text-align: center;
     padding: 3rem;
-    color: var(--color-text-light);
+    color: var(--text-muted);
+    font-size: var(--fs-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -115,7 +139,7 @@ button:active {
     transform: translateX(-50%) translateY(100px);
     padding: 1rem 2rem;
     border-radius: var(--radius-sm);
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     font-size: 1rem;
     z-index: 10000;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
@@ -161,10 +185,10 @@ button:active {
 }
 
 .top-header h1 {
-    font-size: 2rem;
-    color: #2E7D32;
+    font-size: var(--fs-3xl);
+    color: var(--text-heading);
     margin: 0;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
 }
 
 .admin-badge {
@@ -218,10 +242,10 @@ button:active {
 
 /* --- Section Title & Subtitle --- */
 .section-title {
-    font-size: 1.5rem;
-    font-weight: 700;
+    font-size: var(--fs-2xl);
+    font-weight: var(--fw-bold);
     margin-bottom: 1rem;
-    color: #2E7D32;
+    color: var(--text-heading);
     text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
 }
 
@@ -232,11 +256,11 @@ button:active {
     color: white;
     border: none;
     border-radius: var(--radius-btn);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 3px 0 var(--color-green-dark);
-    font-size: 0.95rem;
+    font-size: var(--fs-base);
 }
 
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 0 var(--color-green-dark); }
@@ -245,31 +269,31 @@ button:active {
 .btn-secondary {
     padding: 0.75rem 1.5rem;
     background: white;
-    color: #64748b;
+    color: var(--text-secondary);
     border: 2px solid #e2e8f0;
     border-radius: var(--radius-btn);
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     cursor: pointer;
     transition: all 0.2s;
-    font-size: 0.95rem;
+    font-size: var(--fs-base);
 }
 
 .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
 .btn-secondary:active { transform: translateY(1px); }
 
 /* --- Badges --- */
-.badge-correct { color: #166534; background: #DCFCE7; padding: 4px 8px; border-radius: 4px; font-weight: 600; }
-.badge-error   { color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; font-weight: 600; }
+.badge-correct { color: #166534; background: #DCFCE7; padding: 4px 8px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-error   { color: #991B1B; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; font-weight: var(--fw-semibold); }
 
 /* Confidence-based result badges */
-.badge-excellent { color: #065F46; background: #A7F3D0; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-great     { color: #166534; background: #DCFCE7; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-good      { color: #3B6B1E; background: #E8F5E9; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-fair      { color: #92400E; background: #FEF3C7; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-miss      { color: #9A3412; background: #FFEDD5; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-bad       { color: #991B1B; background: #FEE2E2; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-worse     { color: #7F1D1D; background: #FECACA; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
-.badge-worst     { color: #450A0A; background: #FCA5A5; padding: 4px 10px; border-radius: 4px; font-weight: 600; }
+.badge-excellent { color: #065F46; background: #A7F3D0; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-great     { color: #166534; background: #DCFCE7; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-good      { color: #3B6B1E; background: #E8F5E9; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-fair      { color: #92400E; background: #FEF3C7; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-miss      { color: #9A3412; background: #FFEDD5; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-bad       { color: #991B1B; background: #FEE2E2; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-worse     { color: #7F1D1D; background: #FECACA; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
+.badge-worst     { color: #450A0A; background: #FCA5A5; padding: 4px 10px; border-radius: 4px; font-weight: var(--fw-semibold); }
 
 /* --- Empty State (overlay, centers to nearest position:relative parent) --- */
 .empty-state {
@@ -282,9 +306,9 @@ button:active {
     justify-content: center;
     text-align: center;
     gap: 0.5rem;
-    color: #558B2F;
-    font-size: 1rem;
-    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
     border-radius: inherit;
     pointer-events: none;
 }
@@ -301,16 +325,16 @@ button:active {
 }
 
 .empty-state strong {
-    font-size: 1.1rem;
-    color: #2E7D32;
+    font-size: var(--fs-lg);
+    color: var(--text-heading);
     display: block;
 }
 
 .empty-state small {
-    font-size: 0.85rem;
-    color: #558B2F;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
     max-width: 400px;
-    opacity: 0.8;
+    opacity: 0.9;
     display: block;
 }
 
@@ -339,9 +363,10 @@ button:active {
 
 .form-group label {
     display: block;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     margin-bottom: 0.5rem;
-    color: #2E7D32;
+    font-size: var(--fs-md);
+    color: var(--text-heading);
 }
 
 .form-group input,
@@ -350,7 +375,8 @@ button:active {
     padding: 0.75rem 1rem;
     border: 2px solid var(--color-border);
     border-radius: var(--radius-btn);
-    font-size: 1rem;
+    font-size: var(--fs-md);
+    color: var(--text-body);
     transition: all 0.2s;
 }
 
@@ -369,8 +395,8 @@ button:active {
 
 .form-group small,
 .form-helper-text {
-    color: #64748b;
-    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
     display: block;
     margin-top: 0.3rem;
 }
@@ -379,7 +405,7 @@ button:active {
 .result-message {
     padding: 1rem;
     border-radius: 10px;
-    font-size: 0.9rem;
+    font-size: var(--fs-sm);
     animation: slideIn 0.3s ease;
     margin-top: 1rem;
     display: none;

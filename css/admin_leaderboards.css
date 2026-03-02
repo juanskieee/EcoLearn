@@ -10,9 +10,10 @@
 .modern-table th {
     text-align: left;
     padding: 1rem;
-    color: #558B2F;
-    font-size: 0.85rem;
+    color: var(--text-heading);
+    font-size: var(--fs-xs);
     text-transform: uppercase;
+    letter-spacing: 0.5px;
     border-bottom: 2px solid rgba(165, 214, 167, 0.5);
     background: rgba(255, 255, 255, 0.3);
 }
@@ -20,7 +21,9 @@
 .modern-table td {
     padding: 1rem;
     border-bottom: 1px solid rgba(165, 214, 167, 0.25);
-    font-weight: 500;
+    font-size: var(--fs-base);
+    color: var(--text-body);
+    font-weight: var(--fw-medium);
 }
 
 /* --- Table Containers (scrollable inside section-card) --- */
@@ -59,7 +62,7 @@
     padding: 0.25rem 0.75rem;
     border-radius: 12px;
     color: white;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     font-size: 0.85rem;
 }
 
@@ -77,7 +80,8 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.9rem;
+    font-size: var(--fs-base);
+    color: var(--text-body);
     border: 2px solid rgba(165, 214, 167, 0.3);
 }
 
@@ -129,9 +133,9 @@
 }
 
 .log-nickname {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #1f2937;
+    font-size: var(--fs-base);
+    font-weight: var(--fw-semibold);
+    color: var(--text-body);
 }
 
 .log-item-info {
@@ -141,15 +145,15 @@
 }
 
 .log-item-info p {
-    font-size: 0.9rem;
-    color: #1f2937;
-    font-weight: 600;
+    font-size: var(--fs-sm);
+    color: var(--text-body);
+    font-weight: var(--fw-semibold);
 }
 
 .log-item-category {
-    font-size: 0.75rem;
-    color: #6B7280;
-    font-weight: 500;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
 }
 
 /* ============================================
@@ -185,10 +189,10 @@
 }
 
 .logs-subtitle {
-    font-size: 1rem;
-    color: #558B2F;
+    font-size: var(--fs-md);
+    color: var(--text-heading);
     margin: 0;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
 }
 
 .logs-filter-pills {
@@ -202,7 +206,7 @@
     padding: 0.5rem 1rem;
     border-radius: 20px;
     cursor: pointer;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     color: #558B2F;
     transition: all 0.2s;
 }
@@ -254,10 +258,10 @@
     margin-bottom: 0;
 }
 .lb-subtitle {
-    font-size: 1rem;
-    color: #558B2F;
+    font-size: var(--fs-md);
+    color: var(--text-heading);
     margin: 0;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
 }
 
 .lb-section-header-left { flex: 1; }
@@ -386,7 +390,7 @@
 .lb-podium-name {
     font-family: 'Fredoka', sans-serif;
     font-size: 1.1rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     color: #2E7D32;
     text-align: center;
     word-break: break-word;
@@ -398,7 +402,7 @@
 .lb-podium-score {
     font-family: 'Fredoka', sans-serif;
     font-size: 2rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     color: #1b5e20;
     line-height: 1;
 }
@@ -414,7 +418,7 @@
     justify-content: center;
     font-size: 0.8rem;
     color: #558B2F;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     margin-top: 0.2rem;
 }
 
@@ -424,7 +428,7 @@
     border-radius: 12px 12px 6px 6px;
     text-align: center;
     font-family: 'Fredoka', sans-serif;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     font-size: 1rem;
     color: white;
     margin-top: 0.5rem;
@@ -474,21 +478,22 @@
 .lb-acc-label {
     position: relative;
     z-index: 1;
-    font-size: 0.82rem;
-    color: #1f2937;
-    font-weight: 600;
+    font-size: var(--fs-xs);
+    color: var(--text-body);
+    font-weight: var(--fw-semibold);
     padding-left: 0.6rem;
 }
 
 /* --- Leaderboard table cell colors --- */
 .lb-name-cell strong {
-    color: #1f2937;
-    font-weight: 600;
+    color: var(--text-body);
+    font-weight: var(--fw-semibold);
 }
 
 .lb-num-cell {
-    color: #1f2937;
-    font-weight: 600;
+    color: var(--text-body);
+    font-weight: var(--fw-semibold);
+    font-size: var(--fs-base);
 }
 
 /* --- Leaderboard table empty state: no blur --- */
@@ -519,7 +524,7 @@
 
 .lb-podium-empty-slot-label {
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
     color: #B0BEC5;
     letter-spacing: 0.3px;
 }

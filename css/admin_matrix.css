@@ -16,7 +16,7 @@
 #confusion-matrix .section-title {
     text-align: center;
     font-size: 2rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     color: #2E7D32;
     margin-bottom: 2rem;
     text-shadow: 2px 2px 0 rgba(255, 255, 255, 0.5);
@@ -38,7 +38,8 @@
     border-collapse: separate;
     border-spacing: 0;
     font-family: 'Fredoka', sans-serif;
-    font-size: 1rem;
+    font-size: var(--fs-md);
+    color: var(--text-body);
 }
 
 .confusion-matrix-table th,
@@ -69,16 +70,16 @@
 
 .confusion-matrix-table .corner-cell {
     background: rgba(255, 255, 255, 0.85);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     text-align: center;
-    font-size: 0.85rem;
-    color: #558B2F;
+    font-size: var(--fs-sm);
+    color: var(--text-heading);
 }
 
 .confusion-matrix-table .pred-header,
 .confusion-matrix-table .actual-header {
     background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     color: #2E7D32;
     font-size: 1rem;
     text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
@@ -123,7 +124,7 @@
 .confusion-matrix-table .cell-correct {
     background: linear-gradient(135deg, #a5d6a7 0%, #81c784 100%);
     color: #1b5e20;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     font-size: 1.1rem;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08);
 }
@@ -137,7 +138,7 @@
 .confusion-matrix-table .cell-error {
     background: linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%);
     color: #a55e48;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     font-size: 1rem;
 }
 
@@ -147,17 +148,17 @@
 }
 
 .confusion-matrix-table .cell-zero {
-    color: #9ca3af;
+    color: var(--text-muted);
     background: rgba(255, 255, 255, 0.85);
-    font-weight: 500;
+    font-weight: var(--fw-medium);
 }
 
 .confusion-matrix-table .row-total,
 .confusion-matrix-table .total-header {
     background: rgba(255, 255, 255, 0.85);
-    font-weight: 700;
-    color: #2E7D32;
-    font-size: 1rem;
+    font-weight: var(--fw-bold);
+    color: var(--text-heading);
+    font-size: var(--fs-md);
 }
 
 .category-accuracy-grid {
@@ -192,9 +193,9 @@
 
 .category-stat-card .cat-name {
     font-family: 'Fredoka', sans-serif;
-    font-size: 1rem;
-    font-weight: 700;
-    color: #2E7D32;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-bold);
+    color: var(--text-heading);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -202,13 +203,13 @@
 .category-stat-card .cat-accuracy {
     font-family: 'Fredoka', sans-serif;
     font-size: 2.5rem;
-    font-weight: 700;
-    color: #1b5e20;
+    font-weight: var(--fw-bold);
+    color: var(--text-heading);
     line-height: 1;
 }
 
 .category-stat-card .cat-detail {
-    font-size: 0.9rem;
-    color: #1f2937;
-    font-weight: 600;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    font-weight: var(--fw-semibold);
 }

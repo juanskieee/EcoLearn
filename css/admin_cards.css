@@ -82,20 +82,30 @@
 
 .gallery-card .card-title {
     display: block;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #1f2937;
+    font-size: var(--fs-sm);
+    font-weight: var(--fw-semibold);
+    color: var(--text-body);
     margin-bottom: 0.25rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.gallery-card .card-cat { 
-    font-size: 0.75rem; 
-    font-weight: 600; 
-    color: #558B2F; 
-    }
+.gallery-card .card-cat {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-normal);
+    padding: 0.3rem 0.65rem;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.gallery-card .card-cat.cat-compostable    { color: #065F46; }
+.gallery-card .card-cat.cat-recyclable     { color: #1e40af; }
+.gallery-card .card-cat.cat-non-recyclable { color: #991B1B; }
+.gallery-card .card-cat.cat-special        { color: #92400E; }
 
 /* --- Modal Button Row --- */
 .modal-button-row {
@@ -108,137 +118,12 @@
     flex: 1;
     padding: 14px;
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
 }
 
 .modal-button-row .btn-confirm-cancel {
     flex: 0 0 auto;
     padding: 0.75rem 1.5rem;
-}
-
-/* --- Card Preview Modal --- */
-.card-preview-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
-    z-index: 10001;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    transition: background 0.2s ease, backdrop-filter 0.2s ease;
-    will-change: background, backdrop-filter;
-}
-
-.card-preview-modal.active {
-    display: flex !important;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(12px);
-}
-
-.preview-modal-content {
-    background: white;
-    border-radius: var(--radius-card);
-    max-width: 500px;
-    height: 600px;
-    width: 100%;
-    overflow: visible;
-    position: relative;
-    opacity: 0;
-    transform: scale(0.95) translateY(10px);
-    transition: opacity 0.2s ease, transform 0.2s var(--bounce);
-    will-change: transform, opacity;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-    display: flex;
-    flex-direction: column;
-}
-
-.card-preview-modal.active .preview-modal-content {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-}
-
-/* --- Preview Header --- */
-.preview-modal-header {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 1.25rem 1.5rem;
-    background: linear-gradient(180deg, #e8f5e1 0%, #d4edbc 100%);
-    border-bottom: 2px solid #A5D6A7;
-    border-radius: 32px 32px 0 0;
-    position: relative;
-}
-
-.preview-frame-overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -49%);
-    z-index: 10;
-    pointer-events: none;
-    width: 108%;
-    height: 120%;
-    object-fit: fill;
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
-    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.15));
-}
-
-.preview-modal-header h4 {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    margin: 0;
-    font-size: 1.4rem;
-    color: #2E7D32;
-    font-family: 'Fredoka', sans-serif;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    text-transform: uppercase;
-    pointer-events: none;
-}
-
-.preview-modal-close {
-    background: white;
-    border: 2px solid #A5D6A7;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    font-size: 1.2rem;
-    cursor: pointer;
-    color: #558B2F;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.preview-modal-close:hover {
-    background: var(--color-red);
-    border-color: var(--color-red);
-    color: white;
-    transform: rotate(90deg);
-}
-
-/* --- Preview Body --- */
-.preview-modal-body {
-    background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
-    padding: 2rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 1.25rem;
-    border-radius: 0 0 32px 32px;
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
 }
 
 .preview-image {
@@ -272,9 +157,8 @@
     gap: 0.4rem;
     padding: 0.4rem 1rem;
     border-radius: 20px;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: white;
+    font-size: var(--fs-base);
+    font-weight: var(--fw-bold);
     letter-spacing: 0.2px;
     width: auto;
     white-space: nowrap;
@@ -294,7 +178,7 @@
     padding: 0.75rem 1.5rem;
     border-radius: var(--radius-btn);
     font-family: 'Fredoka', sans-serif;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 3px 0 var(--color-blue-dark);
@@ -310,7 +194,7 @@
     padding: 0.75rem 1.5rem;
     border-radius: var(--radius-btn);
     font-family: 'Fredoka', sans-serif;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 3px 0 var(--color-red-dark);
@@ -409,7 +293,7 @@
     cursor: pointer;
     font-family: 'Fredoka', sans-serif;
     font-size: 0.85rem;
-    font-weight: 600;
+    font-weight: var(--fw-bold);
     color: #558B2F;
     transition: all 0.2s;
     display: inline-flex;
@@ -444,7 +328,7 @@
     border: none;
     border-radius: var(--radius-btn);
     font-family: 'Fredoka', sans-serif;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     cursor: pointer;
     transition: all 0.2s;
     background: linear-gradient(135deg, var(--color-green) 0%, #45a802 100%);
@@ -462,7 +346,7 @@
     width: 100%;
     padding: 14px;
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: var(--fw-semibold);
 }
 
 /* --- Image Preview (card form upload) --- */
@@ -493,8 +377,8 @@
 }
 
 .image-preview-placeholder {
-    color: #94a3b8;
-    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
     text-align: center;
     padding: 2rem;
 }

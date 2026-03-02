@@ -143,7 +143,7 @@ const AppState = {
             </div>
             <div class="card-details">
                 <span class="card-title">${card.card_name}</span>
-                <span class="card-cat" style="color:${getCategoryColor(card.category_name)}">
+                <span class="card-cat ${getCatClass(card.category_name)}">
                     ${getCategoryIcon(card.category_name)} ${card.category_name}
                 </span>
             </div>
@@ -523,7 +523,7 @@ const OptimizedAdmin = {
                 if (!show) div.style.display = 'none';
                 
                 // Use native lazy loading - browser handles it efficiently
-                div.innerHTML = `<div class="card-img-container"><img src="/${card.image_path}" alt="${card.card_name}" loading="lazy" decoding="async" fetchpriority="low" width="120" height="100" onerror="this.onerror=null;this.src='/assets/binbin_neutral.png'"></div><div class="card-details"><span class="card-title">${card.card_name}</span><span class="card-cat" style="color:${getCategoryColor(card.category_name)}">${getCategoryIcon(card.category_name)} ${card.category_name}</span></div>`;
+                div.innerHTML = `<div class="card-img-container"><img src="/${card.image_path}" alt="${card.card_name}" loading="lazy" decoding="async" fetchpriority="low" width="120" height="100" onerror="this.onerror=null;this.src='/assets/binbin_neutral.png'"></div><div class="card-details"><span class="card-title">${card.card_name}</span><span class="card-cat ${getCatClass(card.category_name)}">${getCategoryIcon(card.category_name)} ${card.category_name}</span></div>`;
                 
                 fragment.appendChild(div);
             }

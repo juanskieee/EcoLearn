@@ -71,22 +71,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // ESC key to close modals
+    // ESC key to close modals (highest z-index first)
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+            const deleteModal = document.getElementById('delete-card-modal');
+            const downloadModal = document.getElementById('download-confirm-modal');
+            const previewModal = document.getElementById('card-preview-modal');
             const confirmModal = document.getElementById('confirmationModal');
             const logoutModal = document.getElementById('logoutModal');
             const removeNicknameModal = document.getElementById('remove-nickname-modal');
             const addNicknameModal = document.getElementById('add-nickname-modal');
+            const cardsModal = document.getElementById('cards-modal');
+            const addCardModal = document.getElementById('add-card-modal');
             
-            if (removeNicknameModal && removeNicknameModal.classList.contains('active')) {
+            if (deleteModal && deleteModal.classList.contains('active')) {
+                closeDeleteCardModal();
+            } else if (downloadModal && downloadModal.classList.contains('active')) {
+                closeDownloadConfirmModal();
+            } else if (previewModal && previewModal.classList.contains('active')) {
+                closeCardPreview();
+            } else if (removeNicknameModal && removeNicknameModal.classList.contains('active')) {
                 closeRemoveNicknameModal();
-            } else if (addNicknameModal && addNicknameModal.style.display === 'flex') {
+            } else if (addNicknameModal && addNicknameModal.classList.contains('active')) {
                 closeAddNicknameModal();
             } else if (logoutModal && logoutModal.classList.contains('active')) {
                 closeLogoutModal();
             } else if (confirmModal && confirmModal.classList.contains('active')) {
                 closeConfirmationModal();
+            } else if (cardsModal && cardsModal.classList.contains('active')) {
+                closeCardsModal();
+            } else if (addCardModal && addCardModal.classList.contains('active')) {
+                closeAddCardModal();
             }
         }
     });
@@ -181,12 +196,18 @@ function showTab(tabId) {
         pageTitle.textContent = tabTitles[tabId];
     }
 
-    // Re-trigger popIn animation on the top-header
+    // Re-trigger popIn animation on the top-header and section-card
     const header = document.querySelector('.top-header');
     if (header) {
         header.style.animation = 'none';
         header.offsetHeight; // force reflow
         header.style.animation = '';
+    }
+    
+    if (selectedTab) {
+        selectedTab.style.animation = 'none';
+        selectedTab.offsetHeight; // force reflow
+        selectedTab.style.animation = '';
     }
     
     // NO DATA FETCHING HERE!
@@ -360,11 +381,14 @@ async function loadNicknames() {
                     return `
                     <div class="tag" data-nickname="${(student.nickname || student).toString().replace(/"/g, '&quot;')}">
                         <div class="tag-info">
-                            <span class="tag-name">👤 ${student.nickname || student}</span>
+                            <div class="tag-av-name">
+                            <span class="tag-avatar">👤</span>
+                            <span class="tag-name">${student.nickname || student}</span>
+                            </div>
                             <span class="tag-stats">
                                 <span class="stat-chip sessions">📊 ${student.sessions || 0} session${student.sessions !== 1 ? 's' : ''}</span>
-                                <span class="stat-chip accuracy">🎯 ${student.accuracy ? student.accuracy + '%' : '0 accuracy'}</span>
-                                <span class="stat-chip created">� ${createdTime || 'N/A'}</span>
+                                <span class="stat-chip accuracy">🎯 ${student.accuracy ? student.accuracy + '% accuracy' : '0% accuracy'}</span>
+                                <span class="stat-chip created">⏱️ ${createdTime || 'N/A'}</span>
                                 ${isNew ? '<span class="stat-chip new">✨ New</span>' : ''}
                             </span>
                         </div>
@@ -375,12 +399,13 @@ async function loadNicknames() {
                 // Simple string list (fallback)
                 list.innerHTML = data.nicknames.map((name, index) => `
                     <div class="tag" data-nickname="${name.replace(/"/g, '&quot;')}">
+                        <span class="tag-avatar">👤</span>
                         <div class="tag-info">
-                            <span class="tag-name">👤 ${name}</span>
+                            <span class="tag-name">${name}</span>
                             <span class="tag-stats">
                                 <span class="stat-chip sessions">📊 0 sessions</span>
                                 <span class="stat-chip accuracy">🎯 N/A</span>
-                                <span class="stat-chip created">� N/A</span>
+                                <span class="stat-chip created">⏱️ N/A</span>
                                 <span class="stat-chip new">✨ New</span>
                             </span>
                         </div>
@@ -778,13 +803,19 @@ function updateChart(data) {
     const labels = Object.keys(counts);
     const values = Object.values(counts);
     const colors = {
-        'Compostable':    '#10B981',
-        'Recyclable':     '#3B82F6',
-        'Non-Recyclable': '#EF4444',
-        'Special Waste':  '#F59E0B'
+        'Compostable':    'rgba(236, 253, 245, 0.9)',
+        'Recyclable':     'rgba(239, 246, 255, 0.9)',
+        'Non-Recyclable': 'rgba(254, 242, 242, 0.9)',
+        'Special Waste':  'rgba(255, 251, 235, 0.9)'
     };
-    const bgColors = labels.map(l => colors[l] || '#94A3B8');
-    const borderColors = bgColors.map(c => c);
+    const borders = {
+        'Compostable':    'rgba(52,  211, 153, 0.7)',
+        'Recyclable':     'rgba(96,  165, 250, 0.7)',
+        'Non-Recyclable': 'rgba(248, 113, 113, 0.7)',
+        'Special Waste':  'rgba(251, 211, 141, 0.7)'
+    };
+    const bgColors     = labels.map(l => colors[l]  || 'rgba(200, 200, 200, 0.6)');
+    const borderColors = labels.map(l => borders[l] || 'rgba(150, 150, 150, 0.6)');
 
     const total = values.reduce((a, b) => a + b, 0);
 
@@ -927,12 +958,42 @@ async function loadConfusionMatrix() {
 
 function getCategoryColor(category) {
     const colors = {
-        'Compostable': '#10B981',
-        'Recyclable': '#3B82F6',
-        'Non-Recyclable': '#EF4444',
-        'Special Waste': '#F59E0B'
+        'Compostable':    'rgba(236, 253, 245, 0.9)',
+        'Recyclable':     'rgba(239, 246, 255, 0.9)',
+        'Non-Recyclable': 'rgba(254, 242, 242, 0.9)',
+        'Special Waste':  'rgba(255, 251, 235, 0.9)'
     };
-    return colors[category] || '#888';
+    return colors[category] || 'rgba(243, 244, 246, 0.9)';
+}
+
+function getCategoryTextColor(category) {
+    const colors = {
+        'Compostable':    '#065F46',
+        'Recyclable':     '#1e40af',
+        'Non-Recyclable': '#991B1B',
+        'Special Waste':  '#92400E'
+    };
+    return colors[category] || '#374151';
+}
+
+function getCategoryBorderColor(category) {
+    const colors = {
+        'Compostable':    'rgba(52,  211, 153, 0.55)',
+        'Recyclable':     'rgba(96,  165, 250, 0.55)',
+        'Non-Recyclable': 'rgba(248, 113, 113, 0.55)',
+        'Special Waste':  'rgba(251, 211, 141, 0.6)'
+    };
+    return colors[category] || 'rgba(165, 214, 167, 0.45)';
+}
+
+function getCatClass(category) {
+    const classes = {
+        'Compostable':    'cat-compostable',
+        'Recyclable':     'cat-recyclable',
+        'Non-Recyclable': 'cat-non-recyclable',
+        'Special Waste':  'cat-special'
+    };
+    return classes[category] || '';
 }
 
 // ============================================
@@ -1097,9 +1158,10 @@ function showDownloadConfirmModal(category, cardId, cardName) {
         modal.className = 'cards-modal';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 450px; text-align: center;">
+                <img src="/assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+                <button class="modal-close" onclick="closeDownloadConfirmModal()">✕</button>
                 <div class="modal-header">
                     <h4 id="download-modal-title">Download</h4>
-                    <button class="modal-close" onclick="closeDownloadConfirmModal()">✕</button>
                 </div>
                 <div style="padding: 1.5rem;">
                     <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
@@ -1116,6 +1178,10 @@ function showDownloadConfirmModal(category, cardId, cardName) {
                 </div>
             </div>
         `;
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeDownloadConfirmModal();
+        });
         document.body.appendChild(modal);
     }
     
@@ -1409,9 +1475,9 @@ function previewCard(cardId, cardName, category, imagePath) {
         modal.innerHTML = `
             <div class="preview-modal-content">
                 <img src="/assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
+                <button class="preview-modal-close" onclick="closeCardPreview()">✕</button>
                 <div class="preview-modal-header">
                     <h4 id="preview-modal-name"></h4>
-                    <button class="preview-modal-close" onclick="closeCardPreview()">✕</button>
                 </div>
                 <div class="preview-modal-body">
                     <div class="preview-image">
@@ -1451,7 +1517,10 @@ function previewCard(cardId, cardName, category, imagePath) {
     img.onerror = function() { this.onerror=null; this.src = '/assets/binbin_neutral.png'; };
     nameEl.textContent = cardName;
     categoryEl.textContent = `${getCategoryIcon(category)} ${category}`;
-    categoryEl.style.background = getCategoryColor(category);
+    categoryEl.style.background  = getCategoryColor(category);
+    categoryEl.style.color       = getCategoryTextColor(category);
+    categoryEl.style.borderColor = getCategoryBorderColor(category);
+    categoryEl.style.border      = `1px solid ${getCategoryBorderColor(category)}`;
     replaceBtn.onclick = () => {
         closeCardPreview();
         selectCardForReplacement(cardId, cardName, category, imagePath);
@@ -1480,6 +1549,7 @@ function showDeleteCardModal(cardId, cardName) {
         modal.className = 'confirmation-modal';
         modal.innerHTML = `
             <div class="confirmation-content" onclick="event.stopPropagation()">
+                <img src="/assets/leafframe.png" class="preview-frame-overlay" alt="Leaf Frame">
                 <div class="confirmation-header">
                     <h3>🗑️ Delete Card</h3>
                 </div>

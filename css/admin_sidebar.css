@@ -65,13 +65,13 @@
     gap: 1rem;
     padding: 1rem;
     text-decoration: none;
-    color: #558B2F;
-    font-weight: bold;
+    color: var(--text-heading);
+    font-weight: var(--fw-bold);
     border-radius: var(--radius-btn);
     transition: all 0.2s ease;
     background: rgba(255, 255, 255, 0.3);
     margin-bottom: 0.5rem;
-    font-size: 1.2rem;
+    font-size: var(--fs-lg);
 }
  
 .nav-item.active,
@@ -96,7 +96,7 @@
     text-decoration: none;
     color: white;
     font-size: 1rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     background: linear-gradient(135deg, var(--color-green) 0%, #45a802 100%);
     padding: 0.7rem 1rem;
     border-radius: var(--radius-btn);
@@ -122,7 +122,7 @@
     text-decoration: none;
     color: white;
     font-size: 1rem;
-    font-weight: 700;
+    font-weight: var(--fw-bold);
     background: linear-gradient(135deg, var(--color-red) 0%, #cc3333 100%);
     padding: 0.7rem 1rem;
     border-radius: var(--radius-btn);
