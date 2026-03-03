@@ -61,7 +61,7 @@
     display: inline-block;
     padding: 0.25rem 0.75rem;
     border-radius: 12px;
-    color: white;
+    color: var(--text-secondary);
     font-weight: var(--fw-semibold);
     font-size: 0.85rem;
 }
@@ -229,7 +229,7 @@
 /* --- Two-column layout --- */
 .lb-layout {
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
     flex: 1;
     min-height: 0;
 }
@@ -329,8 +329,10 @@
     width: 260px;
     flex-shrink: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    min-height: 0;
 }
 
 /* --- Podium Container --- */
@@ -338,11 +340,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
+    justify-content: stretch;
+    gap: 0.4rem;
     width: 100%;
-    height: 100%;
-    padding: 1rem 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.5rem 0.25rem;
+    box-sizing: border-box;
 }
 
 /* --- Each podium slot (card + base block) --- */
@@ -351,21 +356,28 @@
     flex-direction: column;
     align-items: center;
     width: 100%;
+    flex: 1;
+    min-height: 0;
 }
 
 /* --- Floating card above the base --- */
 .lb-podium-card {
     width: 100%;
+    flex: 1;
+    min-height: 0;
     background: rgba(255, 255, 255, 0.9);
-    border-radius: 20px;
-    padding: 1.25rem 1rem 1rem;
+    border-radius: 16px;
+    padding: 0.5rem 0.6rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: center;
+    gap: 0.15rem;
     box-shadow: 0 6px 20px rgba(0,0,0,0.10);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     border: 3px solid transparent;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .lb-podium-card:hover {
@@ -373,72 +385,70 @@
     box-shadow: 0 10px 28px rgba(0,0,0,0.14);
 }
 
-.lb-podium-gold   .lb-podium-card { border-color: rgba(196, 154, 42, 0.7); }
-.lb-podium-silver .lb-podium-card { border-color: rgba(107, 138, 156, 0.7); }
-.lb-podium-bronze .lb-podium-card { border-color: rgba(138, 104, 64, 0.7); }
-
 /* --- Medal emoji --- */
 .lb-podium-medal {
-    font-size: 2.8rem;
+    font-size: 2rem;
     line-height: 1;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
 }
 
-.lb-podium-gold .lb-podium-medal   { font-size: 3.4rem; }
+.lb-podium-gold .lb-podium-medal   { font-size: 2.4rem; }
 
 /* --- Name --- */
 .lb-podium-name {
     font-family: 'Fredoka', sans-serif;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: var(--fw-bold);
     color: #2E7D32;
     text-align: center;
     word-break: break-word;
+    line-height: 1.2;
 }
 
-.lb-podium-gold .lb-podium-name { font-size: 1.25rem; }
+.lb-podium-gold .lb-podium-name { font-size: 1.05rem; }
 
 /* --- Best score (big) --- */
 .lb-podium-score {
     font-family: 'Fredoka', sans-serif;
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: var(--fw-bold);
     color: #1b5e20;
     line-height: 1;
 }
 
-.lb-podium-gold .lb-podium-score { font-size: 2.4rem; }
+.lb-podium-gold .lb-podium-score { font-size: 1.8rem; }
 
 /* --- Meta row (sessions + avg badge) --- */
 .lb-podium-meta {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     flex-wrap: wrap;
     justify-content: center;
-    font-size: 0.8rem;
+    font-size: 0.72rem;
     color: #558B2F;
     font-weight: var(--fw-semibold);
-    margin-top: 0.2rem;
+    margin-top: 0.1rem;
 }
 
 /* --- Podium base block --- */
 .lb-podium-base {
     width: 100%;
-    border-radius: 12px 12px 6px 6px;
+    flex-shrink: 0;
+    border-radius: 10px 10px 5px 5px;
     text-align: center;
     font-family: 'Fredoka', sans-serif;
     font-weight: var(--fw-bold);
-    font-size: 1rem;
-    color: white;
-    margin-top: 0.5rem;
-    padding: 0.5rem 0;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+    padding: 0.3rem 0;
     letter-spacing: 0.5px;
+    box-sizing: border-box;
 }
 
-.lb-base-1 { background: linear-gradient(180deg, #C49A2A, #A07B1E); height: 55px; line-height: 40px; padding: 0; }
-.lb-base-2 { background: linear-gradient(180deg, #6B8A9C, #506878); height: 40px; line-height: 30px; padding: 0; }
-.lb-base-3 { background: linear-gradient(180deg, #8A6840, #6B4F2E); height: 30px; line-height: 22px; padding: 0; }
+.lb-base-1 { background: linear-gradient(180deg, rgba(200,245,230,1), rgba(160,225,200,1)); color: #065F46; border: 1.5px solid rgba(165,214,167,0.5); }
+.lb-base-2 { background: linear-gradient(180deg, rgba(219,234,254,1), rgba(191,219,254,1)); color: #1E40AF; border: 1.5px solid rgba(147,197,253,0.5); }
+.lb-base-3 { background: linear-gradient(180deg, rgba(254,226,226,1), rgba(252,200,200,1)); color: #991B1B; border: 1.5px solid rgba(252,165,165,0.5); }
 
 /* --- Table Wrapper: bottom half of combined card --- */
 .lb-table-wrapper {

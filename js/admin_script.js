@@ -1101,10 +1101,10 @@ async function loadLeaderboard() {
 }
 
 function getAccuracyColor(accuracy) {
-    if (accuracy >= 90) return '#10B981';
-    if (accuracy >= 75) return '#3B82F6';
-    if (accuracy >= 50) return '#eeb148';
-    return '#EF4444';
+    if (accuracy >= 90) return '#A0E1C8';
+    if (accuracy >= 75) return '#BFDBFE';
+    if (accuracy >= 50) return '#FCC8C8';
+    return '#FCC8C8';
 }
 
 // ============================================
