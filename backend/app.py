@@ -41,6 +41,18 @@ KNN_K = 2                # Standard for Lowe's Ratio Test
 LOWE_RATIO = 0.65        # Stricter (was 0.70) - fewer false positives
 MIN_MATCHES = 12         # Reduced from 15 for better sensitivity
 CONFIDENCE_THRESHOLD = 0.60  # Minimum confidence to accept result
+SESSION_TIMEOUT_MINUTES = 30
+WEBCAM_FPS = 30
+ROI_BOX_COLOR = '#00FF00'
+ENABLE_AUDIO_FEEDBACK = True
+MODEL_VERSION = 'ORB-KNN-v1.0'
+
+# --- OPTIONAL CNN FALLBACK (for unavoidable blur) ---
+CNN_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
+CNN_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_labels.txt')
+CNN_INPUT_SIZE = (224, 224)
+CNN_CONFIDENCE_THRESHOLD = 0.65
+HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs CNN disagreements
 
 app = Flask(__name__)
 CORS(app)
@@ -61,6 +73,76 @@ card_metadata = {}
 category_metadata = {}
 current_session_id = None
 current_session_mode = None
+cnn_net = None
+cnn_class_to_card_id = {}
+
+
+def rebuild_orb_extractor():
+    """Rebuild ORB extractor when dynamic feature settings change."""
+    global orb
+    orb = cv2.ORB_create(
+        nfeatures=max(100, int(ORB_FEATURES)),
+        scaleFactor=1.2,
+        nlevels=8,
+        edgeThreshold=15,
+        firstLevel=0,
+        WTA_K=2,
+        scoreType=cv2.ORB_HARRIS_SCORE,
+        patchSize=31,
+        fastThreshold=20
+    )
+
+
+def _to_bool(value):
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def apply_config_value(config_key, config_value):
+    """Apply one config key/value into runtime globals with safe casting."""
+    global ORB_FEATURES, KNN_K, LOWE_RATIO, CONFIDENCE_THRESHOLD
+    global SESSION_TIMEOUT_MINUTES, WEBCAM_FPS, ROI_BOX_COLOR, ENABLE_AUDIO_FEEDBACK, MODEL_VERSION
+
+    if config_key == 'orb_feature_count':
+        ORB_FEATURES = max(100, int(config_value))
+        rebuild_orb_extractor()
+    elif config_key == 'knn_k_value':
+        # Lowe ratio test requires at least 2 neighbors.
+        KNN_K = max(2, int(config_value))
+    elif config_key == 'knn_distance_threshold':
+        LOWE_RATIO = max(0.1, min(0.99, float(config_value)))
+    elif config_key == 'min_confidence_score':
+        CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
+    elif config_key == 'session_timeout_minutes':
+        SESSION_TIMEOUT_MINUTES = max(1, int(config_value))
+    elif config_key == 'webcam_fps':
+        WEBCAM_FPS = max(1, int(config_value))
+    elif config_key == 'roi_box_color':
+        ROI_BOX_COLOR = str(config_value)
+    elif config_key == 'enable_audio_feedback':
+        ENABLE_AUDIO_FEEDBACK = _to_bool(config_value)
+    elif config_key == 'model_version':
+        MODEL_VERSION = str(config_value)
+
+
+def load_runtime_config_from_db():
+    """Load dynamic settings from TBL_SYSTEM_CONFIG on startup."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT config_key, config_value FROM TBL_SYSTEM_CONFIG")
+        rows = cursor.fetchall()
+
+        for row in rows:
+            try:
+                apply_config_value(row['config_key'], row['config_value'])
+            except Exception as cfg_err:
+                print(f"⚠️ Skipping config '{row['config_key']}': {cfg_err}")
+
+        cursor.close()
+        conn.close()
+        print("✅ Runtime config loaded from database")
+    except Exception as e:
+        print(f"⚠️ Runtime config load failed, using defaults: {e}")
 
 def connect_db():
     """Get connection from pool for faster access"""
@@ -112,8 +194,181 @@ def load_model():
         print(f"❌ Error loading model: {e}")
         return False
 
-# --- ENHANCED IMAGE PREPROCESSING ---
-def preprocess_image(image_bgr):
+
+def load_cnn_model():
+    """Loads optional ONNX CNN model and class mappings for hybrid fallback."""
+    global cnn_net, cnn_class_to_card_id
+
+    cnn_net = None
+    cnn_class_to_card_id = {}
+
+    if not os.path.exists(CNN_MODEL_PATH):
+        print("ℹ️ CNN fallback disabled: model file not found")
+        return False
+
+    if not os.path.exists(CNN_LABELS_PATH):
+        print("⚠️ CNN fallback disabled: labels file not found")
+        return False
+
+    try:
+        net = cv2.dnn.readNetFromONNX(CNN_MODEL_PATH)
+        class_map = {}
+
+        with open(CNN_LABELS_PATH, 'r', encoding='utf-8') as f:
+            for line in f:
+                row = line.strip()
+                if not row or row.startswith('#'):
+                    continue
+
+                # Format A: class_index,card_id
+                # Format B: card_id (order becomes class index)
+                parts = [p.strip() for p in row.split(',') if p.strip()]
+                if len(parts) >= 2:
+                    class_index = int(parts[0])
+                    card_id = int(parts[1])
+                else:
+                    class_index = len(class_map)
+                    card_id = int(parts[0])
+
+                class_map[class_index] = card_id
+
+        if not class_map:
+            print("⚠️ CNN fallback disabled: empty labels mapping")
+            return False
+
+        cnn_net = net
+        cnn_class_to_card_id = class_map
+        print(f"✅ CNN fallback loaded: {len(cnn_class_to_card_id)} classes")
+        return True
+    except Exception as e:
+        print(f"⚠️ CNN fallback disabled: {e}")
+        cnn_net = None
+        cnn_class_to_card_id = {}
+        return False
+
+
+def predict_waste_cnn(image_bgr):
+    """Runs CNN fallback inference and returns ORB-compatible response shape."""
+    if cnn_net is None or not cnn_class_to_card_id:
+        return {"status": "unknown", "reason": "cnn_unavailable"}
+
+    try:
+        resized = cv2.resize(image_bgr, CNN_INPUT_SIZE)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+        # Teachable Machine exports are commonly NHWC and can use different
+        # normalization schemes depending on embedded preprocessing layers.
+        # Try common variants and keep the highest-confidence prediction.
+        input_variants = [
+            np.expand_dims(rgb, axis=0),
+            np.expand_dims(rgb / 255.0, axis=0),
+            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+        ]
+
+        best_probs = None
+        best_conf = -1.0
+        for candidate in input_variants:
+            try:
+                cnn_net.setInput(candidate)
+                raw = cnn_net.forward().flatten()
+                if raw.size == 0:
+                    continue
+
+                raw = raw.astype(np.float64)
+
+                # Teachable Machine exports may already output probabilities.
+                raw_sum = float(np.sum(raw))
+                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                    probs = raw / raw_sum
+                else:
+                    shifted = raw - np.max(raw)
+                    exp_scores = np.exp(shifted)
+                    denom = float(np.sum(exp_scores))
+                    if denom <= 0.0:
+                        continue
+                    probs = exp_scores / denom
+
+                conf = float(np.max(probs))
+
+                if conf > best_conf:
+                    best_conf = conf
+                    best_probs = probs
+            except Exception:
+                continue
+
+        if best_probs is None:
+            return {"status": "unknown", "reason": "cnn_inference_failed"}
+
+        probs = best_probs
+
+        top_class = int(np.argmax(probs))
+        confidence = float(probs[top_class])
+
+        if confidence < CNN_CONFIDENCE_THRESHOLD:
+            return {
+                "status": "unknown",
+                "reason": "cnn_low_confidence",
+                "confidence": round(confidence, 2)
+            }
+
+        if top_class not in cnn_class_to_card_id:
+            return {"status": "unknown", "reason": "cnn_unmapped_class"}
+
+        card_id = cnn_class_to_card_id[top_class]
+        card = card_metadata.get(card_id)
+        if not card:
+            return {"status": "unknown", "reason": "cnn_card_not_found"}
+
+        category = category_metadata.get(card['category_id'])
+        return {
+            "status": "success",
+            "card_id": card_id,
+            "card_name": card['name'],
+            "category": category,
+            "category_id": card['category_id'],
+            "matches": 0,
+            "confidence": round(confidence, 2),
+            "keypoints_detected": 0,
+            "classifier": "cnn"
+        }
+    except Exception as e:
+        return {"status": "unknown", "reason": f"cnn_error:{str(e)}"}
+
+# --- BLUR DETECTION ---
+def detect_blur(image_gray):
+    """Returns Laplacian variance as plain Python float. Lower = blurrier."""
+    return float(cv2.Laplacian(image_gray, cv2.CV_64F).var())
+
+# --- FIXED PREPROCESSING PIPELINE ---
+def preprocess_image(image_bgr, aggressive=False):
+    """
+    FIXED ORDER: Denoise → CLAHE → Sharpen (not sharpen-then-bilateral)
+    aggressive=True uses stronger sharpening for blurry inputs
+    """
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+
+    # Step 1: Denoise FIRST (reduces noise before amplifying anything)
+    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+
+    # Step 2: CLAHE for contrast (works better on clean signal)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(denoised)
+
+    # Step 3: Sharpen LAST (amplifies real edges, not noise)
+    if aggressive:
+        # Stronger unsharp mask for blurry images
+        blurred = cv2.GaussianBlur(enhanced, (0, 0), 3)
+        sharpened = cv2.addWeighted(enhanced, 2.5, blurred, -1.5, 0)
+    else:
+        kernel = np.array([[-1, -1, -1],
+                           [-1,  9, -1],
+                           [-1, -1, -1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel)
+
+    # Step 4: Bilateral to smooth noise introduced by sharpening
+    result = cv2.bilateralFilter(sharpened, 9, 75, 75)
+    return result
+
     """Advanced preprocessing pipeline for better feature detection"""
     
     # Convert to grayscale
@@ -137,94 +392,333 @@ def preprocess_image(image_bgr):
     
     return bilateral
 
+def mask_white_background(image_bgr):
+    """
+    Blacks out large uniform white/near-white regions before ORB runs.
+    This stops ORB from latching onto white paper/card backgrounds instead
+    of the actual item drawn on the card.
+    
+    Works by: finding pixels above 200 brightness in all 3 channels,
+    then eroding to keep only LARGE white blobs (actual background),
+    not small white highlights that are part of the card art.
+    """
+    # Threshold: pixels where ALL channels > 200 are "white"
+    white_mask = np.all(image_bgr > 200, axis=2).astype(np.uint8) * 255
+    
+    # Erode to remove small white areas (card art highlights are fine)
+    # Only large connected white regions (paper background) get masked
+    kernel = np.ones((40, 40), np.uint8)
+    large_white = cv2.erode(white_mask, kernel, iterations=1)
+    
+    # Dilate back to recover the full region boundary
+    large_white = cv2.dilate(large_white, np.ones((60, 60), np.uint8), iterations=1)
+    
+    # Black out those regions in the image
+    result = image_bgr.copy()
+    result[large_white > 0] = 0
+    return result
+
 # --- IMPROVED ORB-KNN ALGORITHM ---
-orb = cv2.ORB_create(
-    nfeatures=ORB_FEATURES,
-    scaleFactor=1.2,
-    nlevels=8,
-    edgeThreshold=15,
-    firstLevel=0,
-    WTA_K=2,
-    scoreType=cv2.ORB_HARRIS_SCORE,
-    patchSize=31,
-    fastThreshold=20
-)
+orb = None
+rebuild_orb_extractor()
 
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
-def predict_waste(image_bgr):
-    """Enhanced ORB-KNN Algorithm with better accuracy"""
-    
+
+def get_cnn_topk(image_bgr, top_k=3):
+    """Returns top-k CNN card candidates as normalized scores in [0,1]."""
+    if cnn_net is None or not cnn_class_to_card_id:
+        return []
+
+    try:
+        resized = cv2.resize(image_bgr, CNN_INPUT_SIZE)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+        input_variants = [
+            np.expand_dims(rgb, axis=0),
+            np.expand_dims(rgb / 255.0, axis=0),
+            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+        ]
+
+        best_probs = None
+        best_conf = -1.0
+        for candidate in input_variants:
+            try:
+                cnn_net.setInput(candidate)
+                raw = cnn_net.forward().flatten()
+                if raw.size == 0:
+                    continue
+
+                raw = raw.astype(np.float64)
+
+                raw_sum = float(np.sum(raw))
+                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                    probs = raw / raw_sum
+                else:
+                    shifted = raw - np.max(raw)
+                    exp_scores = np.exp(shifted)
+                    denom = float(np.sum(exp_scores))
+                    if denom <= 0.0:
+                        continue
+                    probs = exp_scores / denom
+
+                conf = float(np.max(probs))
+
+                if conf > best_conf:
+                    best_conf = conf
+                    best_probs = probs
+            except Exception:
+                continue
+
+        if best_probs is None:
+            return []
+
+        probs = best_probs
+
+        top_indices = np.argsort(probs)[::-1][:top_k]
+        candidates = []
+        for idx in top_indices:
+            class_index = int(idx)
+            card_id = cnn_class_to_card_id.get(class_index)
+            if card_id is None:
+                continue
+            candidates.append({
+                'card_id': card_id,
+                'score': float(probs[class_index])
+            })
+        return candidates
+    except Exception:
+        return []
+
+
+def get_orb_topk(image_bgr, top_k=3):
+    """Returns top-k ORB card candidates as normalized scores in [0,1]."""
     if not golden_dataset:
-        return {"status": "error", "message": "Model not loaded"}
-    
-    start_time = datetime.now()
-    
-    # Preprocess the image
-    preprocessed = preprocess_image(image_bgr)
-    
-    # Detect keypoints and descriptors
+        return []
+
+    gray_raw = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    blur_score = float(cv2.Laplacian(gray_raw, cv2.CV_64F).var())
+    is_blurry = blur_score < 100
+    lowe_ratio = 0.75 if is_blurry else LOWE_RATIO
+
+    masked = mask_white_background(image_bgr)
+    preprocessed = preprocess_image(masked, aggressive=is_blurry)
     kp, des = orb.detectAndCompute(preprocessed, None)
-    
-    if des is None or len(kp) < 15:
-        return {
-            "status": "unknown", 
-            "reason": "insufficient_features",
-            "keypoints_found": len(kp) if kp else 0
-        }
-    
-    # Vote-based classification
-    votes = {}  # card_id -> good_match_count
-    
+    if des is None or len(kp) < 8:
+        return []
+
+    votes = {}
     for data in golden_dataset:
         card_id = data['card_id']
         train_des = data['features']
-        
         if train_des is None or len(train_des) < 2:
             continue
-        
         try:
-            # KNN matching with k=2
-            matches = bf.knnMatch(des, train_des, k=2)
-            
-            # Apply Lowe's Ratio Test
-            good_matches = []
+            k_neighbors = max(2, int(KNN_K))
+            matches = bf.knnMatch(des, train_des, k=k_neighbors)
+            good = 0
             for pair in matches:
-                if len(pair) == 2:
-                    m, n = pair
-                    if m.distance < LOWE_RATIO * n.distance:
-                        good_matches.append(m)
-            
-            # Accumulate votes for this card
-            if card_id not in votes:
-                votes[card_id] = 0
-            votes[card_id] += len(good_matches)
-            
-        except Exception as e:
+                if len(pair) < 2:
+                    continue
+                m, n = pair[0], pair[1]
+                if m.distance < lowe_ratio * n.distance:
+                    good += 1
+            votes[card_id] = votes.get(card_id, 0) + good
+        except Exception:
             continue
-    
-    # Find best match
+
     if not votes:
-        return {"status": "unknown", "reason": "no_matches_found"}
-    
-    best_card_id = max(votes, key=votes.get)
-    best_match_count = votes[best_card_id]
-    
-    # Calculate response time
+        return []
+
+    sorted_votes = sorted(votes.items(), key=lambda x: x[1], reverse=True)[:top_k]
+    max_vote = max(v for _, v in sorted_votes) if sorted_votes else 1
+    return [
+        {
+            'card_id': card_id,
+            'score': float(vote_count / max_vote) if max_vote > 0 else 0.0,
+            'matches': int(vote_count)
+        }
+        for card_id, vote_count in sorted_votes
+    ]
+
+
+def predict_waste_top3(image_bgr, top_k=3):
+    """Hybrid top-k ranking using ORB and CNN confidence fusion."""
+    gray_raw = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    blur_score = float(cv2.Laplacian(gray_raw, cv2.CV_64F).var())
+    is_blurry = blur_score < 100
+
+    orb_candidates = get_orb_topk(image_bgr, top_k=top_k)
+    cnn_candidates = get_cnn_topk(image_bgr, top_k=top_k)
+
+    # Weight CNN higher when blurry; ORB higher when not blurry.
+    orb_weight = 0.35 if is_blurry else 0.55
+    cnn_weight = 0.65 if is_blurry else 0.45
+
+    merged = {}
+
+    for c in orb_candidates:
+        card_id = c['card_id']
+        merged[card_id] = merged.get(card_id, {
+            'card_id': card_id,
+            'orb_score': 0.0,
+            'cnn_score': 0.0,
+            'matches': 0
+        })
+        merged[card_id]['orb_score'] = float(c['score'])
+        merged[card_id]['matches'] = int(c.get('matches', 0))
+
+    for c in cnn_candidates:
+        card_id = c['card_id']
+        merged[card_id] = merged.get(card_id, {
+            'card_id': card_id,
+            'orb_score': 0.0,
+            'cnn_score': 0.0,
+            'matches': 0
+        })
+        merged[card_id]['cnn_score'] = float(c['score'])
+
+    ranked = []
+    for card_id, entry in merged.items():
+        card = card_metadata.get(card_id)
+        if not card:
+            continue
+        hybrid_score = entry['orb_score'] * orb_weight + entry['cnn_score'] * cnn_weight
+        ranked.append({
+            'card_id': card_id,
+            'card_name': card['name'],
+            'category_id': card['category_id'],
+            'category': category_metadata.get(card['category_id']),
+            'hybrid_score': round(float(hybrid_score), 4),
+            'orb_score': round(float(entry['orb_score']), 4),
+            'cnn_score': round(float(entry['cnn_score']), 4),
+            'matches': int(entry['matches'])
+        })
+
+    ranked.sort(key=lambda x: x['hybrid_score'], reverse=True)
+    return {
+        'status': 'success' if ranked else 'unknown',
+        'blur_score': round(float(blur_score), 1),
+        'is_blurry': bool(is_blurry),
+        'top_candidates': ranked[:top_k],
+        'fusion_weights': {
+            'orb': orb_weight,
+            'cnn': cnn_weight
+        }
+    }
+
+def predict_waste(image_bgr):
+    """
+    Enhanced ORB-KNN with blur detection, adaptive preprocessing, and multi-scale retry.
+    """
+    if not golden_dataset:
+        return {"status": "error", "message": "Model not loaded"}
+
+    start_time = datetime.now()
+
+    # --- Blur detection ---
+    gray_raw = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    blur_score = detect_blur(gray_raw)
+    # FIXED — cast both to plain Python types
+    blur_score = float(cv2.Laplacian(gray_raw, cv2.CV_64F).var())
+    is_blurry = bool(blur_score < 100)
+
+    # --- Adaptive thresholds ---
+    min_matches = 8 if is_blurry else MIN_MATCHES          # Relax for blur
+    confidence_threshold = 0.45 if is_blurry else CONFIDENCE_THRESHOLD
+    lowe_ratio = 0.75 if is_blurry else LOWE_RATIO         # More permissive matching
+
+    # --- Try multiple preprocessing strengths ---
+    scales_to_try = [1.0, 1.5, 0.75] if is_blurry else [1.0]
+    preprocess_modes = [True, False] if is_blurry else [False]  # aggressive first if blurry
+
+    best_result = None
+    best_match_count = 0
+    orb_success_result = None
+
+    for aggressive in preprocess_modes:
+        masked_image = mask_white_background(image_bgr)
+        preprocessed = preprocess_image(masked_image, aggressive=aggressive)
+
+        for scale in scales_to_try:
+            if scale != 1.0:
+                h, w = preprocessed.shape[:2]
+                scaled = cv2.resize(preprocessed, (int(w * scale), int(h * scale)))
+            else:
+                scaled = preprocessed
+
+            kp, des = orb.detectAndCompute(scaled, None)
+
+            if des is None or len(kp) < 8:
+                continue
+
+            votes = {}
+            for data in golden_dataset:
+                card_id = data['card_id']
+                train_des = data['features']
+                if train_des is None or len(train_des) < 2:
+                    continue
+                try:
+                    k_neighbors = max(2, int(KNN_K))
+                    matches = bf.knnMatch(des, train_des, k=k_neighbors)
+                    good_matches = []
+                    for pair in matches:
+                        if len(pair) >= 2:
+                            m, n = pair[0], pair[1]
+                            if m.distance < lowe_ratio * n.distance:
+                                good_matches.append(m)
+                    if card_id not in votes:
+                        votes[card_id] = 0
+                    votes[card_id] += len(good_matches)
+                except Exception:
+                    continue
+
+            if not votes:
+                continue
+
+            candidate_id = max(votes, key=votes.get)
+            candidate_count = votes[candidate_id]
+
+            if candidate_count > best_match_count:
+                best_match_count = candidate_count
+                confidence = min(candidate_count / (min_matches * 3), 1.0)
+                best_result = (candidate_id, confidence, len(kp))
+
+            # Early exit if confident enough
+            if best_match_count >= min_matches * 2:
+                break
+
+        if best_match_count >= min_matches * 2:
+            break
+
     response_time = (datetime.now() - start_time).total_seconds() * 1000
-    
-    # Calculate confidence score (normalized)
-    total_possible_matches = len(kp) * len(golden_dataset)
-    confidence = min(best_match_count / (MIN_MATCHES * 3), 1.0)
-    
-    print(f"🔍 Best Match: Card #{best_card_id} with {best_match_count} features (confidence: {confidence:.2f})")
-    
-    # Decision logic
-    if best_match_count >= MIN_MATCHES and confidence >= CONFIDENCE_THRESHOLD:
+
+    if best_result is None or best_match_count < min_matches:
+        orb_unknown = {
+            "status": "unknown",
+            "reason": "insufficient_features",
+            "blur_score": round(blur_score, 1),
+            "is_blurry": is_blurry,
+            "matches": best_match_count,
+            "classifier": "orb"
+        }
+        if is_blurry and cnn_net is not None:
+            cnn_result = predict_waste_cnn(image_bgr)
+            if cnn_result.get('status') == 'success':
+                cnn_result['response_time'] = round(response_time, 2)
+                cnn_result['blur_score'] = round(blur_score, 1)
+                cnn_result['is_blurry'] = is_blurry
+                cnn_result['classifier'] = 'cnn_fallback'
+                return cnn_result
+        return orb_unknown
+
+    best_card_id, confidence, kp_count = best_result
+
+    if confidence >= confidence_threshold:
         card = card_metadata.get(best_card_id)
         if card:
             category = category_metadata.get(card['category_id'])
-            return {
+            orb_success_result = {
                 "status": "success",
                 "card_id": best_card_id,
                 "card_name": card['name'],
@@ -233,21 +727,69 @@ def predict_waste(image_bgr):
                 "matches": best_match_count,
                 "confidence": round(confidence, 2),
                 "response_time": round(response_time, 2),
-                "keypoints_detected": len(kp)
+                "keypoints_detected": kp_count,
+                "blur_score": round(blur_score, 1),
+                "is_blurry": is_blurry,
+                "classifier": "orb"
             }
-    
+
+    # If image is blurry (or ORB confidence is low), give CNN a chance.
+    if (is_blurry or orb_success_result is None) and cnn_net is not None:
+        cnn_result = predict_waste_cnn(image_bgr)
+        if cnn_result.get('status') == 'success':
+            cnn_result['response_time'] = round(response_time, 2)
+            cnn_result['blur_score'] = round(blur_score, 1)
+            cnn_result['is_blurry'] = is_blurry
+
+            if orb_success_result is None:
+                cnn_result['classifier'] = 'cnn_fallback'
+                return cnn_result
+
+            if orb_success_result['card_id'] == cnn_result['card_id']:
+                merged_conf = round((orb_success_result['confidence'] + cnn_result['confidence']) / 2.0, 2)
+                orb_success_result['confidence'] = merged_conf
+                orb_success_result['classifier'] = 'hybrid_consensus'
+                return orb_success_result
+
+            if cnn_result['confidence'] >= orb_success_result['confidence'] + HYBRID_MARGIN:
+                cnn_result['classifier'] = 'hybrid_cnn_override'
+                return cnn_result
+
+            if orb_success_result['confidence'] >= cnn_result['confidence'] + HYBRID_MARGIN:
+                orb_success_result['classifier'] = 'hybrid_orb_override'
+                return orb_success_result
+
+            return {
+                "status": "unknown",
+                "reason": "hybrid_conflict",
+                "blur_score": round(blur_score, 1),
+                "is_blurry": is_blurry,
+                "orb_card_id": orb_success_result['card_id'],
+                "orb_confidence": orb_success_result['confidence'],
+                "cnn_card_id": cnn_result['card_id'],
+                "cnn_confidence": cnn_result['confidence'],
+                "classifier": "hybrid"
+            }
+
+    if orb_success_result is not None:
+        return orb_success_result
+
     return {
         "status": "unknown",
         "matches": best_match_count,
         "confidence": round(confidence, 2),
-        "reason": "low_confidence" if confidence < CONFIDENCE_THRESHOLD else "insufficient_matches"
+        "blur_score": round(blur_score, 1),
+        "is_blurry": is_blurry,
+        "reason": "low_confidence",
+        "classifier": "orb"
     }
 
 # --- API ROUTES ---
 @app.route('/classify', methods=['POST'])
 def classify():
-    """Main classification endpoint"""
+    """Main classification endpoint (CNN-only mode)."""
     try:
+        start_time = datetime.now()
         file = request.files['image']
         npimg = np.fromfile(file, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
@@ -255,7 +797,11 @@ def classify():
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
-        result = predict_waste(img)
+        result = predict_waste_cnn(img)
+
+        response_time = (datetime.now() - start_time).total_seconds() * 1000
+        result['response_time'] = round(response_time, 2)
+        result['classifier'] = 'cnn_only'
         
         # Don't auto-log in assessment mode - wait for user choice
         if current_session_id and result['status'] == 'success':
@@ -268,6 +814,42 @@ def classify():
         
     except Exception as e:
         print(f"❌ Classification error: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/classify/top3', methods=['POST'])
+def classify_top3():
+    """Returns top-3 CNN-only candidates."""
+    try:
+        file = request.files['image']
+        npimg = np.fromfile(file, np.uint8)
+        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return jsonify({"status": "error", "message": "Invalid image"})
+
+        candidates = get_cnn_topk(img, top_k=3)
+        ranked = []
+        for c in candidates:
+            card = card_metadata.get(c['card_id'])
+            if not card:
+                continue
+            ranked.append({
+                'card_id': c['card_id'],
+                'card_name': card['name'],
+                'category_id': card['category_id'],
+                'category': category_metadata.get(card['category_id']),
+                'cnn_score': round(float(c['score']), 4)
+            })
+
+        result = {
+            'status': 'success' if ranked else 'unknown',
+            'classifier': 'cnn_only',
+            'top_candidates': ranked
+        }
+        return jsonify(result)
+    except Exception as e:
+        print(f"❌ Top3 classification error: {e}")
         return jsonify({"status": "error", "message": str(e)})
 
 @app.route('/assessment/submit', methods=['POST'])
@@ -651,10 +1233,23 @@ def health_check():
     """System health check"""
     return jsonify({
         "status": "healthy",
+        "model_version": MODEL_VERSION,
         "model_loaded": len(golden_dataset) > 0,
+        "cnn_loaded": cnn_net is not None,
+        "cnn_classes": len(cnn_class_to_card_id),
         "cards_loaded": len(card_metadata),
         "categories": len(category_metadata),
-        "active_session": current_session_id is not None
+        "active_session": current_session_id is not None,
+        "runtime_config": {
+            "orb_feature_count": ORB_FEATURES,
+            "knn_k_value": KNN_K,
+            "knn_distance_threshold": LOWE_RATIO,
+            "min_confidence_score": CONFIDENCE_THRESHOLD,
+            "session_timeout_minutes": SESSION_TIMEOUT_MINUTES,
+            "webcam_fps": WEBCAM_FPS,
+            "roi_box_color": ROI_BOX_COLOR,
+            "enable_audio_feedback": ENABLE_AUDIO_FEEDBACK
+        }
     })
 
 # ============================================================
@@ -791,14 +1386,7 @@ def update_system_config():
         conn.commit()
         
         # Apply changes to runtime variables
-        if config_key == 'orb_feature_count':
-            ORB_FEATURES = int(config_value)
-        elif config_key == 'knn_k_value':
-            KNN_K = int(config_value)
-        elif config_key == 'knn_distance_threshold':
-            LOWE_RATIO = float(config_value)
-        elif config_key == 'min_confidence_score':
-            CONFIDENCE_THRESHOLD = float(config_value)
+        apply_config_value(config_key, config_value)
         
         cursor.close()
         conn.close()
@@ -1486,6 +2074,9 @@ def text_to_speech():
     Returns MP3 audio stream.
     """
     try:
+        if not ENABLE_AUDIO_FEEDBACK:
+            return jsonify({"status": "disabled", "message": "Audio feedback is disabled"}), 403
+
         data = request.get_json()
         text = data.get('text', '')
         lang = data.get('lang', 'tl')  # Default to Tagalog
@@ -1527,6 +2118,8 @@ if __name__ == '__main__':
     print("📦 Gzip compression: ENABLED")
     print("🖼️ Image caching: 1 YEAR")
     if load_model():
+        load_runtime_config_from_db()
+        load_cnn_model()
         print("✅ System Ready!")
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:

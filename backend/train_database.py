@@ -66,39 +66,62 @@ def perspective_transform(image, intensity=0.1):
     
     M = cv2.getPerspectiveTransform(pts1, pts2)
     return cv2.warpPerspective(image, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+def motion_blur(image, size=15, angle=0):
+    """Simulate motion blur in a given direction"""
+    k = np.zeros((size, size))
+    k[(size - 1) // 2, :] = np.ones(size)
+    M = cv2.getRotationMatrix2D((size / 2 - 0.5, size / 2 - 0.5), angle, 1.0)
+    k = cv2.warpAffine(k, M, (size, size))
+    k = k / k.sum()
+    return cv2.filter2D(image, -1, k)
+
+def defocus_blur(image, radius=4):
+    """Simulate out-of-focus blur (disk kernel)"""
+    k = np.zeros((2 * radius + 1, 2 * radius + 1), dtype=np.float32)
+    cv2.circle(k, (radius, radius), radius, 1, -1)
+    k = k / k.sum()
+    return cv2.filter2D(image, -1, k)
 
 def augment_image(base_image):
     """
-    Generate multiple augmented versions of the image
-    This improves recognition under various conditions
+    IMPROVED: More blur variants for robust blur-condition training.
     """
     variations = []
-    
+
     # 1. Original
     variations.append(("original", base_image))
-    
-    # 2. Rotations (important for cards held at different angles)
+
+    # 2. Rotations
     for angle in [90, 180, 270]:
         rotated = rotate_image(base_image, angle)
         variations.append((f"rot_{angle}", rotated))
-    
-    # 3. Brightness variations (for different lighting)
-    bright = adjust_brightness(base_image, 1.3, 20)
-    variations.append(("bright", bright))
-    
-    dark = adjust_brightness(base_image, 0.7, -20)
-    variations.append(("dark", dark))
-    
-    # 4. Slight blur (for motion/camera focus issues)
-    blurred = blur_image(base_image, 3)
-    variations.append(("blur", blurred))
-    
-    # 5. Noise (for low-quality camera)
-    noisy = add_noise(base_image, 8)
-    variations.append(("noise", noisy))
-    
-    return variations
 
+    # 3. Brightness
+    variations.append(("bright", adjust_brightness(base_image, 1.3, 20)))
+    variations.append(("dark",   adjust_brightness(base_image, 0.7, -20)))
+
+    # 4. Gaussian blur (mild — existing)
+    variations.append(("blur_mild", blur_image(base_image, 3)))
+
+    # 5. Gaussian blur (strong — new)
+    variations.append(("blur_strong", blur_image(base_image, 7)))
+
+    # 6. Motion blur horizontal (new — simulates hand shake)
+    variations.append(("motion_h", motion_blur(base_image, size=15, angle=0)))
+
+    # 7. Motion blur diagonal (new)
+    variations.append(("motion_d", motion_blur(base_image, size=11, angle=45)))
+
+    # 8. Defocus blur (new — simulates camera not focused on card)
+    variations.append(("defocus", defocus_blur(base_image, radius=4)))
+
+    # 9. Noise
+    variations.append(("noise", add_noise(base_image, 8)))
+
+    # 10. Perspective distortion
+    variations.append(("persp", perspective_transform(base_image, 0.08)))
+
+    return variations
 # ============================================
 # MAIN TRAINING PIPELINE
 # ============================================
@@ -243,7 +266,7 @@ def train_system():
                 # Detect keypoints and compute descriptors
                 keypoints, descriptors = orb.detectAndCompute(aug_img, None)
                 
-                if descriptors is None or len(keypoints) < 10:
+                if descriptors is None or len(keypoints) < 8:
                     print(f"    ⚠️  {var_name}: Too few features ({len(keypoints) if keypoints else 0})")
                     continue
                 

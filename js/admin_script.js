@@ -1115,6 +1115,64 @@ function getAccuracyColor(accuracy) {
 
 let assetData = null; // Used by PDF generation
 
+// Bond paper (8.5x11in) with a true-size 4x5in EcoCard centered on each page.
+const PDF_PAGE = {
+    width: 8.5,
+    height: 11,
+    cardWidth: 4,
+    cardHeight: 5
+};
+
+function getCardOrigin() {
+    return {
+        x: (PDF_PAGE.width - PDF_PAGE.cardWidth) / 2,
+        y: (PDF_PAGE.height - PDF_PAGE.cardHeight) / 2
+    };
+}
+
+function drawEcoCardToPdf(pdf, imageData) {
+    const origin = getCardOrigin();
+
+    // Card base
+    pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(origin.x + 0.06, origin.y + 0.06, 3.88, 4.88, 0.16, 0.16, 'F');
+
+    // Main card border
+    pdf.setDrawColor(51, 51, 51);
+    pdf.setLineWidth(0.022);
+    pdf.roundedRect(origin.x + 0.1, origin.y + 0.1, 3.8, 4.8, 0.15, 0.15, 'S');
+
+    // Image panel
+    pdf.setFillColor(247, 247, 247);
+    pdf.roundedRect(origin.x + 0.35, origin.y + 0.35, 3.3, 3.48, 0.14, 0.14, 'F');
+
+    if (imageData) {
+        pdf.addImage(imageData.dataUrl, imageData.format, origin.x + 0.5, origin.y + 0.5, 3, 3.1, undefined, 'MEDIUM');
+    }
+
+    // Footer brand lockup
+    pdf.setDrawColor(220, 220, 220);
+    pdf.setLineWidth(0.01);
+    pdf.line(origin.x + 0.45, origin.y + 4.28, origin.x + 3.55, origin.y + 4.28);
+
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(90, 90, 90);
+    pdf.text('EcoLearn Eco-Card', origin.x + 2, origin.y + 4.56, { align: 'center' });
+
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(145, 145, 145);
+    pdf.text('Scan to identify and sort correctly', origin.x + 2, origin.y + 4.76, { align: 'center' });
+}
+
+function getHighQualityImagePath(imagePath) {
+    if (!imagePath || typeof imagePath !== 'string') return imagePath;
+    return imagePath
+        .replace(/^assets\//i, 'assets_png/')
+        .replace(/\.webp$/i, '.png');
+}
+
 // Stub - overridden by admin_optimized.js
 async function loadAssetRepository() {
     // Actual implementation in admin_optimized.js
@@ -1232,14 +1290,13 @@ async function executeDownloadAllPDF(category) {
         }
         
         const cards = data.categories[category].cards;
-        const binColor = data.categories[category].bin_color;
         const { jsPDF } = window.jspdf;
         
-        // Create PDF - 4x5 inches in points (1 inch = 72 points)
+        // Create bond-paper PDF and place true-size 4x5in card in the center.
         const pdf = new jsPDF({
             orientation: 'portrait',
             unit: 'in',
-            format: [4, 5]
+            format: [PDF_PAGE.width, PDF_PAGE.height]
         });
         
         // Process each card
@@ -1247,35 +1304,19 @@ async function executeDownloadAllPDF(category) {
             const card = cards[i];
             
             if (i > 0) {
-                pdf.addPage([4, 5]);
+                pdf.addPage([PDF_PAGE.width, PDF_PAGE.height]);
             }
-            
-            // Draw card border
-            pdf.setDrawColor(51, 51, 51);
-            pdf.setLineWidth(0.02);
-            pdf.roundedRect(0.1, 0.1, 3.8, 4.8, 0.15, 0.15, 'S');
-            
+
+            let imgData = null;
             // Load and add image
             try {
-                const imgData = await loadImageAsBase64('/' + card.image_path);
-                if (imgData) {
-                    pdf.addImage(imgData, 'JPEG', 0.5, 0.3, 3, 2.5, undefined, 'FAST');
-                }
+                const highQualityPath = getHighQualityImagePath(card.image_path);
+                imgData = await loadImageAsBase64('/' + highQualityPath, '/' + card.image_path);
             } catch (e) {
                 console.warn('Image load failed for:', card.card_name);
             }
-            
-            // Add card name (centered below image)
-            pdf.setFontSize(18);
-            pdf.setFont('helvetica', 'bold');
-            pdf.setTextColor(51, 51, 51);
-            const nameLines = pdf.splitTextToSize(card.card_name, 3.2);
-            pdf.text(nameLines, 2, 3.2, { align: 'center' });
-            
-            // Add EcoLearn branding at bottom
-            pdf.setFontSize(8);
-            pdf.setTextColor(150, 150, 150);
-            pdf.text('EcoLearn Eco-Card', 2, 4.7, { align: 'center' });
+
+            drawEcoCardToPdf(pdf, imgData);
         }
         
         // Download the PDF
@@ -1302,39 +1343,23 @@ async function executeDownloadSinglePDF(cardId, cardName) {
         if (data.status === 'success') {
             const { jsPDF } = window.jspdf;
             
-            // Create PDF - 4x5 inches (thesis requirement)
+            // Create bond-paper PDF and place true-size 4x5in card in the center.
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'in',
-                format: [4, 5]
+                format: [PDF_PAGE.width, PDF_PAGE.height]
             });
-            
-            // Draw card border
-            pdf.setDrawColor(51, 51, 51);
-            pdf.setLineWidth(0.02);
-            pdf.roundedRect(0.1, 0.1, 3.8, 4.8, 0.15, 0.15, 'S');
-            
+
+            let imgData = null;
             // Load and add image
             try {
-                const imgData = await loadImageAsBase64('/' + data.card.image_path);
-                if (imgData) {
-                    pdf.addImage(imgData, 'JPEG', 0.5, 0.3, 3, 2.5, undefined, 'FAST');
-                }
+                const highQualityPath = getHighQualityImagePath(data.card.image_path);
+                imgData = await loadImageAsBase64('/' + highQualityPath, '/' + data.card.image_path);
             } catch (e) {
                 console.warn('Image load failed');
             }
-            
-            // Add card name (centered below image)
-            pdf.setFontSize(18);
-            pdf.setFont('helvetica', 'bold');
-            pdf.setTextColor(51, 51, 51);
-            const nameLines = pdf.splitTextToSize(data.card.card_name, 3.2);
-            pdf.text(nameLines, 2, 3.2, { align: 'center' });
-            
-            // Add EcoLearn branding at bottom
-            pdf.setFontSize(8);
-            pdf.setTextColor(150, 150, 150);
-            pdf.text('EcoLearn Eco-Card', 2, 4.7, { align: 'center' });
+
+            drawEcoCardToPdf(pdf, imgData);
             
             // Download the PDF
             const filename = `EcoLearn_${cardName.replace(/\\s+/g, '_')}.pdf`;
@@ -1350,13 +1375,13 @@ async function executeDownloadSinglePDF(cardId, cardName) {
 }
 
 // Helper: Load image as base64 for jsPDF (optimized for speed)
-function loadImageAsBase64(imagePath) {
+function loadImageAsBase64(primaryImagePath, fallbackImagePath = null) {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-            // Resize to max 300px for faster PDF (4x5 inch print at 75dpi)
-            const maxSize = 300;
+            // Keep high quality for print output (~300 DPI target area).
+            const maxSize = 1200;
             let width = img.width;
             let height = img.height;
             
@@ -1373,10 +1398,19 @@ function loadImageAsBase64(imagePath) {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7)); // Lower quality for speed
+            resolve({
+                dataUrl: canvas.toDataURL('image/png'),
+                format: 'PNG'
+            });
         };
-        img.onerror = () => resolve(null);
-        img.src = imagePath;
+        img.onerror = () => {
+            if (fallbackImagePath && img.src !== fallbackImagePath) {
+                img.src = fallbackImagePath;
+                return;
+            }
+            resolve(null);
+        };
+        img.src = primaryImagePath;
     });
 }
 

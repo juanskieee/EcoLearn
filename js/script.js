@@ -17,6 +17,26 @@ let assessmentStep = 'scan'; // 'scan' | 'identify'
 let currentScanResult = null;
 let feedbackResetTimeout = null;
 let instructionalResetTimeout = null;
+let scanUnlockTimeout = null;
+let lastErrorFeedbackAt = 0;
+let lastErrorReason = '';
+
+const SCAN_COOLDOWN_MS = 500;
+const ERROR_FEEDBACK_COOLDOWN_MS = 500;
+
+const SYSTEM_CONFIG = {
+    orb_feature_count: 1000,
+    knn_k_value: 2,
+    knn_distance_threshold: 0.65,
+    min_confidence_score: 0.6,
+    session_timeout_minutes: 30,
+    webcam_fps: 30,
+    roi_box_color: '#00FF00',
+    enable_audio_feedback: true
+};
+
+let inactivityTimeout = null;
+let inactivityHandlersBound = false;
 
 // DOM Elements
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -49,10 +69,11 @@ const errorSound = document.getElementById('error-sound');
 // UI INITIALIZATION
 // ============================================
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     initializeWelcomeScreen();
-    loadSystemSettings();
+    await loadSystemSettings();
     setupSessionEndOnUnload();
+    setupSessionInactivityHandlers();
     restoreSessionIfExists();
     loadAudioViaFetch();
     loadAudioSettings();
@@ -117,6 +138,7 @@ function restoreSessionIfExists() {
         loadLeaderboardForIndex('game', studentNickname);
         
         initCamera();
+        resetSessionInactivityTimer();
         setInitialGameMessage();
     } catch (error) {
         localStorage.removeItem('ecolearn_session');
@@ -150,6 +172,8 @@ async function loadSystemSettings() {
         
         if (data.status === 'success' && data.config) {
             data.config.forEach(cfg => {
+                SYSTEM_CONFIG[cfg.config_key] = parseConfigValue(cfg.config_value, cfg.value_type);
+
                 // Apply ROI Box Color to corner brackets
                 if (cfg.config_key === 'roi_box_color') {
                     document.querySelectorAll('.roi-corner').forEach(el => {
@@ -157,10 +181,112 @@ async function loadSystemSettings() {
                     });
                 }
             });
+
+            applyAudioFeedbackPolicy();
+            resetSessionInactivityTimer();
         }
     } catch (error) {
         console.log('Using default settings');
     }
+}
+
+function parseConfigValue(value, valueType) {
+    if (valueType === 'integer') {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    if (valueType === 'float') {
+        const parsed = parseFloat(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    if (valueType === 'boolean') {
+        return String(value).toLowerCase() === 'true' || String(value) === '1';
+    }
+
+    return value;
+}
+
+function setupSessionInactivityHandlers() {
+    if (inactivityHandlersBound) return;
+
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function(eventName) {
+        document.addEventListener(eventName, resetSessionInactivityTimer, { passive: true });
+    });
+
+    inactivityHandlersBound = true;
+}
+
+function clearSessionInactivityTimer() {
+    if (inactivityTimeout) {
+        clearTimeout(inactivityTimeout);
+        inactivityTimeout = null;
+    }
+}
+
+function resetSessionInactivityTimer() {
+    clearSessionInactivityTimer();
+
+    if (!sessionId || gameScreen.classList.contains('hidden')) {
+        return;
+    }
+
+    const timeoutMinutes = Math.max(1, parseInt(SYSTEM_CONFIG.session_timeout_minutes, 10) || 30);
+    inactivityTimeout = setTimeout(autoEndSessionForInactivity, timeoutMinutes * 60 * 1000);
+}
+
+async function autoEndSessionForInactivity() {
+    if (!sessionId || gameScreen.classList.contains('hidden')) return;
+
+    stopSpeech();
+    clearSessionStorage();
+
+    try {
+        const response = await fetch(`${API_URL}/session/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            showResults(data.stats);
+        } else {
+            showResults({
+                total_scans: totalScans,
+                correct_scans: correctScans,
+                accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+            });
+        }
+    } catch (err) {
+        console.error('❌ Auto session end error:', err);
+        showResults({
+            total_scans: totalScans,
+            correct_scans: correctScans,
+            accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+        });
+    } finally {
+        clearSessionInactivityTimer();
+        alert('Session ended due to inactivity. Start a new session when ready.');
+    }
+}
+
+function isAudioFeedbackEnabled() {
+    return !!SYSTEM_CONFIG.enable_audio_feedback;
+}
+
+function applyAudioFeedbackPolicy() {
+    if (!isAudioFeedbackEnabled()) {
+        stopSpeech();
+    }
+
+    if (successSound) successSound.muted = sfxMuted || !isAudioFeedbackEnabled();
+    if (errorSound) errorSound.muted = sfxMuted || !isAudioFeedbackEnabled();
+}
+
+function playSfx(soundEl) {
+    if (!soundEl || !isAudioFeedbackEnabled() || sfxMuted) return;
+    soundEl.play().catch(function() {});
 }
 
 function initializeWelcomeScreen() {
@@ -286,10 +412,12 @@ function setCameraStatus(status, isError) {
 async function initCamera() {
     setCameraStatus('Starting…', false);
     try {
+        const fps = Math.max(1, parseInt(SYSTEM_CONFIG.webcam_fps, 10) || 30);
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
                 width: { ideal: 1280 },
-                height: { ideal: 720 }
+                height: { ideal: 720 },
+                frameRate: { ideal: fps, max: fps }
             } 
         });
         video.srcObject = stream;
@@ -371,6 +499,7 @@ async function startGame() {
             loadLeaderboardForIndex('game', studentNickname);
 
             await initCamera();
+            resetSessionInactivityTimer();
             
             setInitialGameMessage();
         } else {
@@ -475,6 +604,8 @@ async function confirmQuit() {
             correct_scans: correctScans,
             accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
         });
+    } finally {
+        clearSessionInactivityTimer();
     }
 }
 
@@ -600,29 +731,31 @@ function escapeHtml(text) {
 
 async function captureAndIdentify() {
     if (isScanning) return;
+
+    stopSpeech();
+    stopSfx();
     
-    // Cancel any pending feedback reset (rapid scanning)
-    if (feedbackResetTimeout) {
-        clearTimeout(feedbackResetTimeout);
-        feedbackResetTimeout = null;
-    }
-    if (instructionalResetTimeout) {
-        clearTimeout(instructionalResetTimeout);
-        instructionalResetTimeout = null;
-    }
+    if (feedbackResetTimeout) { clearTimeout(feedbackResetTimeout); feedbackResetTimeout = null; }
+    if (instructionalResetTimeout) { clearTimeout(instructionalResetTimeout); instructionalResetTimeout = null; }
+    if (scanUnlockTimeout) { clearTimeout(scanUnlockTimeout); scanUnlockTimeout = null; }
     
     isScanning = true;
     scanBtn.disabled = true;
-    scanBtn.style.opacity = "0.6"; // Dim the button instead of changing text
+    scanBtn.style.opacity = "0.6";
+
+    // ============================================
+    // FREEZE FRAME: pause the live video so the
+    // exact moment of the button press is captured,
+    // not a frame that arrived later during JS delay
+    // ============================================
+    video.pause();
 
     // Visual feedback
     scanEffect.classList.add('active');
     setTimeout(() => scanEffect.classList.remove('active'), 1000);
     
-    // Set thinking state
     resultText.textContent = "Hmm... let me think...";
     categoryDisplay.classList.add('hidden');
-    // Hide learn-mode elements while scanning
     const learnCardDisplay = document.getElementById('learn-card-display');
     const learnCatInfo = document.getElementById('learn-category-info');
     if (learnCardDisplay) learnCardDisplay.classList.add('hidden');
@@ -631,20 +764,29 @@ async function captureAndIdentify() {
     binbinImg.style.transform = "scale(0.9) rotate(-5deg)";
     binbinImg.src = 'assets/binbin_neutral.png';
     
-    // Crop to ROI (70% center)
+    // ============================================
+    // TIGHT ROI: 50% center crop of the frozen frame
+    // This cuts out the surrounding table/background
+    // that was causing white-region false matches.
+    // The dashed ROI box in the UI should visually
+    // match this 50% zone so kids know where to hold
+    // the card.
+    // ============================================
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const cropW = vw * 0.70;
-    const cropH = vh * 0.70;
-    const startX = (vw - cropW) / 2;
-    const startY = (vh - cropH) / 2;
+    const cropW = Math.floor(vw * 0.50);   // was 0.70 — tighter
+    const cropH = Math.floor(vh * 0.50);   // was 0.70 — tighter
+    const startX = Math.floor((vw - cropW) / 2);
+    const startY = Math.floor((vh - cropH) / 2);
     
     canvas.width = cropW;
     canvas.height = cropH;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+
+    // Resume live feed AFTER capture so user sees camera unfreeze
+    video.play();
     
-    // Convert to blob
     canvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('image', blob, 'scan.jpg');
@@ -665,17 +807,10 @@ async function captureAndIdentify() {
             
         } catch (err) {
             showErrorFeedback({ reason: 'connection_error' });
-            // Re-enable on error
-            isScanning = false;
-            scanBtn.disabled = false;
-            scanBtn.style.opacity = "1";
+            scheduleScanUnlock(SCAN_COOLDOWN_MS);
         } finally {
-            // Only re-enable immediately in instructional mode
-            // Assessment mode will re-enable after user answers via resetAssessmentState()
             if (sessionMode === 'instructional') {
-                isScanning = false;
-                scanBtn.disabled = false;
-                scanBtn.style.opacity = "1";
+                scheduleScanUnlock(SCAN_COOLDOWN_MS);
             }
         }
     }, 'image/jpeg', 0.95);
@@ -699,17 +834,39 @@ function handleAssessmentMode(data) {
         } else {
             showErrorFeedback(data);
             // Re-enable button on error
-            isScanning = false;
-            scanBtn.disabled = false;
-            scanBtn.style.opacity = "1";
+            scheduleScanUnlock(SCAN_COOLDOWN_MS);
         }
     } else {
         // Ignore scan if already in identify mode (user scanned too quickly)
         console.log('Ignoring scan - already in identify mode');
-        isScanning = false;
-        scanBtn.disabled = false;
-        scanBtn.style.opacity = "1";
+        scheduleScanUnlock(0);
     }
+}
+
+function unlockScanButton() {
+    isScanning = false;
+    scanBtn.disabled = false;
+    scanBtn.style.opacity = "1";
+}
+
+function scheduleScanUnlock(delayMs) {
+    if (scanUnlockTimeout) {
+        clearTimeout(scanUnlockTimeout);
+        scanUnlockTimeout = null;
+    }
+
+    scanUnlockTimeout = setTimeout(() => {
+        unlockScanButton();
+        scanUnlockTimeout = null;
+    }, Math.max(0, delayMs || 0));
+}
+
+function stopSfx() {
+    [successSound, errorSound].forEach(sound => {
+        if (!sound) return;
+        sound.pause();
+        sound.currentTime = 0;
+    });
 }
 
 function addToScannedCards(cardName, icon, category) {
@@ -735,7 +892,7 @@ function showInstructionalFeedback(data) {
     
     if (!config) return;
     
-    successSound.play().catch(function() {});
+    playSfx(successSound);
     
     binbinImg.src = config.mascot;
     binbinImg.style.transform = "scale(1.15) rotate(5deg)";
@@ -885,10 +1042,10 @@ async function selectAssessmentChoice(selectedCategory) {
     // Update modal Bin-Bin
     if (isCorrect) {
         modalBinbin.src = 'assets/binbin_happy.png';
-        successSound.play().catch(function() {});
+        playSfx(successSound);
     } else {
         modalBinbin.src = 'assets/binbin_warning.png';
-        errorSound.play().catch(function() {});
+        playSfx(errorSound);
     }
     
     // 2. Submit to backend (fire-and-forget for UI speed)
@@ -933,9 +1090,7 @@ async function selectAssessmentChoice(selectedCategory) {
         // IMMEDIATELY re-enable scanning for next card (kids have short attention spans!)
         assessmentStep = 'scan';
         currentScanResult = null;
-        isScanning = false;
-        scanBtn.disabled = false;
-        scanBtn.style.opacity = "1";
+        scheduleScanUnlock(0);
         
         // Keep feedback visible for 20 seconds, then reset UI
         feedbackResetTimeout = setTimeout(() => {
@@ -1039,9 +1194,7 @@ function resetAssessmentState() {
     currentScanResult = null;
     
     // Re-enable scan button for next scan
-    isScanning = false;
-    scanBtn.disabled = false;
-    scanBtn.style.opacity = "1";
+    scheduleScanUnlock(0);
     
     // Reset UI
     resetAssessmentUI();
@@ -1068,8 +1221,16 @@ function resetAssessmentUI() {
 }
 
 function showErrorFeedback(data) {
-    // Play error sound
-    errorSound.play().catch(e => console.log('Audio play failed:', e));
+    const reason = data && data.reason ? data.reason : 'unknown';
+    const now = Date.now();
+    const shouldThrottleAudio = (reason === lastErrorReason) && ((now - lastErrorFeedbackAt) < ERROR_FEEDBACK_COOLDOWN_MS);
+
+    if (!shouldThrottleAudio) {
+        stopSfx();
+        playSfx(errorSound);
+        lastErrorFeedbackAt = now;
+        lastErrorReason = reason;
+    }
     
     // Hide learn-mode elements
     const learnCardDisplay = document.getElementById('learn-card-display');
@@ -1088,11 +1249,13 @@ function showErrorFeedback(data) {
     // Determine error message
     let message = '';
     
-    if (data.reason === 'insufficient_features') {
+    if (reason === 'insufficient_features') {
         message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng yellow box.";
-    } else if (data.reason === 'low_confidence') {
+    } else if (reason === 'low_confidence') {
         message = "Hmm, hindi ako sigurado dito. Subukan mong ipakita ang mas malinaw na card!";
-    } else if (data.reason === 'connection_error') {
+    } else if (reason === 'ambiguous_match') {
+        message = "Magkahawig ang nakita ko. Pakiharap ang card nang mas diretso para mas malinaw.";
+    } else if (reason === 'connection_error') {
         message = "Naku! Nawala ang connection. Naka-on ba ang server?";
     } else {
         message = "Hindi ko nakikilala ang card na ito. Siguraduhing isa ito sa ating eco-cards!";
@@ -1101,7 +1264,9 @@ function showErrorFeedback(data) {
     resultText.textContent = message;
     
     // Speak feedback
-    speak(message);
+    if (!shouldThrottleAudio) {
+        speak(message);
+    }
 }
 
 // ============================================
@@ -1171,17 +1336,18 @@ function loadAudioSettings() {
             
             // Apply to audio elements
             if (bgMusic) bgMusic.muted = bgmMuted;
-            if (successSound) successSound.muted = sfxMuted;
-            if (errorSound) errorSound.muted = sfxMuted;
+            applyAudioFeedbackPolicy();
             
             // Update toggle checkboxes
             const bgmToggle = document.getElementById('toggle-bgm');
             const sfxToggle = document.getElementById('toggle-sfx');
             if (bgmToggle) bgmToggle.checked = !bgmMuted;
-            if (sfxToggle) sfxToggle.checked = !sfxMuted;
+            if (sfxToggle) sfxToggle.checked = !sfxMuted && isAudioFeedbackEnabled();
         } catch (e) {
             console.log('Could not load audio settings:', e);
         }
+    } else {
+        applyAudioFeedbackPolicy();
     }
 }
 
@@ -1201,9 +1367,17 @@ function toggleBGM(enabled) {
 }
 
 function toggleSFX(enabled) {
+    if (!isAudioFeedbackEnabled()) {
+        const sfxToggle = document.getElementById('toggle-sfx');
+        if (sfxToggle) sfxToggle.checked = false;
+        sfxMuted = true;
+        applyAudioFeedbackPolicy();
+        saveAudioSettings();
+        return;
+    }
+
     sfxMuted = !enabled;
-    if (successSound) successSound.muted = sfxMuted;
-    if (errorSound) errorSound.muted = sfxMuted;
+    applyAudioFeedbackPolicy();
     saveAudioSettings();
 }
 
@@ -1260,6 +1434,25 @@ function restoreBackgroundMusic() {
 
 let currentTTSAudio = null;
 
+function getPreferredFemaleVoice() {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+
+    // Prefer Tagalog female voices first, then common female English voices.
+    const femaleNameHint = /(female|woman|zira|hazel|susan|aria|jenny|sara|hedda|katja|samantha)/i;
+    const tagalogVoices = voices.filter(v => /^tl(-|$)/i.test(v.lang));
+    const englishVoices = voices.filter(v => /^en(-|$)/i.test(v.lang));
+
+    return (
+        tagalogVoices.find(v => femaleNameHint.test(v.name)) ||
+        englishVoices.find(v => femaleNameHint.test(v.name)) ||
+        tagalogVoices[0] ||
+        englishVoices[0] ||
+        voices[0]
+    );
+}
+
 function stopSpeech() {
     // Stop server-side gTTS audio
     if (currentTTSAudio) {
@@ -1278,6 +1471,8 @@ function stopSpeech() {
 }
 
 function speak(text) {
+    if (!isAudioFeedbackEnabled()) return;
+
     // Stop any currently playing TTS audio
     if (currentTTSAudio) {
         currentTTSAudio.pause();
@@ -1327,9 +1522,16 @@ function speak(text) {
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
+            const preferredVoice = getPreferredFemaleVoice();
             utterance.rate = 0.9;
-            utterance.pitch = 1.1;
+            utterance.pitch = 1.2;
             utterance.volume = 0.8;
+            if (preferredVoice) {
+                utterance.voice = preferredVoice;
+                utterance.lang = preferredVoice.lang;
+            } else {
+                utterance.lang = 'en-US';
+            }
             utterance.onend = function() { restoreBackgroundMusic(); };
             window.speechSynthesis.speak(utterance);
         } else {
@@ -1375,4 +1577,3 @@ fetch(`${API_URL}/health`)
         console.error('❌ Cannot connect to server:', err);
         console.log('Make sure Python server is running: python app_improved.py');
     });
-

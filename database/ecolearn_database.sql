@@ -169,9 +169,9 @@ INSERT INTO TBL_CATEGORIES (category_name, category_code, description, bin_color
 
 -- System Configuration Defaults
 INSERT INTO TBL_SYSTEM_CONFIG (config_key, config_value, value_type, description, is_editable) VALUES
-('orb_feature_count', '500', 'integer', 'Number of ORB features to extract per image', 1),
-('knn_k_value', '3', 'integer', 'K value for KNN classifier (number of neighbors)', 1),
-('knn_distance_threshold', '0.75', 'float', 'Lowe ratio test threshold for feature matching', 1),
+('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
+('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
+('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
 ('model_version', 'ORB-KNN-v1.0', 'string', 'Current algorithm version identifier', 0),
 ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
 ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
