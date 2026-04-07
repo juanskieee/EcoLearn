@@ -1,40 +1,146 @@
+"""
+generate_variants.py
+────────────────────
+Generate augmented image variants for model training (alpha-safe).
+
+Improvements over v1:
+  • Parallel processing via ProcessPoolExecutor (--workers)
+  • New augmentations: cutout, JPEG artifacts, elastic distortion,
+    channel shuffle, channel drop
+  • --variants  → run only a named subset of augmentations
+  • --skip-existing → resume interrupted runs without re-writing
+  • --workers   → control parallelism
+  • --config    → YAML/JSON file to override augmentation parameters
+  • Progress bar via tqdm
+"""
+
+from __future__ import annotations
+
 import argparse
+import json
 import random
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import cv2
 import numpy as np
 
+try:
+    from tqdm import tqdm
+except ImportError:  # graceful fallback if tqdm not installed
+    def tqdm(it, **kwargs):  # type: ignore[misc]
+        total = kwargs.get("total")
+        desc  = kwargs.get("desc", "")
+        print(f"{desc} ({total} items)…", flush=True)
+        return it
+
+try:
+    import yaml
+    _YAML_AVAILABLE = True
+except ImportError:
+    _YAML_AVAILABLE = False
+
 
 VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Default augmentation parameters  (overridable via --config)
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_PARAMS: dict = {
+    "zoom_in_med":        {"factor": 1.30},
+    "zoom_in_strong":     {"factor": 1.70},
+    "zoom_out_med":       {"factor": 0.70},
+    "zoom_out_strong":    {"factor": 0.45},
+    "persp_med":          {"intensity": 0.12},
+    "persp_strong":       {"intensity": 0.22},
+    "persp_extreme":      {"intensity": 0.35},
+    "bright_med":         {"alpha": 1.45, "beta":  35},
+    "bright_strong":      {"alpha": 1.85, "beta":  70},
+    "bright_extreme":     {"alpha": 2.40, "beta": 110},
+    "dark_med":           {"alpha": 0.65, "beta": -40},
+    "dark_strong":        {"alpha": 0.40, "beta": -70},
+    "dark_extreme":       {"alpha": 0.20, "beta": -110},
+    "contrast_high":      {"factor": 2.0},
+    "contrast_extreme":   {"factor": 3.5},
+    "contrast_low":       {"factor": 0.4},
+    "contrast_flat":      {"factor": 0.15},
+    "sat_high":           {"scale": 2.0},
+    "sat_extreme":        {"scale": 4.0},
+    "sat_low":            {"scale": 0.35},
+    "grayscale":          {"scale": 0.0},
+    "hue_30":             {"shift": 30},
+    "hue_60":             {"shift": 60},
+    "hue_90":             {"shift": 90},
+    "hue_120":            {"shift": 120},
+    "sharpen_med":        {"strength": 1.5},
+    "sharpen_strong":     {"strength": 3.5},
+    "sharpen_extreme":    {"strength": 7.0},
+    "blur_mild":          {"kernel_size":  5},
+    "blur_med":           {"kernel_size": 11},
+    "blur_strong":        {"kernel_size": 21},
+    "blur_heavy":         {"kernel_size": 35},
+    "blur_extreme":       {"kernel_size": 55},
+    "motion_h_med":       {"size": 25, "angle":   0},
+    "motion_h_strong":    {"size": 51, "angle":   0},
+    "motion_v_med":       {"size": 25, "angle":  90},
+    "motion_v_strong":    {"size": 51, "angle":  90},
+    "motion_d45_med":     {"size": 21, "angle":  45},
+    "motion_d45_strong":  {"size": 45, "angle":  45},
+    "motion_d135_med":    {"size": 21, "angle": 135},
+    "motion_d135_strong": {"size": 45, "angle": 135},
+    "defocus_med":        {"radius":  8},
+    "defocus_strong":     {"radius": 16},
+    "defocus_extreme":    {"radius": 28},
+    "noise_mild":         {"sigma": 15},
+    "noise_med":          {"sigma": 35},
+    "noise_strong":       {"sigma": 65},
+    "noise_extreme":      {"sigma": 100},
+    # ── new augmentations ────────────────────────────────────────────────────
+    "cutout_sm":          {"n_holes": 4,  "hole_size": 0.08},
+    "cutout_med":         {"n_holes": 6,  "hole_size": 0.14},
+    "cutout_lg":          {"n_holes": 8,  "hole_size": 0.22},
+    "jpeg_q40":           {"quality": 40},
+    "jpeg_q20":           {"quality": 20},
+    "jpeg_q10":           {"quality": 10},
+    "elastic_soft":       {"alpha": 40,  "sigma": 6},
+    "elastic_med":        {"alpha": 80,  "sigma": 6},
+    "elastic_strong":     {"alpha": 150, "sigma": 8},
+    "channel_shuffle":    {},
+    "drop_red":           {"channel": 2},
+    "drop_green":         {"channel": 1},
+    "drop_blue":          {"channel": 0},
+    "color_jitter_mild":  {"b_range": (0.85, 1.15), "c_range": (0.85, 1.15), "s_range": (0.85, 1.15)},
+    "color_jitter_strong":{"b_range": (0.60, 1.50), "c_range": (0.60, 1.60), "s_range": (0.50, 1.80)},
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # I/O helpers
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def read_image(path: Path) -> np.ndarray | None:
-    """Read image preserving alpha channel (BGRA for PNG, BGR for others)."""
+    """Read image preserving alpha channel (always returns BGRA uint8)."""
     data = np.fromfile(str(path), dtype=np.uint8)
     if data.size == 0:
         return None
     img = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
     if img is None:
         return None
-    # Normalise to BGRA so every downstream function can assume 4 channels
     if img.ndim == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGRA)
     elif img.shape[2] == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-    return img  # always BGRA uint8
+    return img
 
 
-def write_image(path: Path, image: np.ndarray, ext: str = ".png"):
-    """Write image; keeps alpha for PNG/WEBP, strips it for lossy formats."""
+def write_image(path: Path, image: np.ndarray, ext: str = ".png") -> None:
+    """Write image; keeps alpha for PNG/WEBP, composites onto white for lossy."""
     path.parent.mkdir(parents=True, exist_ok=True)
     save_ext = path.suffix.lower() or ext
     if save_ext in {".jpg", ".jpeg", ".bmp"}:
-        # Lossy formats don't support alpha — composite onto white
         image = flatten_alpha(image)
     ok, encoded = cv2.imencode(save_ext, image)
     if not ok:
@@ -42,13 +148,23 @@ def write_image(path: Path, image: np.ndarray, ext: str = ".png"):
     encoded.tofile(str(path))
 
 
-# ---------------------------------------------------------------------------
+def load_config(config_path: Path) -> dict:
+    """Load YAML or JSON parameter overrides."""
+    text = config_path.read_text()
+    if config_path.suffix.lower() in {".yaml", ".yml"}:
+        if not _YAML_AVAILABLE:
+            raise ImportError("PyYAML is required for YAML configs: pip install pyyaml")
+        return yaml.safe_load(text)
+    return json.loads(text)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Alpha utilities
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 
 def split_bgra(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return (bgr, alpha) pair. Alpha is float32 in [0,1]."""
-    bgr = image[:, :, :3]
+    """Return (bgr, alpha_float32) where alpha is in [0, 1]."""
+    bgr   = image[:, :, :3]
     alpha = image[:, :, 3].astype(np.float32) / 255.0
     return bgr, alpha
 
@@ -73,64 +189,60 @@ def apply_to_color(image: np.ndarray, fn) -> np.ndarray:
     return merge_bgra(fn(bgr), alpha)
 
 
-def warp_bgra(image: np.ndarray, m, dsize, flags=cv2.INTER_LINEAR, perspective=False) -> np.ndarray:
-    """Warp all 4 channels correctly with BORDER_CONSTANT (transparent)."""
+def warp_bgra(image: np.ndarray, m, dsize, flags=cv2.INTER_LINEAR,
+              perspective: bool = False) -> np.ndarray:
+    """Warp all 4 channels with BORDER_CONSTANT (transparent fill)."""
     bgr, alpha = split_bgra(image)
     warp_fn = cv2.warpPerspective if perspective else cv2.warpAffine
-    w_bgr = warp_fn(bgr, m, dsize, flags=flags, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
-    w_alpha = warp_fn(alpha, m, dsize, flags=flags, borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+    w_bgr   = warp_fn(bgr,   m, dsize, flags=flags,
+                      borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+    w_alpha = warp_fn(alpha, m, dsize, flags=flags,
+                      borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
     return merge_bgra(w_bgr, w_alpha)
 
 
-# ---------------------------------------------------------------------------
-# Augmentations (all BGRA-safe)
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Augmentations — original
+# ─────────────────────────────────────────────────────────────────────────────
 
 def rotate_image(image: np.ndarray, angle: float) -> np.ndarray:
-    h, w = image.shape[:2]
+    h, w   = image.shape[:2]
     center = (w / 2, h / 2)
-    m = cv2.getRotationMatrix2D(center, angle, 1.0)
+    m      = cv2.getRotationMatrix2D(center, angle, 1.0)
     return warp_bgra(image, m, (w, h))
 
 
 def adjust_brightness(image: np.ndarray, alpha: float, beta: float) -> np.ndarray:
-    """Scale + shift only the colour channels; alpha mask is untouched."""
     def _fn(bgr):
         return cv2.convertScaleAbs(bgr, alpha=alpha, beta=beta)
     return apply_to_color(image, _fn)
 
 
 def blur_image(image: np.ndarray, kernel_size: int) -> np.ndarray:
-    """
-    Gaussian blur with alpha-premultiplication so edges stay clean.
-    Premultiply → blur → un-premultiply avoids dark halos on transparent edges.
-    """
+    """Gaussian blur with alpha-premultiplication to avoid dark halo edges."""
     bgr, alpha = split_bgra(image)
-    # Premultiply
-    pre = bgr.astype(np.float32) * alpha[..., None]
-    pre_blur = cv2.GaussianBlur(pre, (kernel_size, kernel_size), 0)
+    pre        = bgr.astype(np.float32) * alpha[..., None]
+    pre_blur   = cv2.GaussianBlur(pre,   (kernel_size, kernel_size), 0)
     alpha_blur = cv2.GaussianBlur(alpha, (kernel_size, kernel_size), 0)
-    # Un-premultiply safely
-    eps = 1e-6
-    out_bgr = np.where(alpha_blur[..., None] > eps, pre_blur / (alpha_blur[..., None] + eps), 0)
-    out_bgr = np.clip(out_bgr, 0, 255).astype(np.uint8)
-    return merge_bgra(out_bgr, alpha_blur)
+    eps        = 1e-6
+    out_bgr    = np.where(alpha_blur[..., None] > eps,
+                          pre_blur / (alpha_blur[..., None] + eps), 0)
+    return merge_bgra(np.clip(out_bgr, 0, 255).astype(np.uint8), alpha_blur)
 
 
 def add_noise(image: np.ndarray, sigma: float) -> np.ndarray:
-    """Add Gaussian noise only to visible (non-transparent) pixels."""
+    """Gaussian noise only on visible (non-transparent) pixels."""
     bgr, alpha = split_bgra(image)
-    noise = np.random.normal(0, sigma, bgr.shape).astype(np.float32)
-    noisy = bgr.astype(np.float32) + noise * alpha[..., None]
-    out_bgr = np.clip(noisy, 0, 255).astype(np.uint8)
-    return merge_bgra(out_bgr, alpha)
+    noise      = np.random.normal(0, sigma, bgr.shape).astype(np.float32)
+    noisy      = bgr.astype(np.float32) + noise * alpha[..., None]
+    return merge_bgra(np.clip(noisy, 0, 255).astype(np.uint8), alpha)
 
 
 def perspective_transform(image: np.ndarray, intensity: float = 0.08) -> np.ndarray:
-    h, w = image.shape[:2]
+    h, w   = image.shape[:2]
     mx, my = int(w * intensity), int(h * intensity)
-    src = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
-    dst = np.float32([
+    src    = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
+    dst    = np.float32([
         [random.randint(0, mx),     random.randint(0, my)],
         [w - random.randint(0, mx), random.randint(0, my)],
         [random.randint(0, mx),     h - random.randint(0, my)],
@@ -150,18 +262,14 @@ def _motion_kernel(size: int, angle: float) -> np.ndarray:
 
 def motion_blur(image: np.ndarray, size: int = 15, angle: float = 0) -> np.ndarray:
     k = _motion_kernel(size, angle)
-    def _fn(bgr):
-        return cv2.filter2D(bgr, -1, k)
-    return apply_to_color(image, _fn)
+    return apply_to_color(image, lambda bgr: cv2.filter2D(bgr, -1, k))
 
 
 def defocus_blur(image: np.ndarray, radius: int = 4) -> np.ndarray:
     k = np.zeros((2 * radius + 1, 2 * radius + 1), dtype=np.float32)
     cv2.circle(k, (radius, radius), radius, 1, -1)
     k /= k.sum()
-    def _fn(bgr):
-        return cv2.filter2D(bgr, -1, k)
-    return apply_to_color(image, _fn)
+    return apply_to_color(image, lambda bgr: cv2.filter2D(bgr, -1, k))
 
 
 def flip_horizontal(image: np.ndarray) -> np.ndarray:
@@ -173,7 +281,6 @@ def flip_vertical(image: np.ndarray) -> np.ndarray:
 
 
 def adjust_saturation(image: np.ndarray, scale: float) -> np.ndarray:
-    """Scale saturation in HSV space; alpha is preserved."""
     def _fn(bgr):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
         hsv[:, :, 1] = np.clip(hsv[:, :, 1] * scale, 0, 255)
@@ -182,7 +289,6 @@ def adjust_saturation(image: np.ndarray, scale: float) -> np.ndarray:
 
 
 def shift_hue(image: np.ndarray, shift: int) -> np.ndarray:
-    """Rotate hue by `shift` degrees (0-180 in OpenCV HSV scale); alpha preserved."""
     def _fn(bgr):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.int32)
         hsv[:, :, 0] = (hsv[:, :, 0] + shift) % 180
@@ -191,132 +297,326 @@ def shift_hue(image: np.ndarray, shift: int) -> np.ndarray:
 
 
 def sharpen(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
-    """Unsharp-mask style sharpen; `strength` scales the edge signal."""
     def _fn(bgr):
-        blurred = cv2.GaussianBlur(bgr, (0, 0), 3)
+        blurred   = cv2.GaussianBlur(bgr, (0, 0), 3)
         sharpened = cv2.addWeighted(bgr, 1 + strength, blurred, -strength, 0)
         return np.clip(sharpened, 0, 255).astype(np.uint8)
     return apply_to_color(image, _fn)
 
 
 def scale_zoom(image: np.ndarray, factor: float) -> np.ndarray:
-    """
-    Zoom in (factor > 1) or out (factor < 1) while keeping canvas size.
-    Zooming in crops the edges; zooming out reveals transparent padding.
-    """
-    h, w = image.shape[:2]
+    h, w   = image.shape[:2]
     center = (w / 2, h / 2)
-    m = cv2.getRotationMatrix2D(center, 0, factor)
+    m      = cv2.getRotationMatrix2D(center, 0, factor)
     return warp_bgra(image, m, (w, h))
 
 
 def adjust_contrast(image: np.ndarray, factor: float) -> np.ndarray:
-    """
-    Stretch or compress contrast around the mid-point (128).
-    factor > 1 = more contrast, factor < 1 = flat/washed out.
-    """
     def _fn(bgr):
         out = (bgr.astype(np.float32) - 128) * factor + 128
         return np.clip(out, 0, 255).astype(np.uint8)
     return apply_to_color(image, _fn)
 
 
-def rotate_arbitrary(image: np.ndarray, angle: float) -> np.ndarray:
-    """Same as rotate_image but named separately for clarity in variant dict."""
-    return rotate_image(image, angle)
+# ─────────────────────────────────────────────────────────────────────────────
+# Augmentations — new
+# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ---------------------------------------------------------------------------
-# Variant set
-# ---------------------------------------------------------------------------
-
-def build_variants(base_image: np.ndarray) -> dict[str, np.ndarray]:
+def cutout(image: np.ndarray, n_holes: int = 4, hole_size: float = 0.10) -> np.ndarray:
     """
-    Create a large, aggressively-augmented variant set.
-    All values are intentionally strong to stress-test model robustness.
+    Random Erasing / Cutout: zero out n_holes rectangular regions.
+    hole_size is a fraction of the shorter image dimension.
+    Transparent pixels are left untouched.
     """
-    return {
-        # ── Geometry ─────────────────────────────────────────────────────────
-        "original":          base_image,
-        "flip_h":            flip_horizontal(base_image),
-        "flip_v":            flip_vertical(base_image),
-        "rot_45":            rotate_arbitrary(base_image,  45),
-        "rot_90":            rotate_arbitrary(base_image,  90),
-        "rot_135":           rotate_arbitrary(base_image, 135),
-        "rot_180":           rotate_arbitrary(base_image, 180),
-        "rot_225":           rotate_arbitrary(base_image, 225),
-        "rot_270":           rotate_arbitrary(base_image, 270),
-        "rot_315":           rotate_arbitrary(base_image, 315),
-        "zoom_in_med":       scale_zoom(base_image, 1.30),
-        "zoom_in_strong":    scale_zoom(base_image, 1.70),
-        "zoom_out_med":      scale_zoom(base_image, 0.70),
-        "zoom_out_strong":   scale_zoom(base_image, 0.45),
-        "persp_med":         perspective_transform(base_image, intensity=0.12),
-        "persp_strong":      perspective_transform(base_image, intensity=0.22),
-        "persp_extreme":     perspective_transform(base_image, intensity=0.35),
+    out        = image.copy()
+    h, w       = image.shape[:2]
+    side       = int(min(h, w) * hole_size)
+    side       = max(side, 1)
+    _, alpha   = split_bgra(image)
+
+    for _ in range(n_holes):
+        cx = random.randint(0, w - 1)
+        cy = random.randint(0, h - 1)
+        x1, x2 = max(cx - side // 2, 0), min(cx + side // 2, w)
+        y1, y2 = max(cy - side // 2, 0), min(cy + side // 2, h)
+        # Only erase where pixel is visible
+        mask = alpha[y1:y2, x1:x2] > 0.01
+        out[y1:y2, x1:x2, :3][mask] = 0
+    return out
+
+
+def jpeg_artifacts(image: np.ndarray, quality: int = 30) -> np.ndarray:
+    """
+    Simulate JPEG compression artifacts by encode→decode at low quality.
+    Alpha channel is preserved (JPEG itself doesn't support it).
+    """
+    bgr, alpha = split_bgra(image)
+    encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+    ok, buf = cv2.imencode(".jpg", bgr, encode_params)
+    if not ok:
+        return image
+    decoded = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    return merge_bgra(decoded, alpha)
+
+
+def elastic_distortion(image: np.ndarray, alpha: float = 80,
+                       sigma: float = 6) -> np.ndarray:
+    """
+    Elastic deformation: random displacement field smoothed with Gaussian.
+    alpha controls intensity, sigma controls smoothness.
+    """
+    h, w = image.shape[:2]
+    rng  = np.random.default_rng()
+
+    dx = rng.uniform(-1, 1, (h, w)).astype(np.float32) * alpha
+    dy = rng.uniform(-1, 1, (h, w)).astype(np.float32) * alpha
+    dx = cv2.GaussianBlur(dx, (0, 0), sigma)
+    dy = cv2.GaussianBlur(dy, (0, 0), sigma)
+
+    xs, ys = np.meshgrid(np.arange(w), np.arange(h))
+    map_x  = np.clip(xs + dx, 0, w - 1).astype(np.float32)
+    map_y  = np.clip(ys + dy, 0, h - 1).astype(np.float32)
+
+    bgr, alpha_ch = split_bgra(image)
+    w_bgr   = cv2.remap(bgr,      map_x, map_y, cv2.INTER_LINEAR,
+                        borderMode=cv2.BORDER_REFLECT_101)
+    w_alpha = cv2.remap(alpha_ch, map_x, map_y, cv2.INTER_LINEAR,
+                        borderMode=cv2.BORDER_REFLECT_101)
+    return merge_bgra(w_bgr, w_alpha)
+
+
+def channel_shuffle(image: np.ndarray) -> np.ndarray:
+    """Randomly permute the B, G, R channels; alpha is preserved."""
+    bgr, alpha = split_bgra(image)
+    order      = list(range(3))
+    random.shuffle(order)
+    shuffled   = bgr[:, :, order]
+    return merge_bgra(shuffled, alpha)
+
+
+def channel_drop(image: np.ndarray, channel: int = 0) -> np.ndarray:
+    """Zero out one BGR channel (0=B, 1=G, 2=R); alpha preserved."""
+    out = image.copy()
+    out[:, :, channel] = 0
+    return out
+
+
+def color_jitter(image: np.ndarray,
+                 b_range: tuple = (0.8, 1.2),
+                 c_range: tuple = (0.8, 1.2),
+                 s_range: tuple = (0.8, 1.2)) -> np.ndarray:
+    """
+    Random color jitter: brightness, contrast, and saturation applied
+    in a random order, each with a random factor drawn from its range.
+    """
+    b = random.uniform(*b_range)
+    c = random.uniform(*c_range)
+    s = random.uniform(*s_range)
+
+    ops = [
+        lambda img: adjust_brightness(img, alpha=b, beta=0),
+        lambda img: adjust_contrast(img, factor=c),
+        lambda img: adjust_saturation(img, scale=s),
+    ]
+    random.shuffle(ops)
+    for op in ops:
+        image = op(image)
+    return image
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Variant registry
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_variants(base_image: np.ndarray,
+                   params: dict | None = None,
+                   selected: set[str] | None = None) -> dict[str, np.ndarray]:
+    """
+    Build the full augmented variant set.
+
+    Args:
+        base_image: Source BGRA image.
+        params:     Per-variant parameter overrides (merged with DEFAULT_PARAMS).
+        selected:   If provided, only include these variant names.
+    """
+    p = {**DEFAULT_PARAMS, **(params or {})}
+
+    def _p(name: str) -> dict:
+        return p.get(name, {})
+
+    all_variants: dict[str, np.ndarray] = {
+        # ── Identity ──────────────────────────────────────────────────────────
+        "original":           base_image,
+
+        # ── Geometry ──────────────────────────────────────────────────────────
+        "flip_h":             flip_horizontal(base_image),
+        "flip_v":             flip_vertical(base_image),
+        "rot_45":             rotate_image(base_image,  45),
+        "rot_90":             rotate_image(base_image,  90),
+        "rot_135":            rotate_image(base_image, 135),
+        "rot_180":            rotate_image(base_image, 180),
+        "rot_225":            rotate_image(base_image, 225),
+        "rot_270":            rotate_image(base_image, 270),
+        "rot_315":            rotate_image(base_image, 315),
+        "zoom_in_med":        scale_zoom(base_image, **_p("zoom_in_med")),
+        "zoom_in_strong":     scale_zoom(base_image, **_p("zoom_in_strong")),
+        "zoom_out_med":       scale_zoom(base_image, **_p("zoom_out_med")),
+        "zoom_out_strong":    scale_zoom(base_image, **_p("zoom_out_strong")),
+        "persp_med":          perspective_transform(base_image, **_p("persp_med")),
+        "persp_strong":       perspective_transform(base_image, **_p("persp_strong")),
+        "persp_extreme":      perspective_transform(base_image, **_p("persp_extreme")),
 
         # ── Brightness / Exposure ─────────────────────────────────────────────
-        "bright_med":        adjust_brightness(base_image, 1.45,  35),
-        "bright_strong":     adjust_brightness(base_image, 1.85,  70),
-        "bright_extreme":    adjust_brightness(base_image, 2.40, 110),
-        "dark_med":          adjust_brightness(base_image, 0.65, -40),
-        "dark_strong":       adjust_brightness(base_image, 0.40, -70),
-        "dark_extreme":      adjust_brightness(base_image, 0.20, -110),
+        "bright_med":         adjust_brightness(base_image, **_p("bright_med")),
+        "bright_strong":      adjust_brightness(base_image, **_p("bright_strong")),
+        "bright_extreme":     adjust_brightness(base_image, **_p("bright_extreme")),
+        "dark_med":           adjust_brightness(base_image, **_p("dark_med")),
+        "dark_strong":        adjust_brightness(base_image, **_p("dark_strong")),
+        "dark_extreme":       adjust_brightness(base_image, **_p("dark_extreme")),
 
         # ── Contrast ──────────────────────────────────────────────────────────
-        "contrast_high":     adjust_contrast(base_image, 2.0),
-        "contrast_extreme":  adjust_contrast(base_image, 3.5),
-        "contrast_low":      adjust_contrast(base_image, 0.4),
-        "contrast_flat":     adjust_contrast(base_image, 0.15),
+        "contrast_high":      adjust_contrast(base_image, **_p("contrast_high")),
+        "contrast_extreme":   adjust_contrast(base_image, **_p("contrast_extreme")),
+        "contrast_low":       adjust_contrast(base_image, **_p("contrast_low")),
+        "contrast_flat":      adjust_contrast(base_image, **_p("contrast_flat")),
 
         # ── Colour ────────────────────────────────────────────────────────────
-        "sat_high":          adjust_saturation(base_image, 2.0),
-        "sat_extreme":       adjust_saturation(base_image, 4.0),
-        "sat_low":           adjust_saturation(base_image, 0.35),
-        "grayscale":         adjust_saturation(base_image, 0.0),
-        "hue_30":            shift_hue(base_image,  30),
-        "hue_60":            shift_hue(base_image,  60),
-        "hue_90":            shift_hue(base_image,  90),
-        "hue_120":           shift_hue(base_image, 120),
+        "sat_high":           adjust_saturation(base_image, **_p("sat_high")),
+        "sat_extreme":        adjust_saturation(base_image, **_p("sat_extreme")),
+        "sat_low":            adjust_saturation(base_image, **_p("sat_low")),
+        "grayscale":          adjust_saturation(base_image, **_p("grayscale")),
+        "hue_30":             shift_hue(base_image, **_p("hue_30")),
+        "hue_60":             shift_hue(base_image, **_p("hue_60")),
+        "hue_90":             shift_hue(base_image, **_p("hue_90")),
+        "hue_120":            shift_hue(base_image, **_p("hue_120")),
 
         # ── Sharpening ────────────────────────────────────────────────────────
-        "sharpen_med":       sharpen(base_image, strength=1.5),
-        "sharpen_strong":    sharpen(base_image, strength=3.5),
-        "sharpen_extreme":   sharpen(base_image, strength=7.0),
+        "sharpen_med":        sharpen(base_image, **_p("sharpen_med")),
+        "sharpen_strong":     sharpen(base_image, **_p("sharpen_strong")),
+        "sharpen_extreme":    sharpen(base_image, **_p("sharpen_extreme")),
 
         # ── Gaussian blur ─────────────────────────────────────────────────────
-        "blur_mild":         blur_image(base_image,  5),
-        "blur_med":          blur_image(base_image, 11),
-        "blur_strong":       blur_image(base_image, 21),
-        "blur_heavy":        blur_image(base_image, 35),
-        "blur_extreme":      blur_image(base_image, 55),
+        "blur_mild":          blur_image(base_image, **_p("blur_mild")),
+        "blur_med":           blur_image(base_image, **_p("blur_med")),
+        "blur_strong":        blur_image(base_image, **_p("blur_strong")),
+        "blur_heavy":         blur_image(base_image, **_p("blur_heavy")),
+        "blur_extreme":       blur_image(base_image, **_p("blur_extreme")),
 
         # ── Motion blur ───────────────────────────────────────────────────────
-        "motion_h_med":      motion_blur(base_image, size=25,  angle=0),
-        "motion_h_strong":   motion_blur(base_image, size=51,  angle=0),
-        "motion_v_med":      motion_blur(base_image, size=25,  angle=90),
-        "motion_v_strong":   motion_blur(base_image, size=51,  angle=90),
-        "motion_d45_med":    motion_blur(base_image, size=21,  angle=45),
-        "motion_d45_strong": motion_blur(base_image, size=45,  angle=45),
-        "motion_d135_med":   motion_blur(base_image, size=21,  angle=135),
-        "motion_d135_strong":motion_blur(base_image, size=45,  angle=135),
+        "motion_h_med":       motion_blur(base_image, **_p("motion_h_med")),
+        "motion_h_strong":    motion_blur(base_image, **_p("motion_h_strong")),
+        "motion_v_med":       motion_blur(base_image, **_p("motion_v_med")),
+        "motion_v_strong":    motion_blur(base_image, **_p("motion_v_strong")),
+        "motion_d45_med":     motion_blur(base_image, **_p("motion_d45_med")),
+        "motion_d45_strong":  motion_blur(base_image, **_p("motion_d45_strong")),
+        "motion_d135_med":    motion_blur(base_image, **_p("motion_d135_med")),
+        "motion_d135_strong": motion_blur(base_image, **_p("motion_d135_strong")),
 
         # ── Defocus blur ──────────────────────────────────────────────────────
-        "defocus_med":       defocus_blur(base_image, radius=8),
-        "defocus_strong":    defocus_blur(base_image, radius=16),
-        "defocus_extreme":   defocus_blur(base_image, radius=28),
+        "defocus_med":        defocus_blur(base_image, **_p("defocus_med")),
+        "defocus_strong":     defocus_blur(base_image, **_p("defocus_strong")),
+        "defocus_extreme":    defocus_blur(base_image, **_p("defocus_extreme")),
 
         # ── Noise ─────────────────────────────────────────────────────────────
-        "noise_mild":        add_noise(base_image, sigma=15),
-        "noise_med":         add_noise(base_image, sigma=35),
-        "noise_strong":      add_noise(base_image, sigma=65),
-        "noise_extreme":     add_noise(base_image, sigma=100),
+        "noise_mild":         add_noise(base_image, **_p("noise_mild")),
+        "noise_med":          add_noise(base_image, **_p("noise_med")),
+        "noise_strong":       add_noise(base_image, **_p("noise_strong")),
+        "noise_extreme":      add_noise(base_image, **_p("noise_extreme")),
+
+        # ── Cutout / Random Erasing ───────────────────────────────────────────
+        "cutout_sm":          cutout(base_image, **_p("cutout_sm")),
+        "cutout_med":         cutout(base_image, **_p("cutout_med")),
+        "cutout_lg":          cutout(base_image, **_p("cutout_lg")),
+
+        # ── JPEG compression ──────────────────────────────────────────────────
+        "jpeg_q40":           jpeg_artifacts(base_image, **_p("jpeg_q40")),
+        "jpeg_q20":           jpeg_artifacts(base_image, **_p("jpeg_q20")),
+        "jpeg_q10":           jpeg_artifacts(base_image, **_p("jpeg_q10")),
+
+        # ── Elastic distortion ────────────────────────────────────────────────
+        "elastic_soft":       elastic_distortion(base_image, **_p("elastic_soft")),
+        "elastic_med":        elastic_distortion(base_image, **_p("elastic_med")),
+        "elastic_strong":     elastic_distortion(base_image, **_p("elastic_strong")),
+
+        # ── Channel ops ───────────────────────────────────────────────────────
+        "channel_shuffle":    channel_shuffle(base_image),
+        "drop_red":           channel_drop(base_image, **_p("drop_red")),
+        "drop_green":         channel_drop(base_image, **_p("drop_green")),
+        "drop_blue":          channel_drop(base_image, **_p("drop_blue")),
+
+        # ── Color jitter ──────────────────────────────────────────────────────
+        "color_jitter_mild":  color_jitter(base_image, **_p("color_jitter_mild")),
+        "color_jitter_strong":color_jitter(base_image, **_p("color_jitter_strong")),
     }
 
+    if selected:
+        unknown = selected - all_variants.keys()
+        if unknown:
+            print(f"[warn] unknown variant name(s) ignored: {', '.join(sorted(unknown))}",
+                  file=sys.stderr)
+        return {k: v for k, v in all_variants.items() if k in selected}
 
-# ---------------------------------------------------------------------------
-# File iteration & main
-# ---------------------------------------------------------------------------
+    return all_variants
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Worker function (runs in a subprocess)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _process_one(args_tuple: tuple) -> tuple[bool, str, int]:
+    """
+    Process a single source image.  Designed to run in a worker process.
+
+    Returns (success, path_str, n_written).
+    """
+    (image_path_str, input_dir_str, output_dir_str, ext,
+     seed, params, selected, skip_existing) = args_tuple
+
+    image_path = Path(image_path_str)
+    input_dir  = Path(input_dir_str)
+    output_dir = Path(output_dir_str)
+
+    # Each worker re-seeds with image-specific seed for reproducibility
+    img_seed = seed ^ hash(image_path_str) & 0xFFFFFFFF
+    random.seed(img_seed)
+    np.random.seed(img_seed % (2**32))
+
+    rel_parent   = image_path.parent.relative_to(input_dir)
+    stem         = image_path.stem
+    variant_keys = list(build_variants(
+        np.zeros((4, 4, 4), dtype=np.uint8), params=params, selected=selected
+    ).keys())
+
+    # ── Skip entire image if every expected variant file already exists ────────
+    if skip_existing:
+        all_exist = all(
+            (output_dir / rel_parent / f"{stem}__{name}{ext}").exists()
+            for name in variant_keys
+        )
+        if all_exist:
+            return True, image_path_str, 0
+
+    image = read_image(image_path)
+    if image is None:
+        return False, image_path_str, 0
+
+    variants  = build_variants(image, params=params, selected=selected)
+    n_written = 0
+
+    for variant_name, variant_img in variants.items():
+        out_name = f"{stem}__{variant_name}{ext}"
+        out_path = output_dir / rel_parent / out_name
+        if skip_existing and out_path.exists():
+            continue
+        write_image(out_path, variant_img, ext)
+        n_written += 1
+
+    return True, image_path_str, n_written
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# File iteration
+# ─────────────────────────────────────────────────────────────────────────────
 
 def iter_images(input_dir: Path):
     for p in input_dir.rglob("*"):
@@ -324,9 +624,14 @@ def iter_images(input_dir: Path):
             yield p
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate augmented image variants for model training (alpha-safe)."
+        description="Generate augmented image variants for model training (alpha-safe).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--input-dir",  default=str(Path("..") / "assets_png"),
                         help="Source root folder containing class/category subfolders.")
@@ -336,12 +641,40 @@ def main():
                         choices=[".png", ".jpg", ".jpeg", ".webp"],
                         help="Output image extension.")
     parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for reproducible perspective/noise variants.")
+                        help="Base random seed for reproducible results.")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="Number of parallel worker processes.")
+    parser.add_argument("--variants", default=None,
+                        help="Comma-separated list of variant names to generate. "
+                             "Omit to generate all variants.")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip output files that already exist (resume mode).")
+    parser.add_argument("--config", default=None,
+                        help="Path to a YAML or JSON file with parameter overrides.")
+    parser.add_argument("--list-variants", action="store_true",
+                        help="Print all available variant names and exit.")
     args = parser.parse_args()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    # ── List mode ─────────────────────────────────────────────────────────────
+    if args.list_variants:
+        dummy  = np.zeros((4, 4, 4), dtype=np.uint8)
+        names  = list(build_variants(dummy).keys())
+        print("\n".join(names))
+        return
 
+    # ── Config ────────────────────────────────────────────────────────────────
+    params: dict = {}
+    if args.config:
+        params = load_config(Path(args.config))
+        print(f"[config] loaded overrides from {args.config}")
+
+    # ── Variant filter ────────────────────────────────────────────────────────
+    selected: set[str] | None = None
+    if args.variants:
+        selected = {v.strip() for v in args.variants.split(",") if v.strip()}
+        print(f"[variants] restricting to: {', '.join(sorted(selected))}")
+
+    # ── Paths ─────────────────────────────────────────────────────────────────
     script_dir = Path(__file__).resolve().parent
     input_dir  = (script_dir / args.input_dir).resolve()
     output_dir = (script_dir / args.output_dir).resolve()
@@ -349,30 +682,45 @@ def main():
     if not input_dir.exists():
         raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
-    total_sources = total_written = 0
+    image_paths = list(iter_images(input_dir))
+    if not image_paths:
+        print("[warn] No images found in input directory.")
+        return
 
-    for image_path in iter_images(input_dir):
-        image = read_image(image_path)
-        if image is None:
-            print(f"[skip] unreadable: {image_path}")
-            continue
+    # ── Build worker task list ────────────────────────────────────────────────
+    tasks = [
+        (str(p), str(input_dir), str(output_dir),
+         args.ext, args.seed, params, selected, args.skip_existing)
+        for p in image_paths
+    ]
 
-        total_sources += 1
-        rel_parent = image_path.parent.relative_to(input_dir)
-        stem = image_path.stem
+    total_sources = total_written = total_failed = 0
 
-        variants = build_variants(image)
-        for variant_name, variant_img in variants.items():
-            out_name = f"{stem}__{variant_name}{args.ext}"
-            out_path = output_dir / rel_parent / out_name
-            write_image(out_path, variant_img, args.ext)
-            total_written += 1
+    # ── Parallel execution ────────────────────────────────────────────────────
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(_process_one, t): t[0] for t in tasks}
+        pbar = tqdm(as_completed(futures), total=len(futures),
+                    desc="Augmenting", unit="img")
+        for future in pbar:
+            success, path_str, n_written = future.result()
+            if success:
+                total_sources += 1
+                total_written += n_written
+            else:
+                total_failed  += 1
+                print(f"\n[skip] unreadable: {path_str}", file=sys.stderr)
+            if hasattr(pbar, "set_postfix"):
+                pbar.set_postfix(written=total_written, failed=total_failed)
 
+    # ── Summary ───────────────────────────────────────────────────────────────
     print("=" * 60)
-    print(f"Input : {input_dir}")
-    print(f"Output: {output_dir}")
+    print(f"Input  : {input_dir}")
+    print(f"Output : {output_dir}")
+    print(f"Workers: {args.workers}")
     print(f"Source images processed : {total_sources}")
     print(f"Variant images generated: {total_written}")
+    if total_failed:
+        print(f"Failed / unreadable     : {total_failed}")
     print("=" * 60)
 
 

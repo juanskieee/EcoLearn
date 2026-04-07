@@ -152,6 +152,39 @@
     transform: rotate(90deg);
 }
 
+.add-card-modal .modal-close:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.add-card-modal.is-locked .modal-body {
+    overflow-y: auto;
+}
+
+.add-card-modal.is-locked .form-group input,
+.add-card-modal.is-locked .form-group select,
+.add-card-modal.is-locked .btn-add,
+.add-card-modal.is-locked .btn-confirm-cancel {
+    opacity: 0.58;
+    cursor: not-allowed;
+}
+
+.add-card-modal.is-locked .form-group input:disabled,
+.add-card-modal.is-locked .form-group select:disabled {
+    background: #F3F4F6;
+    border-color: #D1D5DB;
+    color: #6B7280;
+    box-shadow: none;
+}
+
+.add-card-modal.is-locked .btn-add:disabled,
+.add-card-modal.is-locked .btn-confirm-cancel:disabled {
+    background: linear-gradient(135deg, #9CA3AF 0%, #6B7280 100%);
+    box-shadow: 0 3px 0 #4B5563;
+    transform: none;
+}
+
 /* ============================================
    CARDS MODAL (View Category Cards)
    ============================================ */

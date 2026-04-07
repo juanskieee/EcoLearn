@@ -1,15 +1,13 @@
 flask==3.0.0
 flask-cors==4.0.0
 flask-compress==1.14
-
 opencv-python==4.10.0.84
 numpy==1.26.4
-
 mysql-connector-python==8.0.33
 gTTS==2.5.1
-
 tensorflow==2.15.0
 tf2onnx==1.15.1
 onnx==1.14.1
 protobuf==3.20.3
 ml-dtypes==0.2.0
+reportlab==4.2.2

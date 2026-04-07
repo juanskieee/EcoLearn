@@ -76,6 +76,11 @@
                         <span class="score-value" id="correct-count">0</span>
                         <span class="score-label">Correct</span>
                     </div>
+                    <div class="score-divider"></div>
+                    <div class="score-item" id="test-timer-wrap">
+                        <span class="score-value" id="test-timer">01:00</span>
+                        <span class="score-label">Time Left</span>
+                    </div>
                 </div>
             </div>
 
@@ -227,7 +232,7 @@
                 </section>
             </div>
 
-            <button class="btn-restart" onclick="location.reload()">
+            <button class="btn-restart" onclick="restartGame()">
                 Play Again
             </button>
         </div>
@@ -289,6 +294,29 @@
                 <button class="btn-quit-cancel" onclick="closeQuitModal()">Cancel</button>
                 <button class="btn-quit-confirm" onclick="confirmQuit()">
                     <span>Quit</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Up Modal -->
+    <div id="timeUpModal" class="quit-modal" onclick="handleTimeUpModalBackdropClick(event)">
+        <div class="quit-modal-content" onclick="event.stopPropagation()">
+            <img src="assets/leafframe.png" class="quit-frame-overlay" alt="Leaf Frame">
+            <div class="quit-modal-header">
+                <h3>⏰ Time is up!</h3>
+            </div>
+            <div class="quit-modal-body">
+                <p class="quit-modal-main-text">
+                    <strong>Your test session has ended.</strong>
+                </p>
+                <p class="quit-modal-sub-text">
+                    We will now show your results and leaderboard rank.
+                </p>
+            </div>
+            <div class="quit-modal-actions">
+                <button class="btn-timeup-continue" onclick="confirmTimeUpProceed()">
+                    <span>View Results</span>
                 </button>
             </div>
         </div>

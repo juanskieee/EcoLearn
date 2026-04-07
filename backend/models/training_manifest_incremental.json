@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-04-07T18:40:29",
+  "backbone": "MobileNetV2",
+  "backbone_weights": "imagenet_download",
+  "class_count": 2,
+  "train_samples": 51,
+  "val_samples": 9,
+  "preprocessing": "mobilenet_v2.preprocess_input ([-1, 1])",
+  "augmentation": [
+    "random_flip_lr",
+    "random_flip_ud",
+    "random_brightness",
+    "random_contrast",
+    "random_rotation_15deg"
+  ],
+  "class_to_card_id": [
+    {
+      "class_index": 0,
+      "card_id": 1,
+      "card_name": "Pencil Shavings"
+    },
+    {
+      "class_index": 1,
+      "card_id": 75,
+      "card_name": "Cardboard Cup"
+    }
+  ],
+  "args": {
+    "variants_dir": "C:\\xampp\\htdocs\\assets_variants",
+    "png_dir": "C:\\xampp\\htdocs\\assets_png",
+    "out_keras": "models/waste_incremental_finetuned.h5",
+    "out_onnx": "models/waste_incremental.onnx",
+    "out_labels": "models/waste_incremental_labels.txt",
+    "out_manifest": "models/training_manifest_incremental.json",
+    "img_size": 224,
+    "batch_size": 24,
+    "head_epochs": 1,
+    "finetune_epochs": 0,
+    "val_ratio": 0.15,
+    "seed": 42,
+    "head_lr": 0.001,
+    "finetune_lr": 0.0002,
+    "dropout": 0.3,
+    "trainer_augment": false,
+    "max_samples_per_class": 12,
+    "focus_card_id": 75,
+    "focus_max_samples": 48,
+    "imagenet_weights_path": null,
+    "include_card_ids": "75,1",
+    "log_file": "models\\cnn_retrain_last.log"
+  }
+}

@@ -4,7 +4,7 @@
 // No XAMPP configuration needed!
 // ============================================
 
-const CACHE_NAME = 'ecolearn-cache-v2';
+const CACHE_NAME = 'ecolearn-cache-v11';
 const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Core assets to cache immediately on install

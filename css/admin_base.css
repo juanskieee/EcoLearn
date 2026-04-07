@@ -76,6 +76,13 @@ body {
     background: url('../assets/background.png') no-repeat center center fixed;
     background-size: cover;
     line-height: 1.5;
+    transition: opacity 0.42s ease, filter 0.42s ease, transform 0.42s ease;
+}
+
+body.smooth-reloading {
+    opacity: 0;
+    filter: blur(2px);
+    transform: scale(0.995);
 }
 
 /* --- Typography --- */
@@ -403,12 +410,34 @@ button:active {
 
 /* --- Result Message --- */
 .result-message {
-    padding: 1rem;
-    border-radius: 10px;
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+    border: 2px solid rgba(16, 185, 129, 0.22);
+    background: linear-gradient(180deg, rgba(236, 253, 245, 0.95) 0%, rgba(220, 252, 231, 0.92) 100%);
     font-size: var(--fs-sm);
     animation: slideIn 0.3s ease;
     margin-top: 1rem;
     display: none;
+    line-height: 1.35;
+}
+
+.result-message .result-title {
+    font-size: 1rem;
+    font-weight: var(--fw-bold);
+    color: #065F46;
+    margin-bottom: 0.45rem;
+}
+
+.result-message .result-subline {
+    display: block;
+    margin-top: 0.35rem;
+    color: #334155;
+    opacity: 0.95;
+}
+
+.result-message .result-subline.warning {
+    color: #9A3412;
+    font-weight: var(--fw-semibold);
 }
 
 .result-message.show { display: block; }

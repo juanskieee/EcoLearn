@@ -3,6 +3,7 @@
 // ============================================
 
 const API_URL = 'http://localhost:5000';
+const RESULTS_REDIRECT_KEY = 'ecolearn_results_redirect';
 
 // Game State
 let sessionId = null;
@@ -11,6 +12,10 @@ let sessionMode = 'instructional'; // 'instructional' or 'assessment'
 let totalScans = 0;
 let correctScans = 0;
 let isScanning = false;
+let assessmentTimerHandle = null;
+let assessmentRemainingSeconds = 60;
+let pendingTimeUpStats = null;
+let skipSessionPersistOnUnload = false;
 
 // Assessment Mode State
 let assessmentStep = 'scan'; // 'scan' | 'identify'
@@ -23,6 +28,7 @@ let lastErrorReason = '';
 
 const SCAN_COOLDOWN_MS = 500;
 const ERROR_FEEDBACK_COOLDOWN_MS = 500;
+const CAMERA_ROI_RATIO = 0.50;
 
 const SYSTEM_CONFIG = {
     orb_feature_count: 1000,
@@ -32,11 +38,62 @@ const SYSTEM_CONFIG = {
     session_timeout_minutes: 30,
     webcam_fps: 30,
     roi_box_color: '#00FF00',
-    enable_audio_feedback: true
+    enable_audio_feedback: true,
+    assessment_timer_seconds: 60
 };
 
 let inactivityTimeout = null;
 let inactivityHandlersBound = false;
+let tutorialState = null;
+
+const tutorialStepsByMode = {
+    instructional: [
+        {
+            target: '.guide-card',
+            title: 'Meet the Categories',
+            text: 'Hi! I am Bin-Bin. This guide shows all four waste types. We will use these colors while we play.'
+        },
+        {
+            target: '.camera-display',
+            bubblePosition: 'top',
+            title: 'Place the Card Here',
+            text: 'Hold your eco-card inside the green box so I can read it clearly.'
+        },
+        {
+            target: '#scan-btn',
+            title: 'Tap Scan',
+            text: 'Press SCAN when your card is ready. I will explain where it belongs and why.'
+        },
+        {
+            target: '.feedback-card',
+            title: 'Watch My Feedback',
+            text: 'This panel shows the card result, category icon, and my helpful tips.'
+        }
+    ],
+    assessment: [
+        {
+            target: '.leaderboard-card',
+            title: 'Score Challenge',
+            text: 'Welcome to Test mode! Try to climb the leaderboard with accurate sorting.'
+        },
+        {
+            targets: ['#test-timer-wrap', '#test-timer', '.score-board'],
+            title: 'Beat the Timer',
+            text: 'You have limited time. Keep scanning and answering quickly.'
+        },
+        {
+            target: '.camera-display',
+            bubblePosition: 'top',
+            title: 'Scan the Card',
+            text: 'Center your card in the camera frame, then scan to start each question.'
+        },
+        {
+            target: '.feedback-card',
+            title: 'Check the Result',
+            text: 'After you answer, this panel shows if you are correct and explains the right category.'
+        }
+    ]
+};
 
 // DOM Elements
 const welcomeScreen = document.getElementById('welcome-screen');
@@ -56,6 +113,8 @@ const scanEffect = document.getElementById('scan-effect');
 
 const scanCountEl = document.getElementById('scan-count');
 const correctCountEl = document.getElementById('correct-count');
+let testTimerEl = document.getElementById('test-timer');
+let testTimerWrap = document.getElementById('test-timer-wrap');
 const binBadge = document.getElementById('bin-badge');
 const binBadgeLabel = document.getElementById('bin-badge-label');
 const confidenceKidsEl = document.getElementById('confidence-kids');
@@ -70,14 +129,129 @@ const errorSound = document.getElementById('error-sound');
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async function() {
+    ensureAssessmentTimerUi();
+    applyRoiOverlayGeometry();
     initializeWelcomeScreen();
     await loadSystemSettings();
+    const restoredToResults = restoreResultsIfNeeded();
+    if (restoredToResults) {
+        loadAudioViaFetch();
+        loadAudioSettings();
+        return;
+    }
     setupSessionEndOnUnload();
     setupSessionInactivityHandlers();
     restoreSessionIfExists();
     loadAudioViaFetch();
     loadAudioSettings();
 });
+
+function restoreResultsIfNeeded() {
+    const raw = sessionStorage.getItem(RESULTS_REDIRECT_KEY);
+    if (!raw) return false;
+
+    try {
+        const payload = JSON.parse(raw);
+        sessionStorage.removeItem(RESULTS_REDIRECT_KEY);
+
+        sessionMode = payload.sessionMode || 'assessment';
+        studentNickname = payload.studentNickname || '';
+        if (studentDisplayName && studentNickname) {
+            studentDisplayName.textContent = studentNickname;
+        }
+
+        welcomeScreen.classList.add('hidden');
+        gameScreen.classList.add('hidden');
+        resultsScreen.classList.remove('hidden');
+
+        const stats = payload.stats || {
+            total_scans: 0,
+            correct_scans: 0,
+            accuracy: 0
+        };
+        showResults(stats);
+        return true;
+    } catch (error) {
+        sessionStorage.removeItem(RESULTS_REDIRECT_KEY);
+        return false;
+    }
+}
+
+function smoothReloadToResults(stats) {
+    skipSessionPersistOnUnload = true;
+    sessionStorage.setItem(RESULTS_REDIRECT_KEY, JSON.stringify({
+        stats: stats,
+        sessionMode: sessionMode,
+        studentNickname: studentNickname
+    }));
+
+    document.body.classList.add('is-reloading');
+    setTimeout(function() {
+        location.reload();
+    }, 300);
+}
+
+function restartGame() {
+    skipSessionPersistOnUnload = true;
+    closeTimeUpModal();
+    sessionStorage.removeItem(RESULTS_REDIRECT_KEY);
+    clearSessionStorage();
+    pendingTimeUpStats = null;
+    sessionId = null;
+    document.body.classList.add('is-reloading');
+    setTimeout(function() {
+        location.reload();
+    }, 250);
+}
+
+function ensureAssessmentTimerUi() {
+    const scoreBoard = document.querySelector('.score-board');
+    if (!scoreBoard) return;
+
+    testTimerWrap = document.getElementById('test-timer-wrap');
+    testTimerEl = document.getElementById('test-timer');
+
+    if (!testTimerWrap || !testTimerEl) {
+        const divider = document.createElement('div');
+        divider.className = 'score-divider';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'score-item';
+        wrap.id = 'test-timer-wrap';
+        wrap.style.display = 'none';
+
+        const value = document.createElement('span');
+        value.className = 'score-value';
+        value.id = 'test-timer';
+        value.textContent = '01:00';
+
+        const label = document.createElement('span');
+        label.className = 'score-label';
+        label.textContent = 'Timer';
+
+        wrap.appendChild(value);
+        wrap.appendChild(label);
+        scoreBoard.appendChild(divider);
+        scoreBoard.appendChild(wrap);
+
+        testTimerWrap = wrap;
+        testTimerEl = value;
+    }
+}
+
+function applyRoiOverlayGeometry() {
+    const roiBox = document.querySelector('.roi-box');
+    if (!roiBox) return;
+
+    const ratio = Math.max(0.3, Math.min(0.9, CAMERA_ROI_RATIO));
+    const sizePct = ratio * 100;
+    const offsetPct = (100 - sizePct) / 2;
+
+    roiBox.style.width = `${sizePct}%`;
+    roiBox.style.height = `${sizePct}%`;
+    roiBox.style.left = `${offsetPct}%`;
+    roiBox.style.top = `${offsetPct}%`;
+}
 
 // Session persistence - save/restore from localStorage
 function saveSessionToStorage() {
@@ -88,6 +262,7 @@ function saveSessionToStorage() {
         sessionMode: sessionMode,
         totalScans: totalScans,
         correctScans: correctScans,
+        assessmentRemainingSeconds: assessmentRemainingSeconds,
         scannedCardsHistory: scannedCardsHistory,
         timestamp: Date.now()
     };
@@ -110,6 +285,9 @@ function restoreSessionIfExists() {
         sessionMode = sessionData.sessionMode;
         totalScans = sessionData.totalScans || 0;
         correctScans = sessionData.correctScans || 0;
+        assessmentRemainingSeconds = Number.isFinite(sessionData.assessmentRemainingSeconds)
+            ? sessionData.assessmentRemainingSeconds
+            : Math.max(10, parseInt(SYSTEM_CONFIG.assessment_timer_seconds, 10) || 60);
         scannedCardsHistory = sessionData.scannedCardsHistory || [];
         
         studentDisplayName.textContent = studentNickname;
@@ -129,8 +307,19 @@ function restoreSessionIfExists() {
         
         if (sessionMode === 'instructional') {
             gameScreen.classList.add('learn-mode');
+            stopAssessmentTimer();
         } else {
             gameScreen.classList.remove('learn-mode');
+            if (sfxMuted) {
+                sfxMuted = false;
+                saveAudioSettings();
+            }
+            applyAudioFeedbackPolicy();
+            warmupAssessmentSfx();
+            const sfxToggle = document.getElementById('toggle-sfx');
+            if (sfxToggle) sfxToggle.checked = true;
+            updateAssessmentTimerDisplay();
+            startAssessmentTimer();
         }
         
         welcomeScreen.classList.add('hidden');
@@ -152,6 +341,9 @@ function clearSessionStorage() {
 function setupSessionEndOnUnload() {
     // Only show warning on refresh if session is active
     window.addEventListener('beforeunload', function(e) {
+        if (skipSessionPersistOnUnload) {
+            return;
+        }
         if (sessionId && !gameScreen.classList.contains('hidden')) {
             // Save session state so it can be restored
             saveSessionToStorage();
@@ -280,13 +472,37 @@ function applyAudioFeedbackPolicy() {
         stopSpeech();
     }
 
-    if (successSound) successSound.muted = sfxMuted || !isAudioFeedbackEnabled();
-    if (errorSound) errorSound.muted = sfxMuted || !isAudioFeedbackEnabled();
+    if (successSound) successSound.muted = sfxMuted;
+    if (errorSound) errorSound.muted = sfxMuted;
 }
 
 function playSfx(soundEl) {
-    if (!soundEl || !isAudioFeedbackEnabled() || sfxMuted) return;
+    if (!soundEl || sfxMuted) return;
+    // In assessment mode, always keep right/wrong answer SFX available.
+    if (sessionMode !== 'assessment' && !isAudioFeedbackEnabled()) return;
+    if (!soundEl.src && soundEl.id === 'success-sound') soundEl.src = 'assets/success.mp3';
+    if (!soundEl.src && soundEl.id === 'error-sound') soundEl.src = 'assets/error.mp3';
+    soundEl.muted = false;
+    soundEl.volume = 1;
+    soundEl.currentTime = 0;
     soundEl.play().catch(function() {});
+}
+
+function warmupAssessmentSfx() {
+    [successSound, errorSound].forEach(function(soundEl) {
+        if (!soundEl) return;
+        if (!soundEl.src && soundEl.id === 'success-sound') soundEl.src = 'assets/success.mp3';
+        if (!soundEl.src && soundEl.id === 'error-sound') soundEl.src = 'assets/error.mp3';
+        const wasMuted = soundEl.muted;
+        soundEl.muted = true;
+        soundEl.play().then(function() {
+            soundEl.pause();
+            soundEl.currentTime = 0;
+            soundEl.muted = wasMuted;
+        }).catch(function() {
+            soundEl.muted = wasMuted;
+        });
+    });
 }
 
 function initializeWelcomeScreen() {
@@ -393,6 +609,17 @@ const categoryIcons = {
     'Special Waste': 'assets/special_waste_icon.png'
 };
 
+const categoryReasonTagalog = {
+    'Compostable': 'nabubulok ito',
+    'Recyclable': 'puwede pa itong i-recycle',
+    'Non-Recyclable': 'hindi ito puwedeng i-recycle o i-compost',
+    'Special Waste': 'may delikadong sangkap ito'
+};
+
+function getCategoryReasonTagalog(category) {
+    return categoryReasonTagalog[category] || 'ito ang tamang paraan ng waste segregation para sa kaligtasan ng kapaligiran';
+}
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -467,6 +694,14 @@ async function startGame() {
         gameScreen.classList.add('learn-mode');
     } else {
         gameScreen.classList.remove('learn-mode');
+        if (sfxMuted) {
+            sfxMuted = false;
+            saveAudioSettings();
+        }
+        applyAudioFeedbackPolicy();
+        warmupAssessmentSfx();
+        const sfxToggle = document.getElementById('toggle-sfx');
+        if (sfxToggle) sfxToggle.checked = true;
     }
     
     // Start session
@@ -490,6 +725,7 @@ async function startGame() {
             correctScans = 0;
             assessmentStep = 'scan';
             currentScanResult = null;
+            assessmentRemainingSeconds = Math.max(10, parseInt(SYSTEM_CONFIG.assessment_timer_seconds, 10) || 60);
             
             saveSessionToStorage();
             
@@ -500,8 +736,16 @@ async function startGame() {
 
             await initCamera();
             resetSessionInactivityTimer();
+
+            if (sessionMode === 'assessment') {
+                updateAssessmentTimerDisplay();
+                startAssessmentTimer();
+            } else {
+                stopAssessmentTimer();
+            }
             
             setInitialGameMessage();
+            await maybeStartModeTutorial();
         } else {
             alert('Failed to start session. Please check if the server is running.');
         }
@@ -514,14 +758,355 @@ async function startGame() {
 
 function configureGameForMode(mode) {
     const headerLeftScore = document.querySelector('.header-left-score');
+    ensureAssessmentTimerUi();
     
     if (mode === 'instructional') {
         // Hide scores in instructional mode
         if (headerLeftScore) headerLeftScore.style.display = 'none';
+        stopAssessmentTimer();
     } else {
         // Show scores in assessment mode
         if (headerLeftScore) headerLeftScore.style.display = 'flex';
+        if (testTimerWrap) testTimerWrap.style.display = 'block';
+        updateAssessmentTimerDisplay();
     }
+}
+
+async function shouldRunTutorialForCurrentPlayer() {
+    if (!studentNickname || !sessionId) return false;
+
+    try {
+        const response = await fetch(`${API_URL}/tutorial/should-show`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nickname: studentNickname,
+                mode: sessionMode,
+                current_session_id: sessionId
+            })
+        });
+
+        const data = await response.json();
+        return data.status === 'success' && !!data.should_show;
+    } catch (error) {
+        return false;
+    }
+}
+
+async function maybeStartModeTutorial() {
+    const shouldShow = await shouldRunTutorialForCurrentPlayer();
+    if (!shouldShow) return;
+    const modeKey = sessionMode === 'assessment' ? 'assessment' : 'instructional';
+    const steps = tutorialStepsByMode[modeKey] || [];
+    if (!steps.length) return;
+
+    startCinematicTutorial(steps);
+}
+
+function startCinematicTutorial(steps) {
+    if (!Array.isArray(steps) || !steps.length) return;
+    if (tutorialState && tutorialState.active) return;
+
+    stopSpeech();
+    const wasAssessmentTimerRunning = !!assessmentTimerHandle;
+    if (sessionMode === 'assessment') {
+        stopAssessmentTimer();
+    }
+
+    const overlay = createTutorialOverlay();
+    const bubbleTitle = overlay.querySelector('[data-tutorial-title]');
+    const bubbleText = overlay.querySelector('[data-tutorial-text]');
+    const stepCounter = overlay.querySelector('[data-tutorial-step]');
+    const bubblePanel = overlay.querySelector('.tutorial-binbin-bubble');
+    const btnPrev = overlay.querySelector('[data-tutorial-prev]');
+    const btnNext = overlay.querySelector('[data-tutorial-next]');
+    const btnSkip = overlay.querySelector('[data-tutorial-skip]');
+
+    tutorialState = {
+        active: true,
+        steps: steps,
+        currentIndex: 0,
+        overlay: overlay,
+        highlightedEl: null,
+        spotlightCutout: overlay.querySelector('[data-tutorial-cutout]'),
+        spotlightRing: overlay.querySelector('[data-tutorial-ring]'),
+        pausedAssessmentTimer: wasAssessmentTimerRunning
+    };
+
+    document.body.classList.add('tutorial-active');
+
+    const finishTutorial = () => {
+        if (!tutorialState || !tutorialState.active) return;
+
+        const state = tutorialState;
+        if (state.highlightedEl) {
+            state.highlightedEl.classList.remove('tutorial-spotlight');
+        }
+        if (state.spotlightCutout) {
+            state.spotlightCutout.classList.remove('is-visible');
+        }
+        if (state.spotlightRing) {
+            state.spotlightRing.classList.remove('is-visible');
+        }
+
+        if (state.overlay && state.overlay.parentNode) {
+            state.overlay.parentNode.removeChild(state.overlay);
+        }
+
+        document.body.classList.remove('tutorial-active');
+        tutorialState = null;
+
+        if (sessionMode === 'assessment' && state.pausedAssessmentTimer && !gameScreen.classList.contains('hidden')) {
+            startAssessmentTimer();
+        }
+    };
+
+    const goToStep = (newIndex) => {
+        if (!tutorialState || !tutorialState.active) return;
+
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex >= tutorialState.steps.length) {
+            finishTutorial();
+            return;
+        }
+
+        if (tutorialState.highlightedEl) {
+            tutorialState.highlightedEl.classList.remove('tutorial-spotlight');
+        }
+
+        tutorialState.currentIndex = newIndex;
+        const step = tutorialState.steps[newIndex];
+        const targetEl = resolveTutorialTarget(step);
+
+        tutorialState.highlightedEl = targetEl || null;
+        if (targetEl) {
+            targetEl.classList.add('tutorial-spotlight');
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            positionTutorialSpotlight(tutorialState.spotlightCutout, tutorialState.spotlightRing, targetEl);
+            setTimeout(function() {
+                if (tutorialState && tutorialState.active && tutorialState.highlightedEl === targetEl) {
+                    positionTutorialSpotlight(tutorialState.spotlightCutout, tutorialState.spotlightRing, targetEl);
+                }
+            }, 260);
+        } else {
+            if (tutorialState.spotlightCutout) {
+                tutorialState.spotlightCutout.classList.remove('is-visible');
+            }
+            if (tutorialState.spotlightRing) {
+                tutorialState.spotlightRing.classList.remove('is-visible');
+            }
+        }
+
+        bubbleTitle.textContent = step.title || 'Quick Tour';
+        bubbleText.textContent = step.text || '';
+        stepCounter.textContent = 'Step ' + (newIndex + 1) + ' of ' + tutorialState.steps.length;
+
+        if (bubblePanel) {
+            bubblePanel.classList.remove('tutorial-bubble-top', 'tutorial-bubble-bottom');
+            bubblePanel.classList.add(step.bubblePosition === 'top' ? 'tutorial-bubble-top' : 'tutorial-bubble-bottom');
+        }
+
+        btnPrev.disabled = newIndex === 0;
+        btnNext.textContent = (newIndex === tutorialState.steps.length - 1) ? 'Finish' : 'Next';
+    };
+
+    btnPrev.addEventListener('click', function() {
+        goToStep(tutorialState.currentIndex - 1);
+    });
+    btnNext.addEventListener('click', function() {
+        goToStep(tutorialState.currentIndex + 1);
+    });
+    btnSkip.addEventListener('click', finishTutorial);
+
+    goToStep(0);
+}
+
+function isElementVisibleForTutorial(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    if (!style) return false;
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+    return el.getClientRects && el.getClientRects().length > 0;
+}
+
+function resolveTutorialTarget(step) {
+    if (!step) return null;
+
+    const selectors = [];
+    if (Array.isArray(step.targets)) {
+        selectors.push.apply(selectors, step.targets);
+    }
+    if (step.target) {
+        selectors.push(step.target);
+    }
+
+    for (let i = 0; i < selectors.length; i++) {
+        const selector = selectors[i];
+        if (!selector) continue;
+        let el = document.querySelector(selector);
+        if (selector === '#test-timer' && el) {
+            const wrap = el.closest('#test-timer-wrap');
+            if (wrap) {
+                el = wrap;
+            }
+        }
+        if (isElementVisibleForTutorial(el)) {
+            return el;
+        }
+    }
+
+    return null;
+}
+
+function positionTutorialSpotlight(cutout, ring, targetEl) {
+    if (!targetEl) return;
+    const rect = targetEl.getBoundingClientRect();
+    const cutoutPad = 4;
+    const ringPad = 8;
+
+    if (cutout) {
+        cutout.style.left = Math.max(0, rect.left - cutoutPad) + 'px';
+        cutout.style.top = Math.max(0, rect.top - cutoutPad) + 'px';
+        cutout.style.width = Math.max(24, rect.width + cutoutPad * 2) + 'px';
+        cutout.style.height = Math.max(24, rect.height + cutoutPad * 2) + 'px';
+        cutout.classList.add('is-visible');
+    }
+
+    if (ring) {
+        ring.style.left = Math.max(0, rect.left - ringPad) + 'px';
+        ring.style.top = Math.max(0, rect.top - ringPad) + 'px';
+        ring.style.width = Math.max(24, rect.width + ringPad * 2) + 'px';
+        ring.style.height = Math.max(24, rect.height + ringPad * 2) + 'px';
+        ring.classList.add('is-visible');
+    }
+}
+
+function createTutorialOverlay() {
+    const existing = document.getElementById('cinematic-tutorial-overlay');
+    if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cinematic-tutorial-overlay';
+    overlay.className = 'cinematic-tutorial-overlay';
+    overlay.innerHTML = `
+        <div class="tutorial-dim-layer"></div>
+        <div class="tutorial-focus-cutout" data-tutorial-cutout aria-hidden="true"></div>
+        <div class="tutorial-spotlight-ring" data-tutorial-ring aria-hidden="true"></div>
+        <div class="tutorial-binbin-bubble" role="dialog" aria-live="polite" aria-label="Bin-Bin Tutorial">
+            <div class="tutorial-binbin-avatar-wrap">
+                <img src="assets/binbin_happy.png" alt="Bin-Bin" class="tutorial-binbin-avatar">
+            </div>
+            <div class="tutorial-bubble-content">
+                <p class="tutorial-bubble-step" data-tutorial-step>Step 1 of 1</p>
+                <h3 class="tutorial-bubble-title" data-tutorial-title>Quick Tour</h3>
+                <p class="tutorial-bubble-text" data-tutorial-text></p>
+                <div class="tutorial-bubble-actions">
+                    <button type="button" class="tutorial-btn tutorial-btn-secondary" data-tutorial-prev>Back</button>
+                    <button type="button" class="tutorial-btn tutorial-btn-ghost" data-tutorial-skip>Skip</button>
+                    <button type="button" class="tutorial-btn tutorial-btn-primary" data-tutorial-next>Next</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function updateAssessmentTimerDisplay() {
+    if (!testTimerEl) return;
+    const safeSeconds = Math.max(0, Math.floor(assessmentRemainingSeconds));
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    testTimerEl.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    testTimerEl.classList.toggle('timer-warning', safeSeconds <= 10);
+}
+
+function startAssessmentTimer() {
+    if (sessionMode !== 'assessment' || !sessionId) return;
+    stopAssessmentTimer();
+    updateAssessmentTimerDisplay();
+    assessmentTimerHandle = setInterval(() => {
+        assessmentRemainingSeconds -= 1;
+        updateAssessmentTimerDisplay();
+        saveSessionToStorage();
+
+        if (assessmentRemainingSeconds <= 0) {
+            stopAssessmentTimer();
+            forceEndSessionByTimer();
+        }
+    }, 1000);
+}
+
+function stopAssessmentTimer() {
+    if (assessmentTimerHandle) {
+        clearInterval(assessmentTimerHandle);
+        assessmentTimerHandle = null;
+    }
+}
+
+async function forceEndSessionByTimer() {
+    if (!sessionId || gameScreen.classList.contains('hidden')) return;
+
+    stopSpeech();
+    clearSessionStorage();
+
+    try {
+        const response = await fetch(`${API_URL}/session/end`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            pendingTimeUpStats = data.stats;
+        } else {
+            pendingTimeUpStats = {
+                total_scans: totalScans,
+                correct_scans: correctScans,
+                accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+            };
+        }
+    } catch (err) {
+        console.error('❌ Timer session end error:', err);
+        pendingTimeUpStats = {
+            total_scans: totalScans,
+            correct_scans: correctScans,
+            accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+        };
+    } finally {
+        clearSessionInactivityTimer();
+        showTimeUpModal();
+    }
+}
+
+function showTimeUpModal() {
+    const modal = document.getElementById('timeUpModal');
+    if (modal) modal.classList.add('active');
+}
+
+function closeTimeUpModal() {
+    const modal = document.getElementById('timeUpModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function handleTimeUpModalBackdropClick(event) {
+    if (event.target === event.currentTarget) {
+        confirmTimeUpProceed();
+    }
+}
+
+function confirmTimeUpProceed() {
+    closeTimeUpModal();
+    sessionId = null;
+    const stats = pendingTimeUpStats || {
+        total_scans: totalScans,
+        correct_scans: correctScans,
+        accuracy: totalScans > 0 ? Math.round((correctScans / totalScans) * 100) : 0
+    };
+    smoothReloadToResults(stats);
 }
 
 function setInitialGameMessage() {
@@ -606,12 +1191,14 @@ async function confirmQuit() {
         });
     } finally {
         clearSessionInactivityTimer();
+        stopAssessmentTimer();
     }
 }
 
 function showResults(stats) {
     // Stop any ongoing speech
     stopSpeech();
+    stopAssessmentTimer();
     
     gameScreen.classList.add('hidden');
     resultsScreen.classList.remove('hidden');
@@ -677,6 +1264,55 @@ function getAccuracyColor(accuracy) {
     return 'var(--color-red)';
 }
 
+function getProficiencyScore(student) {
+    const scans = Number(student.total_scans || 0);
+    const correct = Number(student.correct || 0);
+    if (Number.isFinite(student.proficiency_score)) {
+        return Number(student.proficiency_score);
+    }
+    if (Number.isFinite(student.avg_accuracy)) {
+        return Number(student.avg_accuracy);
+    }
+    return scans > 0 ? (correct * 100) / scans : 0;
+}
+
+function renderLeaderboardPodium(topStudents, highlightNickname) {
+    if (!topStudents || topStudents.length === 0) return '';
+
+    const byRank = {
+        1: topStudents[0] || null,
+        2: topStudents[1] || null,
+        3: topStudents[2] || null
+    };
+
+    const slotOrder = [2, 1, 3];
+    const slotClassByRank = {
+        1: 'lb-podium-gold',
+        2: 'lb-podium-silver',
+        3: 'lb-podium-bronze'
+    };
+    const medalByRank = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+    return `<div class="lb-podium">${slotOrder.map(rank => {
+        const student = byRank[rank];
+        if (!student) {
+            return `<div class="lb-podium-slot ${slotClassByRank[rank]} lb-podium-empty"><div class="lb-podium-card"><div class="lb-podium-name">No player yet</div><div class="lb-podium-score">--</div></div><div class="lb-podium-base lb-base-${rank}">#${rank}</div></div>`;
+        }
+
+        const score = getProficiencyScore(student);
+        const isHighlight = highlightNickname && student.nickname === highlightNickname;
+        return `<div class="lb-podium-slot ${slotClassByRank[rank]}${isHighlight ? ' highlight' : ''}">
+            <div class="lb-podium-card">
+                <div class="lb-podium-medal">${medalByRank[rank]}</div>
+                <div class="lb-podium-name">${escapeHtml(student.nickname || 'Guest')}</div>
+                <div class="lb-podium-score" style="color:${getAccuracyColor(score)}">${Math.round(score)}%</div>
+                <div class="lb-podium-meta">${Number(student.correct || 0)} / ${Number(student.total_scans || 0)} correct</div>
+            </div>
+            <div class="lb-podium-base lb-base-${rank}">#${rank}</div>
+        </div>`;
+    }).join('')}</div>`;
+}
+
 async function loadLeaderboardForIndex(which, highlightNickname) {
     const containerIds = {
         game: 'game-leaderboard-list',
@@ -703,17 +1339,31 @@ async function loadLeaderboardForIndex(which, highlightNickname) {
             return;
         }
 
-        const top = data.leaderboard.slice(0, 10);
-        const rankDisplay = (rank) => (rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank);
+        const podiumSource = data.leaderboard.slice(0, 3);
+        const podiumHtml = renderLeaderboardPodium(podiumSource, highlightNickname);
 
-        container.innerHTML = top.map(student => {
+        if (which === 'results') {
+            container.innerHTML = podiumHtml;
+            return;
+        }
+
+        const rest = data.leaderboard.slice(3, 20);
+
+        const listHtml = rest.map(student => {
+            const score = getProficiencyScore(student);
             const isHighlight = highlightNickname && student.nickname === highlightNickname;
             return `<div class="leaderboard-item${isHighlight ? ' highlight' : ''}" role="listitem">
-                <span class="leaderboard-rank">${rankDisplay(student.rank)}</span>
-                <span class="leaderboard-name">${escapeHtml(student.nickname)}</span>
-                <span class="leaderboard-score" style="color:${getAccuracyColor(student.avg_accuracy)}">${student.avg_accuracy}%</span>
+                <span class="leaderboard-rank">#${student.rank}</span>
+                <span class="leaderboard-name">${escapeHtml(student.nickname || 'Guest')}</span>
+                <span class="leaderboard-meta">${Number(student.correct || 0)}/${Number(student.total_scans || 0)}</span>
+                <span class="leaderboard-score" style="color:${getAccuracyColor(score)}">${Math.round(score)}%</span>
             </div>`;
         }).join('');
+
+        container.innerHTML = `
+            ${podiumHtml}
+            <div class="leaderboard-mini-list">${listHtml || '<div class="leaderboard-rest-empty">No additional players yet. More rankings will appear here.</div>'}</div>
+        `;
     } catch (err) {
         container.innerHTML = '<p class="leaderboard-empty">Could not load leaderboard.</p>';
     }
@@ -774,8 +1424,8 @@ async function captureAndIdentify() {
     // ============================================
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const cropW = Math.floor(vw * 0.50);   // was 0.70 — tighter
-    const cropH = Math.floor(vh * 0.50);   // was 0.70 — tighter
+    const cropW = Math.floor(vw * CAMERA_ROI_RATIO);
+    const cropH = Math.floor(vh * CAMERA_ROI_RATIO);
     const startX = Math.floor((vw - cropW) / 2);
     const startY = Math.floor((vh - cropH) / 2);
     
@@ -869,11 +1519,25 @@ function stopSfx() {
     });
 }
 
-function addToScannedCards(cardName, icon, category) {
-    if (!scannedCardsListEl || !cardName) return;
+function sanitizeCardFileStem(cardName) {
+    if (!cardName) return 'card';
+    const normalized = String(cardName).replace(/ /g, '_').replace(/-/g, '_');
+    const safe = normalized.replace(/[^A-Za-z0-9_]/g, '');
+    return safe || 'card';
+}
+
+function resolveCardImagePath(result) {
+    if (result && result.image_path) return result.image_path;
+    const category = result && result.category ? result.category : '';
     const categoryFolder = category ? category.replace(/ /g, '-') : '';
-    const cardFileName = (cardName || '').replace(/ /g, '_');
-    const imgPath = categoryFolder ? ('assets/' + categoryFolder + '/' + cardFileName + '.webp') : '';
+    const cardFileName = sanitizeCardFileStem(result && result.card_name ? result.card_name : 'card');
+    return categoryFolder ? ('assets/' + categoryFolder + '/' + cardFileName + '.webp') : '';
+}
+
+function addToScannedCards(cardName, icon, category, imagePath) {
+    if (!scannedCardsListEl || !cardName) return;
+    const fallbackResult = { card_name: cardName, category: category, image_path: imagePath || '' };
+    const imgPath = resolveCardImagePath(fallbackResult);
     scannedCardsHistory.unshift({ name: cardName, icon: icon || '✅', category: category || '', imgPath: imgPath });
     if (scannedCardsHistory.length > SCANNED_CARDS_MAX) scannedCardsHistory.pop();
     scannedCardsListEl.innerHTML = scannedCardsHistory.map(function(c) {
@@ -889,6 +1553,7 @@ function addToScannedCards(cardName, icon, category) {
 function showInstructionalFeedback(data) {
     const category = data.category;
     const config = categories[category];
+    const reasonTl = getCategoryReasonTagalog(category);
     
     if (!config) return;
     
@@ -910,11 +1575,7 @@ function showInstructionalFeedback(data) {
     const learnCardDisplay = document.getElementById('learn-card-display');
     const learnCardImage = document.getElementById('learn-card-image');
     if (learnCardDisplay && learnCardImage) {
-        // Build image path: assets/{Category}/{Card_Name}.webp
-        const categoryFolder = category.replace(/ /g, '-'); // "Special Waste" -> "Special-Waste"
-        // Ensure card filename uses underscores (file naming convention)
-        const cardFileName = (data.card_name || 'card').replace(/ /g, '_');
-        learnCardImage.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        learnCardImage.src = resolveCardImagePath(data);
         learnCardImage.alt = friendlyName;
         learnCardDisplay.classList.remove('hidden');
         // Add category class for colored border
@@ -939,10 +1600,10 @@ function showInstructionalFeedback(data) {
     categoryDisplay.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
     
-    addToScannedCards(data.card_name, config.icon, category);
+    addToScannedCards(data.card_name, config.icon, category, data.image_path);
     
-    // Speak it in Tagalog
-    speak('Ito ay isang ' + friendlyName + '! Ilagay ito sa ' + category + '.');
+    // Speak concise reason-based feedback in Tagalog
+    speak('Ang ' + friendlyName + ' ay kabilang sa ' + category + ' dahil ' + reasonTl + '. Very good!');
     
     // Auto-reset to default after a delay
     instructionalResetTimeout = setTimeout(function() {
@@ -992,9 +1653,7 @@ function showAssessmentModal(cardName) {
     
     // Show card image in modal
     if (cardImgEl && currentScanResult) {
-        const categoryFolder = currentScanResult.category.replace(/ /g, '-');
-        const cardFileName = (cardName || '').replace(/ /g, '_');
-        cardImgEl.src = 'assets/' + categoryFolder + '/' + cardFileName + '.webp';
+        cardImgEl.src = resolveCardImagePath(currentScanResult);
         cardImgEl.alt = friendlyName;
     }
     
@@ -1103,8 +1762,10 @@ async function selectAssessmentChoice(selectedCategory) {
 function showAssessmentCorrect(selectedCategory) {
     const config = categories[selectedCategory];
     const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
+    const reasonTl = getCategoryReasonTagalog(selectedCategory);
     
     binbinImg.src = config.mascot;
+    playSfx(successSound);
     binbinImg.style.transform = "scale(1.15) rotate(5deg)";
     setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
@@ -1140,6 +1801,8 @@ function showAssessmentCorrect(selectedCategory) {
     // Hide old test-mode elements
     categoryDisplay.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+
+    speak('Tama! Ang ' + friendlyName + ' ay kabilang sa ' + selectedCategory + ' dahil ' + reasonTl + '. Very good!');
     
     if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, config.icon, selectedCategory);
 }
@@ -1147,8 +1810,10 @@ function showAssessmentCorrect(selectedCategory) {
 function showAssessmentIncorrect(selectedCategory, correctCategory) {
     const correctConfig = categories[correctCategory];
     const friendlyName = currentScanResult ? (currentScanResult.card_name || 'card').replace(/_/g, ' ') : 'card';
+    const reasonTl = getCategoryReasonTagalog(correctCategory);
     
     binbinImg.src = 'assets/binbin_warning.png';
+    playSfx(errorSound);
     binbinImg.style.transform = "scale(1.15) rotate(-5deg)";
     setTimeout(function() {
         binbinImg.style.transform = "scale(1) rotate(0deg)";
@@ -1184,6 +1849,8 @@ function showAssessmentIncorrect(selectedCategory, correctCategory) {
     // Hide old test-mode elements
     categoryDisplay.classList.add('hidden');
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
+
+    speak('Hindi pa tama. Ang ' + friendlyName + ' ay kabilang sa ' + correctCategory + ' dahil ' + reasonTl + '. Subukan ulit!');
     
     // Add to recent scans
     if (currentScanResult && currentScanResult.card_name) addToScannedCards(currentScanResult.card_name, correctConfig.icon, correctCategory);
@@ -1275,7 +1942,7 @@ function showErrorFeedback(data) {
 
 const bgMusic = document.getElementById('background-music');
 const BG_MUSIC_NORMAL_VOL = 0.3;  // Normal background volume
-const BG_MUSIC_DUCK_VOL = 0.08;   // Ducked volume during speech
+const BG_MUSIC_DUCK_VOL = 0.03;   // Ducked volume during speech
 const BG_MUSIC_FADE_MS = 300;     // Fade duration in ms
 
 // Load audio files via fetch + blob URL to prevent IDM from intercepting
@@ -1342,7 +2009,7 @@ function loadAudioSettings() {
             const bgmToggle = document.getElementById('toggle-bgm');
             const sfxToggle = document.getElementById('toggle-sfx');
             if (bgmToggle) bgmToggle.checked = !bgmMuted;
-            if (sfxToggle) sfxToggle.checked = !sfxMuted && isAudioFeedbackEnabled();
+            if (sfxToggle) sfxToggle.checked = !sfxMuted;
         } catch (e) {
             console.log('Could not load audio settings:', e);
         }
@@ -1367,15 +2034,6 @@ function toggleBGM(enabled) {
 }
 
 function toggleSFX(enabled) {
-    if (!isAudioFeedbackEnabled()) {
-        const sfxToggle = document.getElementById('toggle-sfx');
-        if (sfxToggle) sfxToggle.checked = false;
-        sfxMuted = true;
-        applyAudioFeedbackPolicy();
-        saveAudioSettings();
-        return;
-    }
-
     sfxMuted = !enabled;
     applyAudioFeedbackPolicy();
     saveAudioSettings();
@@ -1471,7 +2129,7 @@ function stopSpeech() {
 }
 
 function speak(text) {
-    if (!isAudioFeedbackEnabled()) return;
+    if (sessionMode !== 'assessment' && !isAudioFeedbackEnabled()) return;
 
     // Stop any currently playing TTS audio
     if (currentTTSAudio) {
@@ -1484,6 +2142,8 @@ function speak(text) {
     
     // Duck the background music
     duckBackgroundMusic();
+
+    const assessmentSpeechRate = sessionMode === 'assessment' ? 1.35 : 1.1;
     
     fetch(API_URL + '/tts', {
         method: 'POST',
@@ -1506,6 +2166,7 @@ function speak(text) {
         const audioUrl = URL.createObjectURL(blob);
         currentTTSAudio = new Audio(audioUrl);
         currentTTSAudio.volume = 0.8;
+        currentTTSAudio.playbackRate = assessmentSpeechRate;
         currentTTSAudio.play().catch(e => {
             console.log('TTS play failed:', e);
             restoreBackgroundMusic();
@@ -1523,7 +2184,7 @@ function speak(text) {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             const preferredVoice = getPreferredFemaleVoice();
-            utterance.rate = 0.9;
+            utterance.rate = sessionMode === 'assessment' ? 1.35 : 1.1;
             utterance.pitch = 1.2;
             utterance.volume = 0.8;
             if (preferredVoice) {
@@ -1545,6 +2206,14 @@ function speak(text) {
 // ============================================
 
 document.addEventListener('keydown', (e) => {
+    if (tutorialState && tutorialState.active && e.code === 'Escape') {
+        const skipBtn = tutorialState.overlay ? tutorialState.overlay.querySelector('[data-tutorial-skip]') : null;
+        if (skipBtn) {
+            skipBtn.click();
+            return;
+        }
+    }
+
     // ESC closes the quit modal
     if (e.code === 'Escape') {
         const quitModal = document.getElementById('quitModal');

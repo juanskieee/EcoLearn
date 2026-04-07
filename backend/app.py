@@ -11,7 +11,32 @@ from datetime import datetime
 import hashlib
 import os
 import io
+import sys
+import subprocess
+import threading
+from pathlib import Path
 from gtts import gTTS
+
+# Compatibility shim for loading legacy NumPy pickles across module path changes.
+try:
+    import numpy.core.numeric as _np_numeric
+    import numpy.core.multiarray as _np_multiarray
+    import numpy.core.umath as _np_umath
+
+    sys.modules.setdefault('numpy._core.numeric', _np_numeric)
+    sys.modules.setdefault('numpy._core.multiarray', _np_multiarray)
+    sys.modules.setdefault('numpy._core.umath', _np_umath)
+except Exception:
+    pass
+
+try:
+    from generate_variants import build_variants as gv_build_variants
+    from generate_variants import read_image as gv_read_image
+    from generate_variants import write_image as gv_write_image
+except Exception:
+    gv_build_variants = None
+    gv_read_image = None
+    gv_write_image = None
 
 # --- CONFIGURATION ---
 DB_CONFIG = {
@@ -45,14 +70,35 @@ SESSION_TIMEOUT_MINUTES = 30
 WEBCAM_FPS = 30
 ROI_BOX_COLOR = '#00FF00'
 ENABLE_AUDIO_FEEDBACK = True
-MODEL_VERSION = 'ORB-KNN-v1.0'
+MODEL_VERSION = 'CNN-KNN-v2.0'
 
 # --- OPTIONAL CNN FALLBACK (for unavoidable blur) ---
 CNN_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
 CNN_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_labels.txt')
+CNN_INCREMENTAL_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental.onnx')
+CNN_INCREMENTAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental_labels.txt')
 CNN_INPUT_SIZE = (224, 224)
 CNN_CONFIDENCE_THRESHOLD = 0.65
+CNN_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.85
+CNN_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
 HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs CNN disagreements
+
+SYSTEM_CONFIG_DEFAULTS = [
+    ('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
+    ('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
+    ('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
+    ('cnn_confidence_threshold', '0.65', 'float', 'Minimum confidence for base CNN fallback prediction', 1),
+    ('cnn_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental CNN prediction', 1),
+    ('cnn_focus_roi_scale', '0.80', 'float', 'Center crop scale used before CNN inference (0.5 to 1.0)', 1),
+    ('hybrid_margin', '0.10', 'float', 'Confidence gap required for CNN/ORB override in hybrid mode', 1),
+    ('model_version', 'CNN-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
+    ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
+    ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
+    ('webcam_fps', '30', 'integer', 'Target frames per second for video capture', 1),
+    ('roi_box_color', '#00FF00', 'string', 'Hex color code for scanning area overlay', 1),
+    ('enable_audio_feedback', 'true', 'boolean', 'Whether Bin-Bin provides audio responses', 1),
+    ('pdf_dpi', '300', 'integer', 'Resolution for generating printable Eco-Cards', 0),
+]
 
 app = Flask(__name__)
 CORS(app)
@@ -75,6 +121,249 @@ current_session_id = None
 current_session_mode = None
 cnn_net = None
 cnn_class_to_card_id = {}
+incremental_cnn_net = None
+incremental_cnn_class_to_card_id = {}
+incremental_allowed_card_ids = set()
+training_status_lock = threading.Lock()
+training_status = {
+    'state': 'idle',
+    'started_at': None,
+    'ended_at': None,
+    'last_error': None,
+    'last_log_path': None,
+    'last_trigger': None,
+    'last_card_id': None,
+    'last_card_name': None,
+}
+
+
+def _update_training_status(**kwargs):
+    with training_status_lock:
+        training_status.update(kwargs)
+
+
+def get_training_status_snapshot():
+    with training_status_lock:
+        return dict(training_status)
+
+
+def generate_variants_for_card(png_full_path: str, variants_category_dir: str, stem: str) -> int:
+    """Generate all variants for a single card image into assets_variants/category."""
+    if gv_build_variants is None or gv_read_image is None or gv_write_image is None:
+        raise RuntimeError("generate_variants.py helpers unavailable")
+
+    image = gv_read_image(Path(png_full_path))
+    if image is None:
+        raise RuntimeError(f"Failed to read PNG for variant generation: {png_full_path}")
+
+    variants = gv_build_variants(image)
+    os.makedirs(variants_category_dir, exist_ok=True)
+
+    written = 0
+    for variant_name, variant_img in variants.items():
+        out_path = Path(variants_category_dir) / f"{stem}__{variant_name}.png"
+        gv_write_image(out_path, variant_img, ext='.png')
+        written += 1
+    return written
+
+
+def decode_uploaded_image_to_bgr(file_storage):
+    """Decode uploaded image and flatten alpha onto white to avoid black backgrounds."""
+    raw = file_storage.read()
+    if not raw:
+        return None
+
+    npbuf = np.frombuffer(raw, dtype=np.uint8)
+    img = cv2.imdecode(npbuf, cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return None
+
+    if img.ndim == 2:
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+    if img.shape[2] == 4:
+        bgr = img[:, :, :3].astype(np.float32)
+        alpha = (img[:, :, 3].astype(np.float32) / 255.0)[..., None]
+        bg = np.full_like(bgr, 255.0)
+        flat = bgr * alpha + bg * (1.0 - alpha)
+        return np.clip(flat, 0, 255).astype(np.uint8)
+
+    return img[:, :, :3]
+
+
+def decode_uploaded_image_keep_alpha(file_storage):
+    """Decode uploaded image as-is so alpha can be preserved when saving assets."""
+    raw = file_storage.read()
+    if not raw:
+        return None
+
+    npbuf = np.frombuffer(raw, dtype=np.uint8)
+    return cv2.imdecode(npbuf, cv2.IMREAD_UNCHANGED)
+
+
+def to_bgr_for_ml(img):
+    """Convert decoded image to BGR for ORB/CNN processing while handling alpha safely."""
+    if img is None:
+        return None
+
+    if img.ndim == 2:
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+    if img.shape[2] == 4:
+        bgr = img[:, :, :3].astype(np.float32)
+        alpha = (img[:, :, 3].astype(np.float32) / 255.0)[..., None]
+        bg = np.full_like(bgr, 255.0)
+        flat = bgr * alpha + bg * (1.0 - alpha)
+        return np.clip(flat, 0, 255).astype(np.uint8)
+
+    return img[:, :, :3]
+
+
+def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | None):
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    log_path = os.path.join(backend_dir, 'models', 'cnn_retrain_last.log')
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+    _update_training_status(
+        state='running',
+        started_at=datetime.now().isoformat(timespec='seconds'),
+        ended_at=None,
+        last_error=None,
+        last_log_path=log_path,
+        last_trigger=trigger,
+        last_card_id=card_id,
+        last_card_name=card_name,
+    )
+
+    # Prefer explicit override, then project .venv, then current interpreter.
+    env_python = os.environ.get('ECOLEARN_TRAIN_PYTHON')
+    venv_python = os.path.join(project_root, '.venv', 'Scripts', 'python.exe')
+    if env_python and os.path.exists(env_python):
+        python_exe = env_python
+    elif os.path.exists(venv_python):
+        python_exe = venv_python
+    else:
+        python_exe = sys.executable
+
+    cmd = [python_exe, '-u', 'train_cnn.py']
+
+    # Fast incremental retraining profile after one-shot add/replace.
+    if trigger in {'card_add', 'card_replace'}:
+        incremental_ids = get_incremental_card_ids()
+        if not incremental_ids:
+            _update_training_status(
+                state='completed',
+                ended_at=datetime.now().isoformat(timespec='seconds'),
+                last_error=None,
+            )
+            print('ℹ️ No incremental cards found; skipping incremental CNN retrain')
+            return
+
+        training_ids = list(incremental_ids)
+        if len(training_ids) == 1:
+            anchor_id = get_anchor_card_id(set(training_ids))
+            if anchor_id is not None:
+                training_ids.append(anchor_id)
+                print(f"ℹ️ Added anchor card_id={anchor_id} for one-class incremental training")
+
+        cmd.extend([
+            '--img-size', '224',
+            '--batch-size', '24',
+            '--head-epochs', '1',
+            '--finetune-epochs', '0',
+            '--max-samples-per-class', '12',
+            '--focus-max-samples', '48',
+            '--include-card-ids', ','.join(str(x) for x in training_ids),
+            '--out-keras', 'models/waste_incremental_finetuned.h5',
+            '--out-onnx', 'models/waste_incremental.onnx',
+            '--out-labels', 'models/waste_incremental_labels.txt',
+            '--out-manifest', 'models/training_manifest_incremental.json',
+        ])
+        if card_id is not None:
+            cmd.extend(['--focus-card-id', str(card_id)])
+    try:
+        with open(log_path, 'w', encoding='utf-8') as logf:
+            logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting CNN retrain\n")
+            logf.write(f"trigger={trigger} card_id={card_id} card_name={card_name}\n")
+            logf.write(f"python_executable={python_exe}\n")
+            logf.write(f"command={' '.join(cmd)}\n")
+            logf.flush()
+
+            proc = subprocess.run(
+                cmd,
+                cwd=backend_dir,
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            logf.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] Finished with exit_code={proc.returncode}\n")
+            logf.flush()
+
+        if proc.returncode != 0:
+            _update_training_status(
+                state='failed',
+                ended_at=datetime.now().isoformat(timespec='seconds'),
+                last_error=f"train_cnn.py exited with code {proc.returncode}",
+            )
+            print(f"❌ CNN retrain failed (code {proc.returncode}). See log: {log_path}")
+            return
+
+        if trigger in {'card_add', 'card_replace'}:
+            reloaded = load_incremental_cnn_model()
+        else:
+            reloaded = load_cnn_model()
+            load_incremental_cnn_model()
+        if not reloaded:
+            _update_training_status(
+                state='failed',
+                ended_at=datetime.now().isoformat(timespec='seconds'),
+                last_error='Training finished but CNN reload failed',
+            )
+            print("❌ CNN retrain completed but model reload failed")
+            return
+
+        _update_training_status(
+            state='completed',
+            ended_at=datetime.now().isoformat(timespec='seconds'),
+            last_error=None,
+        )
+        print("✅ CNN retrain completed and model reloaded")
+    except Exception as e:
+        _update_training_status(
+            state='failed',
+            ended_at=datetime.now().isoformat(timespec='seconds'),
+            last_error=str(e),
+        )
+        try:
+            with open(log_path, 'a', encoding='utf-8') as logf:
+                logf.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] Exception: {e}\n")
+        except Exception:
+            pass
+        print(f"❌ CNN retrain exception: {e}")
+
+
+def maybe_start_cnn_retrain(trigger: str, card_id: int | None, card_name: str | None) -> tuple[bool, str]:
+    snap = get_training_status_snapshot()
+    if snap.get('state') == 'running':
+        return False, 'CNN retraining already running'
+
+    thread = threading.Thread(
+        target=_run_cnn_training_job,
+        args=(trigger, card_id, card_name),
+        daemon=True,
+    )
+    _update_training_status(
+        state='queued',
+        started_at=None,
+        ended_at=None,
+        last_error=None,
+        last_trigger=trigger,
+        last_card_id=card_id,
+        last_card_name=card_name,
+    )
+    thread.start()
+    return True, 'CNN retraining started in background'
 
 
 def rebuild_orb_extractor():
@@ -101,6 +390,7 @@ def apply_config_value(config_key, config_value):
     """Apply one config key/value into runtime globals with safe casting."""
     global ORB_FEATURES, KNN_K, LOWE_RATIO, CONFIDENCE_THRESHOLD
     global SESSION_TIMEOUT_MINUTES, WEBCAM_FPS, ROI_BOX_COLOR, ENABLE_AUDIO_FEEDBACK, MODEL_VERSION
+    global CNN_CONFIDENCE_THRESHOLD, CNN_INCREMENTAL_CONFIDENCE_THRESHOLD, CNN_FOCUS_ROI_SCALE, HYBRID_MARGIN
 
     if config_key == 'orb_feature_count':
         ORB_FEATURES = max(100, int(config_value))
@@ -110,6 +400,14 @@ def apply_config_value(config_key, config_value):
         KNN_K = max(2, int(config_value))
     elif config_key == 'knn_distance_threshold':
         LOWE_RATIO = max(0.1, min(0.99, float(config_value)))
+    elif config_key == 'cnn_confidence_threshold':
+        CNN_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
+    elif config_key == 'cnn_incremental_confidence_threshold':
+        CNN_INCREMENTAL_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
+    elif config_key == 'cnn_focus_roi_scale':
+        CNN_FOCUS_ROI_SCALE = max(0.3, min(1.0, float(config_value)))
+    elif config_key == 'hybrid_margin':
+        HYBRID_MARGIN = max(0.0, min(0.5, float(config_value)))
     elif config_key == 'min_confidence_score':
         CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
     elif config_key == 'session_timeout_minutes':
@@ -124,9 +422,33 @@ def apply_config_value(config_key, config_value):
         MODEL_VERSION = str(config_value)
 
 
+def ensure_system_config_defaults():
+    """Seed missing config keys without overwriting existing admin-tuned values."""
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT config_key FROM TBL_SYSTEM_CONFIG")
+    existing = {row['config_key'] for row in cursor.fetchall()}
+
+    missing = [cfg for cfg in SYSTEM_CONFIG_DEFAULTS if cfg[0] not in existing]
+    if missing:
+        cursor.executemany(
+            """
+            INSERT INTO TBL_SYSTEM_CONFIG (config_key, config_value, value_type, description, is_editable)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            missing,
+        )
+        conn.commit()
+
+    cursor.close()
+    conn.close()
+
+
 def load_runtime_config_from_db():
     """Load dynamic settings from TBL_SYSTEM_CONFIG on startup."""
     try:
+        ensure_system_config_defaults()
         conn = connect_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT config_key, config_value FROM TBL_SYSTEM_CONFIG")
@@ -168,11 +490,12 @@ def load_model():
             category_metadata[row['category_id']] = row['category_name']
             
         # Load Card Names and metadata
-        cursor.execute("SELECT card_id, card_name, category_id FROM TBL_CARD_ASSETS WHERE is_active = 1")
+        cursor.execute("SELECT card_id, card_name, category_id, image_path FROM TBL_CARD_ASSETS WHERE is_active = 1")
         for row in cursor.fetchall():
             card_metadata[row['card_id']] = {
                 'name': row['card_name'],
-                'category_id': row['category_id']
+                'category_id': row['category_id'],
+                'image_path': row.get('image_path') or ''
             }
             
         # Load Feature Vectors
@@ -247,13 +570,147 @@ def load_cnn_model():
         return False
 
 
+def get_incremental_card_ids() -> list[int]:
+    """Returns active cards created/updated via one-shot flow for incremental model."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT card_id
+            FROM TBL_CARD_ASSETS
+            WHERE is_active = 1
+              AND (
+                description LIKE '%One-shot learned card%'
+                OR description LIKE '%One-Shot Learning%'
+              )
+            ORDER BY card_id
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [int(r['card_id']) for r in rows]
+    except Exception as e:
+        print(f"⚠️ Failed to fetch incremental card IDs: {e}")
+        return []
+
+
+def get_anchor_card_id(exclude_ids: set[int]) -> int | None:
+    """Pick one active non-incremental card as anchor for one-class training."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+
+        if exclude_ids:
+            placeholders = ','.join(['%s'] * len(exclude_ids))
+            sql = f"""
+                SELECT card_id
+                FROM TBL_CARD_ASSETS
+                WHERE is_active = 1 AND card_id NOT IN ({placeholders})
+                ORDER BY card_id
+                LIMIT 1
+            """
+            cursor.execute(sql, tuple(sorted(exclude_ids)))
+        else:
+            cursor.execute(
+                """
+                SELECT card_id
+                FROM TBL_CARD_ASSETS
+                WHERE is_active = 1
+                ORDER BY card_id
+                LIMIT 1
+                """
+            )
+
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['card_id']) if row else None
+    except Exception as e:
+        print(f"⚠️ Failed to fetch anchor card: {e}")
+        return None
+
+
+def load_incremental_cnn_model():
+    """Loads incremental ONNX model trained only on one-shot cards."""
+    global incremental_cnn_net, incremental_cnn_class_to_card_id, incremental_allowed_card_ids
+
+    incremental_cnn_net = None
+    incremental_cnn_class_to_card_id = {}
+    incremental_allowed_card_ids = set(get_incremental_card_ids())
+
+    if not os.path.exists(CNN_INCREMENTAL_MODEL_PATH):
+        print('ℹ️ Incremental CNN disabled: model file not found')
+        return False
+
+    if not os.path.exists(CNN_INCREMENTAL_LABELS_PATH):
+        print('ℹ️ Incremental CNN disabled: labels file not found')
+        return False
+
+    try:
+        net = cv2.dnn.readNetFromONNX(CNN_INCREMENTAL_MODEL_PATH)
+        class_map = {}
+
+        with open(CNN_INCREMENTAL_LABELS_PATH, 'r', encoding='utf-8') as f:
+            for line in f:
+                row = line.strip()
+                if not row or row.startswith('#'):
+                    continue
+
+                parts = [p.strip() for p in row.split(',') if p.strip()]
+                if len(parts) >= 2:
+                    class_index = int(parts[0])
+                    card_id = int(parts[1])
+                else:
+                    class_index = len(class_map)
+                    card_id = int(parts[0])
+
+                class_map[class_index] = card_id
+
+        incremental_cnn_net = net
+        incremental_cnn_class_to_card_id = class_map
+        print(f"✅ Incremental CNN loaded: {len(incremental_cnn_class_to_card_id)} classes")
+        return True
+    except Exception as e:
+        print(f"⚠️ Incremental CNN disabled: {e}")
+        incremental_cnn_net = None
+        incremental_cnn_class_to_card_id = {}
+        return False
+
+
+def crop_center_roi(image_bgr, scale=0.8):
+    """Returns a centered crop to reduce background noise during CNN inference."""
+    if image_bgr is None or image_bgr.size == 0:
+        return image_bgr
+
+    s = max(0.35, min(1.0, float(scale)))
+    if s >= 0.999:
+        return image_bgr
+
+    h, w = image_bgr.shape[:2]
+    crop_w = max(8, int(w * s))
+    crop_h = max(8, int(h * s))
+
+    start_x = max(0, (w - crop_w) // 2)
+    start_y = max(0, (h - crop_h) // 2)
+    end_x = min(w, start_x + crop_w)
+    end_y = min(h, start_y + crop_h)
+
+    if end_x - start_x < 8 or end_y - start_y < 8:
+        return image_bgr
+
+    return image_bgr[start_y:end_y, start_x:end_x]
+
+
 def predict_waste_cnn(image_bgr):
     """Runs CNN fallback inference and returns ORB-compatible response shape."""
     if cnn_net is None or not cnn_class_to_card_id:
         return {"status": "unknown", "reason": "cnn_unavailable"}
 
     try:
-        resized = cv2.resize(image_bgr, CNN_INPUT_SIZE)
+        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, CNN_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         # Teachable Machine exports are commonly NHWC and can use different
@@ -324,6 +781,7 @@ def predict_waste_cnn(image_bgr):
             "status": "success",
             "card_id": card_id,
             "card_name": card['name'],
+            "image_path": card.get('image_path', ''),
             "category": category,
             "category_id": card['category_id'],
             "matches": 0,
@@ -333,6 +791,91 @@ def predict_waste_cnn(image_bgr):
         }
     except Exception as e:
         return {"status": "unknown", "reason": f"cnn_error:{str(e)}"}
+
+
+def predict_waste_incremental_cnn(image_bgr):
+    """Runs incremental CNN first for one-shot classes only."""
+    if incremental_cnn_net is None or not incremental_cnn_class_to_card_id:
+        return {"status": "unknown", "reason": "incremental_cnn_unavailable"}
+
+    try:
+        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, CNN_INPUT_SIZE)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+        input_variants = [
+            np.expand_dims(rgb, axis=0),
+            np.expand_dims(rgb / 255.0, axis=0),
+            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+        ]
+
+        best_probs = None
+        best_conf = -1.0
+        for candidate in input_variants:
+            try:
+                incremental_cnn_net.setInput(candidate)
+                raw = incremental_cnn_net.forward().flatten()
+                if raw.size == 0:
+                    continue
+
+                raw = raw.astype(np.float64)
+                raw_sum = float(np.sum(raw))
+                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                    probs = raw / raw_sum
+                else:
+                    shifted = raw - np.max(raw)
+                    exp_scores = np.exp(shifted)
+                    denom = float(np.sum(exp_scores))
+                    if denom <= 0.0:
+                        continue
+                    probs = exp_scores / denom
+
+                conf = float(np.max(probs))
+                if conf > best_conf:
+                    best_conf = conf
+                    best_probs = probs
+            except Exception:
+                continue
+
+        if best_probs is None:
+            return {"status": "unknown", "reason": "incremental_cnn_inference_failed"}
+
+        probs = best_probs
+        top_class = int(np.argmax(probs))
+        confidence = float(probs[top_class])
+
+        if confidence < CNN_INCREMENTAL_CONFIDENCE_THRESHOLD:
+            return {
+                "status": "unknown",
+                "reason": "incremental_cnn_low_confidence",
+                "confidence": round(confidence, 2),
+            }
+
+        if top_class not in incremental_cnn_class_to_card_id:
+            return {"status": "unknown", "reason": "incremental_cnn_unmapped_class"}
+
+        card_id = incremental_cnn_class_to_card_id[top_class]
+        if card_id not in incremental_allowed_card_ids:
+            return {"status": "unknown", "reason": "incremental_anchor_class"}
+        card = card_metadata.get(card_id)
+        if not card:
+            return {"status": "unknown", "reason": "incremental_cnn_card_not_found"}
+
+        category = category_metadata.get(card['category_id'])
+        return {
+            "status": "success",
+            "card_id": card_id,
+            "card_name": card['name'],
+            "image_path": card.get('image_path', ''),
+            "category": category,
+            "category_id": card['category_id'],
+            "matches": 0,
+            "confidence": round(confidence, 2),
+            "keypoints_detected": 0,
+            "classifier": "incremental_cnn",
+        }
+    except Exception as e:
+        return {"status": "unknown", "reason": f"incremental_cnn_error:{str(e)}"}
 
 # --- BLUR DETECTION ---
 def detect_blur(image_gray):
@@ -431,7 +974,8 @@ def get_cnn_topk(image_bgr, top_k=3):
         return []
 
     try:
-        resized = cv2.resize(image_bgr, CNN_INPUT_SIZE)
+        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, CNN_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         input_variants = [
@@ -791,17 +1335,19 @@ def classify():
     try:
         start_time = datetime.now()
         file = request.files['image']
-        npimg = np.fromfile(file, np.uint8)
-        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        img = decode_uploaded_image_to_bgr(file)
         
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
-        result = predict_waste_cnn(img)
+        # Dual-model routing: incremental model first, then base model fallback.
+        result = predict_waste_incremental_cnn(img)
+        if result.get('status') != 'success':
+            result = predict_waste_cnn(img)
 
         response_time = (datetime.now() - start_time).total_seconds() * 1000
         result['response_time'] = round(response_time, 2)
-        result['classifier'] = 'cnn_only'
+        result['classifier'] = result.get('classifier', 'cnn_only')
         
         # Don't auto-log in assessment mode - wait for user choice
         if current_session_id and result['status'] == 'success':
@@ -995,6 +1541,50 @@ def end_session():
     except Exception as e:
         print(f"❌ Session end error: {e}")
         return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/tutorial/should-show', methods=['POST'])
+def tutorial_should_show():
+    """Return whether tutorial should be shown for nickname + mode based on DB history."""
+    try:
+        data = request.json or {}
+        nickname = str(data.get('nickname', '')).strip()
+        mode = str(data.get('mode', 'instructional')).strip()
+        current_session_id = data.get('current_session_id')
+
+        if not nickname:
+            return jsonify({"status": "success", "should_show": False})
+
+        conn = connect_db()
+        cursor = conn.cursor()
+
+        query = """
+            SELECT COUNT(*)
+            FROM TBL_SESSIONS
+            WHERE student_nickname = %s
+              AND session_mode = %s
+              AND session_status != 'admin_preset'
+        """
+        params = [nickname, mode]
+
+        if current_session_id is not None:
+            query += " AND session_id != %s"
+            params.append(current_session_id)
+
+        cursor.execute(query, tuple(params))
+        row = cursor.fetchone()
+        prior_sessions = int(row[0]) if row and row[0] is not None else 0
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "should_show": prior_sessions == 0,
+            "prior_sessions": prior_sessions
+        })
+    except Exception as e:
+        print(f"❌ Tutorial should-show error: {e}")
+        return jsonify({"status": "error", "message": str(e), "should_show": False})
 
 def log_scan_transaction(result):
     """Log scan to database"""
@@ -1328,6 +1918,7 @@ def get_system_config():
     Allows administrators to view ORB-KNN parameters
     """
     try:
+        ensure_system_config_defaults()
         conn = connect_db()
         cursor = conn.cursor(dictionary=True)
         
@@ -1357,8 +1948,10 @@ def update_system_config():
     without modifying source code (as per TBL_SYSTEM_CONFIG design)
     """
     global ORB_FEATURES, KNN_K, LOWE_RATIO, MIN_MATCHES, CONFIDENCE_THRESHOLD
+    global CNN_CONFIDENCE_THRESHOLD, CNN_INCREMENTAL_CONFIDENCE_THRESHOLD, CNN_FOCUS_ROI_SCALE, HYBRID_MARGIN
     
     try:
+        ensure_system_config_defaults()
         data = request.json
         config_key = data.get('config_key')
         config_value = data.get('config_value')
@@ -1609,9 +2202,9 @@ def get_student_proficiency():
             SELECT 
                 student_nickname,
                 COUNT(*) as total_sessions,
-                SUM(total_scans) as total_scans,
-                SUM(correct_scans) as total_correct,
-                ROUND(AVG(accuracy_percentage), 1) as avg_accuracy,
+                COALESCE(SUM(total_scans), 0) as total_scans,
+                COALESCE(SUM(correct_scans), 0) as total_correct,
+                ROUND((COALESCE(SUM(correct_scans), 0) * 100.0) / NULLIF(COALESCE(SUM(total_scans), 0), 0), 1) as proficiency_score,
                 MAX(accuracy_percentage) as best_accuracy,
                 MAX(end_time) as last_session
             FROM TBL_SESSIONS
@@ -1619,7 +2212,7 @@ def get_student_proficiency():
             AND student_nickname != 'Guest'
             AND session_mode = 'assessment'
             GROUP BY student_nickname
-            ORDER BY avg_accuracy DESC, total_scans DESC
+            ORDER BY proficiency_score DESC, total_correct DESC, total_scans DESC
         """)
         
         students = cursor.fetchall()
@@ -1633,7 +2226,8 @@ def get_student_proficiency():
                 "sessions": student['total_sessions'],
                 "total_scans": student['total_scans'] or 0,
                 "correct": student['total_correct'] or 0,
-                "avg_accuracy": student['avg_accuracy'] or 0,
+                "proficiency_score": student['proficiency_score'] or 0,
+                "avg_accuracy": student['proficiency_score'] or 0,
                 "best_accuracy": student['best_accuracy'] or 0,
                 "last_session": student['last_session'].strftime("%Y-%m-%d") if student['last_session'] else "N/A"
             })
@@ -1649,6 +2243,243 @@ def get_student_proficiency():
     except Exception as e:
         print(f"❌ Proficiency error: {e}")
         return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/admin/proficiency-reports', methods=['GET'])
+def get_proficiency_reports():
+    """Student proficiency reports endpoint for Objective 1e Admin page."""
+    try:
+        reports, summary = _collect_proficiency_reports()
+
+        return jsonify({
+            "status": "success",
+            "reports": reports,
+            "summary": summary,
+        })
+    except Exception as e:
+        print(f"❌ Proficiency reports error: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+
+
+def _collect_proficiency_reports():
+    conn = connect_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        """
+        SELECT
+            student_nickname,
+            COUNT(*) AS total_sessions,
+            SUM(total_scans) AS total_scans,
+            SUM(correct_scans) AS total_correct,
+            ROUND(AVG(accuracy_percentage), 1) AS avg_accuracy,
+            MAX(accuracy_percentage) AS best_accuracy,
+            COALESCE(MAX(end_time), MAX(start_time)) AS last_session,
+            SUM(CASE WHEN session_status = 'active' THEN 1 ELSE 0 END) AS in_progress_sessions
+        FROM TBL_SESSIONS
+        WHERE session_status IN ('completed', 'active')
+          AND session_mode = 'assessment'
+          AND student_nickname IS NOT NULL
+          AND student_nickname NOT IN ('', 'Guest')
+        GROUP BY student_nickname
+        ORDER BY avg_accuracy DESC, total_scans DESC
+        """
+    )
+
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    reports = []
+    for idx, row in enumerate(rows, 1):
+        reports.append({
+            "rank": idx,
+            "nickname": row['student_nickname'],
+            "sessions": int(row['total_sessions'] or 0),
+            "total_scans": int(row['total_scans'] or 0),
+            "correct": int(row['total_correct'] or 0),
+            "avg_accuracy": float(row['avg_accuracy'] or 0),
+            "best_accuracy": float(row['best_accuracy'] or 0),
+            "last_session": row['last_session'].strftime("%Y-%m-%d") if row['last_session'] else "N/A",
+            "in_progress_sessions": int(row['in_progress_sessions'] or 0),
+        })
+
+    total_students = len(reports)
+    summary = {
+        "total_students": total_students,
+        "total_sessions": sum(r['sessions'] for r in reports),
+        "total_scans": sum(r['total_scans'] for r in reports),
+        "average_accuracy": round((sum(r['avg_accuracy'] for r in reports) / total_students) if total_students else 0.0, 2),
+    }
+    return reports, summary
+
+
+def _pdf_escape_text(text: str) -> str:
+    return str(text).replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+
+
+def _build_minimal_proficiency_pdf(reports, summary):
+    # Minimal single-page PDF fallback (A4 landscape-ish content area)
+    lines = []
+    lines.append('BT /F1 16 Tf 40 560 Td (EcoLearn Student Proficiency Report) Tj ET')
+    lines.append(f"BT /F1 10 Tf 40 542 Td ({_pdf_escape_text('Generated: ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}) Tj ET")
+    summary_text = (
+        f"Students: {summary['total_students']}   Sessions: {summary['total_sessions']}   "
+        f"Total Scans: {summary['total_scans']}   Avg Accuracy: {summary['average_accuracy']}%"
+    )
+    lines.append(f"BT /F1 10 Tf 40 526 Td ({_pdf_escape_text(summary_text)}) Tj ET")
+
+    header = '#   Nickname                  Sessions  Scans  Correct  Avg%  Best%  Last Session'
+    lines.append(f"BT /F1 9 Tf 40 505 Td ({_pdf_escape_text(header)}) Tj ET")
+
+    y = 490
+    for row in reports[:28]:
+        row_text = (
+            f"{str(row['rank']).ljust(3)} {str(row['nickname'])[:24].ljust(24)} "
+            f"{str(row['sessions']).rjust(8)} {str(row['total_scans']).rjust(6)} "
+            f"{str(row['correct']).rjust(8)} {str(row['avg_accuracy']).rjust(5)}% "
+            f"{str(row['best_accuracy']).rjust(5)}% {str(row['last_session'])}"
+        )
+        lines.append(f"BT /F1 9 Tf 40 {y} Td ({_pdf_escape_text(row_text)}) Tj ET")
+        y -= 14
+
+    if not reports:
+        lines.append('BT /F1 10 Tf 40 470 Td (No proficiency data available yet.) Tj ET')
+
+    stream = '\n'.join(lines).encode('latin-1', 'replace')
+
+    objects = []
+    objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+    objects.append(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n")
+    objects.append(b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n")
+    objects.append(b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+    objects.append(
+        b"5 0 obj << /Length " + str(len(stream)).encode('ascii') + b" >> stream\n" + stream + b"\nendstream endobj\n"
+    )
+
+    pdf = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj)
+
+    xref_start = len(pdf)
+    pdf.extend(f"xref\n0 {len(offsets)}\n".encode('ascii'))
+    pdf.extend(b"0000000000 65535 f \n")
+    for off in offsets[1:]:
+        pdf.extend(f"{off:010d} 00000 n \n".encode('ascii'))
+
+    pdf.extend(
+        f"trailer << /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode('ascii')
+    )
+    return bytes(pdf)
+
+
+@app.route('/admin/proficiency-reports/pdf', methods=['GET'])
+def export_proficiency_reports_pdf():
+    """Generate printable student proficiency report as PDF."""
+    try:
+        reports, summary = _collect_proficiency_reports()
+
+        pdf_bytes = None
+        try:
+            import importlib
+            pagesizes = importlib.import_module('reportlab.lib.pagesizes')
+            canvas_module = importlib.import_module('reportlab.pdfgen.canvas')
+            A4 = pagesizes.A4
+            landscape = pagesizes.landscape
+            rl_canvas = canvas_module
+
+            buffer = io.BytesIO()
+            pdf = rl_canvas.Canvas(buffer, pagesize=landscape(A4))
+            page_width, page_height = landscape(A4)
+
+            def draw_header(y):
+                pdf.setFont("Helvetica-Bold", 14)
+                pdf.drawString(36, y, "EcoLearn Student Proficiency Report")
+                pdf.setFont("Helvetica", 10)
+                pdf.drawString(36, y - 14, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                pdf.drawString(36, y - 28, f"Students: {summary['total_students']}   Sessions: {summary['total_sessions']}   Total Scans: {summary['total_scans']}   Avg Accuracy: {summary['average_accuracy']}%")
+
+            columns = [
+                ("#", 24),
+                ("Nickname", 170),
+                ("Sessions", 60),
+                ("Scans", 55),
+                ("Correct", 55),
+                ("Avg%", 55),
+                ("Best%", 55),
+                ("Last Session", 80),
+                ("In Progress", 75),
+            ]
+
+            x0 = 36
+            y = page_height - 48
+            draw_header(y)
+            y -= 52
+
+            def draw_table_header(y_pos):
+                pdf.setFont("Helvetica-Bold", 9)
+                x = x0
+                for name, width in columns:
+                    pdf.drawString(x, y_pos, name)
+                    x += width
+                pdf.line(x0, y_pos - 3, x0 + sum(w for _, w in columns), y_pos - 3)
+
+            draw_table_header(y)
+            y -= 16
+
+            pdf.setFont("Helvetica", 9)
+            for row in reports:
+                if y < 44:
+                    pdf.showPage()
+                    y = page_height - 48
+                    draw_header(y)
+                    y -= 52
+                    draw_table_header(y)
+                    y -= 16
+                    pdf.setFont("Helvetica", 9)
+
+                values = [
+                    str(row['rank']),
+                    str(row['nickname'])[:35],
+                    str(row['sessions']),
+                    str(row['total_scans']),
+                    str(row['correct']),
+                    f"{row['avg_accuracy']}%",
+                    f"{row['best_accuracy']}%",
+                    str(row['last_session']),
+                    str(row['in_progress_sessions']),
+                ]
+
+                x = x0
+                for (value, (_, width)) in zip(values, columns):
+                    pdf.drawString(x, y, value)
+                    x += width
+                y -= 14
+
+            if not reports:
+                pdf.setFont("Helvetica", 10)
+                pdf.drawString(x0, y, "No proficiency data available yet.")
+
+            pdf.save()
+            pdf_bytes = buffer.getvalue()
+            buffer.close()
+        except Exception:
+            pdf_bytes = _build_minimal_proficiency_pdf(reports, summary)
+
+        filename = f"EcoLearn_Student_Proficiency_Report_{datetime.now().strftime('%Y-%m-%d')}.pdf"
+        return Response(
+            pdf_bytes,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Length': str(len(pdf_bytes)),
+            },
+        )
+    except Exception as e:
+        print(f"❌ Proficiency PDF export error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/admin/one-shot-learn', methods=['POST'])
 def one_shot_learning():
@@ -1684,12 +2515,12 @@ def one_shot_learning():
         
         category_folder = CATEGORY_FOLDERS.get(str(category_id), 'Compostable')
         
-        # Process the uploaded image (keep as high quality for training)
+        # Decode once: keep alpha for saved card assets, convert separately for ML features.
         file = request.files['image']
-        npimg = np.fromfile(file, np.uint8)
-        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        img_saved = decode_uploaded_image_keep_alpha(file)
+        img = to_bgr_for_ml(img_saved)
         
-        if img is None:
+        if img is None or img_saved is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
         # Extract ORB features from the original HIGH-QUALITY image (PNG quality)
@@ -1744,11 +2575,11 @@ def one_shot_learning():
             card_code = old_result[1] if old_result else f"{safe_name[:3].upper()}{datetime.now().strftime('%H%M%S')}"
             
             # Save PNG (high quality for training)
-            cv2.imwrite(png_full_path, img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+            cv2.imwrite(png_full_path, img_saved, [cv2.IMWRITE_PNG_COMPRESSION, 1])
             print(f"📸 Saved training PNG: {png_full_path}")
             
             # Convert and save WebP (optimized for display)
-            cv2.imwrite(webp_full_path, img, [cv2.IMWRITE_WEBP_QUALITY, 85])
+            cv2.imwrite(webp_full_path, img_saved, [cv2.IMWRITE_WEBP_QUALITY, 85])
             print(f"🌐 Saved display WebP: {webp_full_path}")
             
             # Update card metadata with WebP path for display
@@ -1792,12 +2623,29 @@ def one_shot_learning():
             if card_id in card_metadata:
                 card_metadata[card_id]['name'] = card_name
                 card_metadata[card_id]['category_id'] = int(category_id)
+                card_metadata[card_id]['image_path'] = webp_db_path
             
             conn.commit()
             cursor.close()
             conn.close()
             
             print(f"✅ Card updated: {card_name} | Features: {len(kp)} | PNG: {png_db_path} | WebP: {webp_db_path}")
+
+            variants_generated = 0
+            retrain_started = False
+            retrain_msg = 'CNN retraining was not started'
+            pipeline_warning = None
+            try:
+                variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
+                variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
+                retrain_started, retrain_msg = maybe_start_cnn_retrain(
+                    trigger='card_replace',
+                    card_id=card_id,
+                    card_name=card_name,
+                )
+            except Exception as pipeline_err:
+                pipeline_warning = f"Card updated, but pipeline failed: {pipeline_err}"
+                print(f"⚠️ {pipeline_warning}")
             
             return jsonify({
                 "status": "success",
@@ -1805,9 +2653,14 @@ def one_shot_learning():
                 "card_id": card_id,
                 "card_code": card_code,
                 "features_extracted": len(kp),
+                "variants_generated": variants_generated,
                 "png_path": png_db_path,
                 "webp_path": webp_db_path,
-                "image_path": webp_db_path  # For display
+                "image_path": webp_db_path,  # For display
+                "cnn_retrain_started": retrain_started,
+                "cnn_retrain_message": retrain_msg,
+                "cnn_retrain_status_url": "/admin/cnn-training-status",
+                "pipeline_warning": pipeline_warning,
             })
             
         else:
@@ -1815,11 +2668,11 @@ def one_shot_learning():
             card_code = f"{safe_name[:3].upper()}{datetime.now().strftime('%H%M%S')}"
             
             # Save PNG (high quality for training)
-            cv2.imwrite(png_full_path, img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+            cv2.imwrite(png_full_path, img_saved, [cv2.IMWRITE_PNG_COMPRESSION, 1])
             print(f"📸 Saved training PNG: {png_full_path}")
             
             # Convert and save WebP (optimized for display)
-            cv2.imwrite(webp_full_path, img, [cv2.IMWRITE_WEBP_QUALITY, 85])
+            cv2.imwrite(webp_full_path, img_saved, [cv2.IMWRITE_WEBP_QUALITY, 85])
             print(f"🌐 Saved display WebP: {webp_full_path}")
             
             # Insert card asset with WebP path for display
@@ -1857,13 +2710,30 @@ def one_shot_learning():
             })
             card_metadata[new_card_id] = {
                 'name': card_name,
-                'category_id': int(category_id)
+                'category_id': int(category_id),
+                'image_path': webp_db_path
             }
             
             cursor.close()
             conn.close()
             
             print(f"✅ New card registered: {card_name} | Features: {len(kp)} | PNG: {png_db_path} | WebP: {webp_db_path}")
+
+            variants_generated = 0
+            retrain_started = False
+            retrain_msg = 'CNN retraining was not started'
+            pipeline_warning = None
+            try:
+                variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
+                variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
+                retrain_started, retrain_msg = maybe_start_cnn_retrain(
+                    trigger='card_add',
+                    card_id=new_card_id,
+                    card_name=card_name,
+                )
+            except Exception as pipeline_err:
+                pipeline_warning = f"Card added, but pipeline failed: {pipeline_err}"
+                print(f"⚠️ {pipeline_warning}")
             
             return jsonify({
                 "status": "success",
@@ -1871,9 +2741,14 @@ def one_shot_learning():
                 "card_id": new_card_id,
                 "card_code": card_code,
                 "features_extracted": len(kp),
+                "variants_generated": variants_generated,
                 "png_path": png_db_path,
                 "webp_path": webp_db_path,
-                "image_path": webp_db_path  # For display
+                "image_path": webp_db_path,  # For display
+                "cnn_retrain_started": retrain_started,
+                "cnn_retrain_message": retrain_msg,
+                "cnn_retrain_status_url": "/admin/cnn-training-status",
+                "pipeline_warning": pipeline_warning,
             })
         
     except Exception as e:
@@ -1881,6 +2756,30 @@ def one_shot_learning():
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/admin/cnn-training-status', methods=['GET'])
+def cnn_training_status():
+    """Returns latest CNN retraining job state for Admin UI polling."""
+    return jsonify({
+        "status": "success",
+        "training": get_training_status_snapshot(),
+    })
+
+
+@app.route('/admin/cnn-retrain', methods=['POST'])
+def admin_trigger_cnn_retrain():
+    """Manual retrain trigger for Admin tools."""
+    started, msg = maybe_start_cnn_retrain(
+        trigger='manual_admin',
+        card_id=None,
+        card_name=None,
+    )
+    return jsonify({
+        "status": "success" if started else "busy",
+        "message": msg,
+        "training": get_training_status_snapshot(),
+    })
 
 @app.route('/admin/cards/<int:card_id>', methods=['DELETE'])
 def delete_card(card_id):
@@ -1892,7 +2791,7 @@ def delete_card(card_id):
 
         # Fetch card info
         cursor.execute("""
-            SELECT ca.card_name, ca.image_path
+            SELECT ca.card_name, ca.image_path, ca.image_filename
             FROM TBL_CARD_ASSETS ca
             WHERE ca.card_id = %s AND ca.is_active = 1
         """, (card_id,))
@@ -1903,7 +2802,7 @@ def delete_card(card_id):
             conn.close()
             return jsonify({"status": "error", "message": "Card not found or already deleted"})
 
-        card_name, image_path = card
+        card_name, image_path, image_filename = card
 
         # Soft-delete: deactivate in TBL_CARD_ASSETS
         cursor.execute("UPDATE TBL_CARD_ASSETS SET is_active = 0 WHERE card_id = %s", (card_id,))
@@ -1935,6 +2834,38 @@ def delete_card(card_id):
             if os.path.exists(png_full):
                 os.remove(png_full)
                 print(f"🗑️ Removed PNG: {png_full}")
+
+            # Remove all generated variants for this card.
+            # Match by stems from DB image filename/path and sanitized card name.
+            path_obj = Path(image_path)
+            category_folder = path_obj.parent.name if path_obj.parent else ''
+            variants_dir = Path(base_dir) / 'assets_variants' / category_folder
+
+            stem_candidates = set()
+            if path_obj.stem:
+                stem_candidates.add(path_obj.stem)
+            if image_filename:
+                stem_candidates.add(Path(image_filename).stem)
+
+            safe_name = card_name.replace(' ', '_').replace('-', '_')
+            safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
+            if safe_name:
+                stem_candidates.add(safe_name)
+
+            removed_variants = 0
+            if variants_dir.exists() and stem_candidates:
+                variant_exts = {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
+                for stem in stem_candidates:
+                    for p in variants_dir.glob(f"{stem}__*"):
+                        try:
+                            if p.is_file() and p.suffix.lower() in variant_exts:
+                                p.unlink()
+                                removed_variants += 1
+                        except Exception:
+                            continue
+
+            if removed_variants > 0:
+                print(f"🗑️ Removed variants: {removed_variants} file(s) for card stem(s) {sorted(stem_candidates)}")
 
         print(f"🗑️ Card deleted: {card_name} (ID: {card_id})")
         return jsonify({"status": "success", "message": f"Card '{card_name}' deleted successfully"})
@@ -2108,6 +3039,9 @@ def add_cache_headers(response):
     # Don't cache API responses that change frequently
     if request.path.startswith('/admin/') or request.path == '/scan':
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    # Don't aggressively cache admin dashboard scripts; they change often.
+    elif request.path.startswith('/js/admin'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     # Cache static files aggressively
     elif request.path.endswith(('.css', '.js', '.png', '.jpg', '.jpeg', '.webp', '.gif')):
         response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
@@ -2120,6 +3054,7 @@ if __name__ == '__main__':
     if load_model():
         load_runtime_config_from_db()
         load_cnn_model()
+        load_incremental_cnn_model()
         print("✅ System Ready!")
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:

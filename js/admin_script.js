@@ -11,6 +11,137 @@ let allCards = []; // For card gallery
 let currentFilter = 'all';
 let currentSearchTerm = '';
 let refreshTimer = null;
+let isAddCardModalLocked = false;
+let proficiencyReportData = [];
+const ADD_CARD_UI_STATE_KEY = 'ecolearn_admin_add_card_ui_state_v1';
+const ADMIN_LAST_TAB_KEY = 'ecolearn_admin_last_tab_v1';
+const ADMIN_TAB_IDS = new Set([
+    'overview',
+    'confusion-matrix',
+    'leaderboard',
+    'proficiency-reports',
+    'asset-repository',
+    'one-shot',
+    'config',
+    'logs',
+    'nicknames'
+]);
+
+function getSavedAdminTab() {
+    const savedTab = localStorage.getItem(ADMIN_LAST_TAB_KEY);
+    if (savedTab && ADMIN_TAB_IDS.has(savedTab)) {
+        return savedTab;
+    }
+    return 'overview';
+}
+
+function restoreAdminTabAfterReload() {
+    const targetTab = getSavedAdminTab();
+    if (targetTab !== 'overview') {
+        showTab(targetTab);
+        setActiveNavItemByTab(targetTab);
+    }
+}
+
+function getAddCardUiState() {
+    try {
+        const raw = sessionStorage.getItem(ADD_CARD_UI_STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        console.warn('Failed to parse add-card UI state:', error);
+        return null;
+    }
+}
+
+function clearAddCardUiState() {
+    sessionStorage.removeItem(ADD_CARD_UI_STATE_KEY);
+}
+
+function saveAddCardUiState(partial = {}) {
+    const state = {
+        ...(getAddCardUiState() || {}),
+        ...partial,
+        updatedAt: Date.now(),
+    };
+    sessionStorage.setItem(ADD_CARD_UI_STATE_KEY, JSON.stringify(state));
+}
+
+function setActiveNavItemByTab(tabId) {
+    document.querySelectorAll('.nav-item').forEach((item) => item.classList.remove('active'));
+
+    const navItems = Array.from(document.querySelectorAll('.nav-item'));
+    const navItem = navItems.find((item) => {
+        const onclickAttr = item.getAttribute('onclick') || '';
+        return onclickAttr.includes(`'${tabId}'`) || onclickAttr.includes(`"${tabId}"`);
+    });
+
+    if (navItem) {
+        navItem.classList.add('active');
+    }
+}
+
+async function restoreAddCardUiStateAfterReload() {
+    const state = getAddCardUiState();
+    if (!state || !state.modalOpen) return;
+
+    try {
+        const response = await fetch(`${API_URL}/admin/cnn-training-status`);
+        const data = await response.json();
+        const training = data && data.status === 'success' ? data.training : null;
+        const isTrainingActive = training && (training.state === 'queued' || training.state === 'running');
+
+        if (!isTrainingActive) {
+            clearAddCardUiState();
+            return;
+        }
+    } catch (error) {
+        console.warn('Unable to validate training status on restore:', error);
+    }
+
+    showTab('one-shot');
+    setActiveNavItemByTab('one-shot');
+
+    const modal = document.getElementById('add-card-modal');
+    if (!modal) return;
+
+    const replaceCardInput = document.getElementById('replace-card-id');
+    const nameInput = document.getElementById('one-shot-name');
+    const categorySelect = document.getElementById('one-shot-category');
+    const preview = document.getElementById('image-preview');
+    const formTitle = document.getElementById('form-title');
+    const submitText = document.getElementById('submit-btn-text');
+    const cancelReplaceBtn = document.getElementById('cancel-replace-btn');
+    const resultDiv = document.getElementById('one-shot-result');
+
+    if (replaceCardInput) replaceCardInput.value = state.replaceCardId || '';
+    if (nameInput) nameInput.value = state.cardName || '';
+    if (categorySelect && state.categoryId) categorySelect.value = String(state.categoryId);
+
+    if (state.previewHtml && preview) {
+        preview.innerHTML = state.previewHtml;
+        preview.classList.toggle('has-image', Boolean(state.previewHasImage));
+    }
+
+    const isReplacement = Boolean(state.isReplacement || state.replaceCardId);
+    if (formTitle) formTitle.innerHTML = isReplacement ? '🔄 Replace Card' : 'Add New Card';
+    if (submitText) submitText.textContent = isReplacement ? 'Update Card' : 'Register New Card';
+    if (cancelReplaceBtn) cancelReplaceBtn.style.display = isReplacement ? 'block' : 'none';
+
+    if (resultDiv) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = state.resultBackground || '#FEF3C7';
+        resultDiv.style.color = state.resultColor || '#92400E';
+        resultDiv.innerHTML = state.resultHtml || '<div class="result-title">⏳ Restored session</div><span class="result-subline">CNN retraining is still running...</span>';
+    }
+
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => modal.classList.add('active'));
+    setAddCardModalLocked(true);
+
+    if (resultDiv) {
+        await monitorCnnRetrainProgress(resultDiv, !isReplacement);
+    }
+}
 
 // Debounce utility for performance
 function debounce(func, wait) {
@@ -59,6 +190,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     loadDashboard();
+    restoreAdminTabAfterReload();
+    restoreAddCardUiStateAfterReload();
     
     // Event delegation for nickname removal
     document.addEventListener('click', function(event) {
@@ -120,6 +253,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'leaderboard':
                     loadLeaderboard();
                     break;
+                case 'proficiency-reports':
+                    loadProficiencyReports();
+                    break;
                 // Asset tabs use AppState - no refresh needed
                 // They're pre-rendered and update universally
             }
@@ -136,6 +272,7 @@ async function loadDashboard() {
             loadNicknames(),
             loadConfusionMatrix(),
             loadLeaderboard(),
+            loadProficiencyReports(),
             AppState.loadAll(),  // Single Source of Truth - renders BOTH views
             loadSystemConfig()
         ]);
@@ -149,7 +286,11 @@ async function loadDashboard() {
 // No data fetching! Both views are pre-rendered by AppState
 // ============================================
 
-function showTab(tabId) {
+function showTab(tabId, evt = null) {
+    if (!ADMIN_TAB_IDS.has(tabId)) {
+        tabId = 'overview';
+    }
+
     // Get current active tab before switching
     const currentTab = document.querySelector('.tab-content.active');
     
@@ -172,12 +313,16 @@ function showTab(tabId) {
     const selectedTab = document.getElementById(tabId);
     if (selectedTab) {
         selectedTab.classList.add('active');
+        localStorage.setItem(ADMIN_LAST_TAB_KEY, tabId);
     }
     
-    // Add active to clicked nav item
-    if (event && event.target) {
-        const navItem = event.target.closest('.nav-item');
-        if (navItem) navItem.classList.add('active');
+    // Add active to clicked nav item; fallback to tab id mapping for programmatic calls.
+    const targetEl = evt && evt.target && typeof evt.target.closest === 'function' ? evt.target : null;
+    const navItem = targetEl ? targetEl.closest('.nav-item') : null;
+    if (navItem) {
+        navItem.classList.add('active');
+    } else {
+        setActiveNavItemByTab(tabId);
     }
 
     // Update top-header title based on active tab
@@ -185,6 +330,7 @@ function showTab(tabId) {
         'overview':         'Overview',
         'confusion-matrix': 'Confusion Matrix',
         'leaderboard':      'Leaderboard',
+        'proficiency-reports': 'Proficiency Reports',
         'asset-repository': 'Asset Repository',
         'one-shot':         'Card Manager',
         'config':           'System Config',
@@ -1107,6 +1253,214 @@ function getAccuracyColor(accuracy) {
     return '#FCC8C8';
 }
 
+async function loadProficiencyReports() {
+    const tbody = document.getElementById('proficiency-report-body');
+    if (!tbody) return;
+
+    try {
+        const response = await fetch(`${API_URL}/admin/proficiency-reports`);
+        const data = await response.json();
+
+        const reports = Array.isArray(data.reports) ? data.reports : [];
+
+        if (data.status !== 'success' || reports.length === 0) {
+            proficiencyReportData = [];
+            updateProficiencySummary([]);
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="empty-state-cell">
+                        <div class="empty-state">
+                        <span class="empty-icon">📑</span>
+                        <strong>No proficiency reports yet</strong>
+                        <small>Assessment sessions are required to generate student proficiency reports</small>
+                        </div>
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        proficiencyReportData = reports;
+        updateProficiencySummary(proficiencyReportData);
+
+        tbody.innerHTML = proficiencyReportData.map((row) => `
+            <tr>
+                <td class="rank-cell">${row.rank}</td>
+                <td class="lb-name-cell"><strong>${row.nickname}</strong></td>
+                <td class="lb-num-cell">${row.sessions}</td>
+                <td class="lb-num-cell">${row.total_scans}</td>
+                <td class="lb-num-cell">${row.correct}</td>
+                <td class="lb-num-cell">${row.avg_accuracy}%</td>
+                <td><span class="accuracy-badge" style="background:${getAccuracyColor(row.best_accuracy)}">${row.best_accuracy}%</span></td>
+                <td class="lb-num-cell">${row.last_session || 'N/A'}</td>
+            </tr>`).join('');
+    } catch (error) {
+        console.error('Proficiency report load error:', error);
+        proficiencyReportData = [];
+        updateProficiencySummary([]);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="empty-state-cell">
+                    <div class="empty-state">
+                        <span class="empty-icon">⚠️</span>
+                        <strong>Error loading proficiency reports</strong>
+                        <small>Please refresh the page or check backend connection</small>
+                    </div>
+                </td>
+            </tr>`;
+    }
+}
+
+function updateProficiencySummary(rows) {
+    const totalStudentsEl = document.getElementById('report-total-students');
+    const totalSessionsEl = document.getElementById('report-total-sessions');
+    const averageAccuracyEl = document.getElementById('report-average-accuracy');
+    const totalScansEl = document.getElementById('report-total-scans');
+
+    const totalStudents = rows.length;
+    const totalSessions = rows.reduce((sum, row) => sum + Number(row.sessions || 0), 0);
+    const totalScans = rows.reduce((sum, row) => sum + Number(row.total_scans || 0), 0);
+    const accuracyAvg = totalStudents > 0
+        ? (rows.reduce((sum, row) => sum + Number(row.avg_accuracy || 0), 0) / totalStudents)
+        : 0;
+
+    if (totalStudentsEl) totalStudentsEl.textContent = totalStudents;
+    if (totalSessionsEl) totalSessionsEl.textContent = totalSessions;
+    if (averageAccuracyEl) averageAccuracyEl.textContent = `${accuracyAvg.toFixed(1)}%`;
+    if (totalScansEl) totalScansEl.textContent = totalScans;
+}
+
+function searchProficiencyReports(searchTerm) {
+    const tbody = document.getElementById('proficiency-report-body');
+    if (!tbody) return;
+
+    const clearBtn = document.getElementById('proficiency-search-clear');
+    const term = String(searchTerm || '').toLowerCase().trim();
+    if (clearBtn) clearBtn.style.display = term ? 'flex' : 'none';
+
+    const rows = tbody.querySelectorAll('tr');
+
+    // If table is in no-data/error empty mode, avoid injecting another empty state.
+    if (rows.length === 1 && rows[0].querySelector('.empty-state')) {
+        return;
+    }
+
+    let visibleCount = 0;
+
+    rows.forEach((row) => {
+        if (row.querySelector('.empty-state')) return;
+        const nickname = row.querySelector('td:nth-child(2)')?.textContent.toLowerCase() || '';
+        const rank = row.querySelector('td:nth-child(1)')?.textContent.toLowerCase() || '';
+        const isVisible = !term || nickname.includes(term) || rank.includes(term);
+        row.style.display = isVisible ? '' : 'none';
+        if (isVisible) visibleCount += 1;
+    });
+
+    let emptyRow = tbody.querySelector('.proficiency-search-empty-row');
+    if (visibleCount === 0 && term) {
+        if (!emptyRow) {
+            emptyRow = document.createElement('tr');
+            emptyRow.className = 'proficiency-search-empty-row';
+            emptyRow.innerHTML = `
+                <td colspan="8" class="empty-state-cell">
+                    <div class="empty-state">
+                        <span class="empty-icon">🔍</span>
+                        <strong>No report entries match "${searchTerm}"</strong>
+                        <small>Try another nickname keyword</small>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(emptyRow);
+        } else {
+            emptyRow.style.display = '';
+            const title = emptyRow.querySelector('strong');
+            if (title) title.textContent = `No report entries match "${searchTerm}"`;
+        }
+    } else if (emptyRow) {
+        emptyRow.style.display = 'none';
+    }
+}
+
+function clearProficiencySearch() {
+    const searchInput = document.getElementById('proficiency-search');
+    const clearBtn = document.getElementById('proficiency-search-clear');
+
+    if (searchInput) {
+        searchInput.value = '';
+        searchProficiencyReports('');
+    }
+    if (clearBtn) clearBtn.style.display = 'none';
+}
+
+function exportProficiencyReportCsv() {
+    if (!Array.isArray(proficiencyReportData) || proficiencyReportData.length === 0) {
+        showNotification('No proficiency report data to export yet', 'info');
+        return;
+    }
+
+    const headers = ['Rank', 'Nickname', 'Sessions', 'Total Scans', 'Correct', 'Average Accuracy', 'Best Accuracy', 'Last Session'];
+    const csvRows = [headers.join(',')];
+
+    proficiencyReportData.forEach((row) => {
+        const csvRow = [
+            row.rank,
+            `"${String(row.nickname || '').replace(/"/g, '""')}"`,
+            row.sessions,
+            row.total_scans,
+            row.correct,
+            `${row.avg_accuracy}%`,
+            `${row.best_accuracy}%`,
+            row.last_session || 'N/A'
+        ];
+        csvRows.push(csvRow.join(','));
+    });
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `EcoLearn_Student_Proficiency_Report_${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    showNotification('📥 Proficiency report exported', 'success');
+}
+
+async function exportProficiencyReportPdf() {
+    try {
+        showNotification('🖨️ Generating proficiency PDF...', 'info');
+        const response = await fetch(`${API_URL}/admin/proficiency-reports/pdf`);
+        if (!response.ok) {
+            let msg = `Request failed (${response.status})`;
+            try {
+                const err = await response.json();
+                if (err && err.message) msg = err.message;
+            } catch (_) {
+                // no-op
+            }
+            throw new Error(msg);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0, 10);
+        link.href = url;
+        link.download = `EcoLearn_Student_Proficiency_Report_${stamp}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+
+        showNotification('✅ Proficiency PDF downloaded', 'success');
+    } catch (error) {
+        console.error('Proficiency PDF export error:', error);
+        showNotification(`❌ ${error.message || 'Unable to export PDF'}`, 'error');
+    }
+}
+
 // ============================================
 // ASSET REPOSITORY (PDF Generation)
 // NOTE: loadAssetRepository() and viewCategoryCards() are
@@ -1635,6 +1989,7 @@ async function confirmDeleteCard(cardId, cardName) {
                 await OptimizedAdmin.loadAssets(true);
                 OptimizedAdmin.renderCardGallery(currentFilter, currentSearchTerm);
             }
+            setTimeout(() => smoothReloadPage(), 220);
         } else {
             showNotification(`❌ ${data.message}`, 'error');
         }
@@ -1707,33 +2062,87 @@ function resetCardForm() {
     const resultDiv = document.getElementById('one-shot-result');
     resultDiv.style.display = 'none';
     resultDiv.innerHTML = '';
+    clearAddCardUiState();
+}
+
+function setAddCardModalLocked(locked) {
+    const modal = document.getElementById('add-card-modal');
+    if (!modal) return;
+
+    isAddCardModalLocked = Boolean(locked);
+    modal.classList.toggle('is-locked', isAddCardModalLocked);
+
+    const controlIds = [
+        'one-shot-name',
+        'one-shot-category',
+        'one-shot-image',
+        'submit-card-btn',
+        'cancel-replace-btn'
+    ];
+
+    controlIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = isAddCardModalLocked;
+    });
+
+    const closeBtn = modal.querySelector('.modal-close');
+    if (closeBtn) closeBtn.disabled = isAddCardModalLocked;
+}
+
+function smoothReloadPage(delayMs = 420) {
+    if (document.body.classList.contains('smooth-reloading')) return;
+
+    document.body.classList.add('smooth-reloading');
+    setTimeout(() => {
+        window.location.reload();
+    }, delayMs);
 }
 
 function cancelCardEdit() {
+    if (isAddCardModalLocked) return;
+
     // Close the modal first, then reset form after it's hidden
     const modal = document.getElementById('add-card-modal');
     modal.classList.remove('active');
     setTimeout(() => {
         modal.style.display = 'none';
+        setAddCardModalLocked(false);
         resetCardForm();
     }, 200);
 }
 
 function openAddCardModal() {
     const modal = document.getElementById('add-card-modal');
+    setAddCardModalLocked(false);
     // Reset form when opening fresh
     resetCardForm();
     modal.style.display = 'flex';
     requestAnimationFrame(() => {
         modal.classList.add('active');
+        saveAddCardUiState({
+            modalOpen: true,
+            tabId: 'one-shot',
+            isReplacement: false,
+            replaceCardId: '',
+            cardName: '',
+            categoryId: document.getElementById('one-shot-category')?.value || '1',
+            previewHtml: document.getElementById('image-preview')?.innerHTML || '',
+            previewHasImage: false,
+            resultHtml: '',
+            resultBackground: '',
+            resultColor: '',
+        });
     });
 }
 
-function closeAddCardModal() {
+function closeAddCardModal(forceClose = false) {
+    if (isAddCardModalLocked && !forceClose) return;
+
     const modal = document.getElementById('add-card-modal');
     modal.classList.remove('active');
     setTimeout(() => {
         modal.style.display = 'none';
+        setAddCardModalLocked(false);
         resetCardForm();
     }, 200);
 }
@@ -1747,11 +2156,27 @@ function previewCardImage() {
         reader.onload = function(e) {
             preview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
             preview.classList.add('has-image');
+            saveAddCardUiState({
+                modalOpen: true,
+                tabId: 'one-shot',
+                cardName: document.getElementById('one-shot-name')?.value.trim() || '',
+                categoryId: document.getElementById('one-shot-category')?.value || '1',
+                replaceCardId: document.getElementById('replace-card-id')?.value || '',
+                isReplacement: Boolean(document.getElementById('replace-card-id')?.value),
+                previewHtml: preview.innerHTML,
+                previewHasImage: true,
+            });
         };
         reader.readAsDataURL(input.files[0]);
     } else {
         preview.innerHTML = '<div class="image-preview-placeholder">Upload an image to preview</div>';
         preview.classList.remove('has-image');
+        saveAddCardUiState({
+            modalOpen: true,
+            tabId: 'one-shot',
+            previewHtml: preview.innerHTML,
+            previewHasImage: false,
+        });
     }
 }
 
@@ -1783,6 +2208,20 @@ async function submitOneShotLearning() {
     resultDiv.style.background = '#FEF3C7';
     resultDiv.style.color = '#D97706';
     resultDiv.innerHTML = `⏳ ${isReplacement ? 'Updating' : 'Processing'} image and extracting features...`;
+    setAddCardModalLocked(true);
+    saveAddCardUiState({
+        modalOpen: true,
+        tabId: 'one-shot',
+        isReplacement,
+        replaceCardId,
+        cardName,
+        categoryId,
+        resultHtml: resultDiv.innerHTML,
+        resultBackground: resultDiv.style.background,
+        resultColor: resultDiv.style.color,
+        previewHtml: document.getElementById('image-preview')?.innerHTML || '',
+        previewHasImage: document.getElementById('image-preview')?.classList.contains('has-image') || false,
+    });
     
     try {
         const formData = new FormData();
@@ -1808,14 +2247,43 @@ async function submitOneShotLearning() {
             // Show success with dual storage info
             let storageInfo = '';
             if (data.png_path && data.webp_path) {
-                storageInfo = `<br><small style="opacity: 0.7;">📸 Training: PNG | 🌐 Display: WebP</small>`;
+                storageInfo = '<span class="result-subline">📸 Training: PNG | 🌐 Display: WebP</span>';
             }
-            resultDiv.innerHTML = `✅ ${data.message}<br><small style="opacity: 0.8;">Card Code: ${data.card_code} | Features: ${data.features_extracted}</small>${storageInfo}`;
+
+            const variantsInfo = (typeof data.variants_generated === 'number')
+                ? `<span class="result-subline">🧪 Variants generated: ${data.variants_generated}</span>`
+                : '';
+
+            const retrainInfo = data.cnn_retrain_message
+                ? `<span class="result-subline">🧠 CNN Retrain: ${data.cnn_retrain_message}</span>`
+                : '';
+
+            const pipelineWarning = data.pipeline_warning
+                ? `<span class="result-subline warning">⚠️ ${data.pipeline_warning}</span>`
+                : '';
+
+            resultDiv.innerHTML = `<div class="result-title">✅ ${data.message}</div><span class="result-subline">Card Code: ${data.card_code} | Features: ${data.features_extracted}</span>${storageInfo}${variantsInfo}${retrainInfo}${pipelineWarning}`;
+            saveAddCardUiState({
+                modalOpen: true,
+                tabId: 'one-shot',
+                isReplacement,
+                replaceCardId,
+                cardName,
+                categoryId,
+                resultHtml: resultDiv.innerHTML,
+                resultBackground: resultDiv.style.background,
+                resultColor: resultDiv.style.color,
+            });
             
-            // Close modal after showing success
-            setTimeout(() => {
-                closeAddCardModal();
-            }, 2000);
+            // Keep modal open while CNN retraining runs; close only on completion.
+            if (!data.cnn_retrain_started) {
+                setTimeout(() => {
+                    closeAddCardModal(true);
+                    if (!isReplacement) {
+                        setTimeout(() => smoothReloadPage(), 220);
+                    }
+                }, 2000);
+            }
             
             // STATE-DRIVEN UPDATE: Sync both views via AppState
             if (typeof AppState !== 'undefined') {
@@ -1823,7 +2291,19 @@ async function submitOneShotLearning() {
                 if (data.card) {
                     AppState.universalCardUpdate(isReplacement ? 'update' : 'add', data.card);
                 } else {
-                    // Fallback: reload everything from server
+                    // Fallback: force-refresh caches so newly added cards appear immediately.
+                    if (typeof OptimizedAdmin !== 'undefined' && OptimizedAdmin.cache) {
+                        OptimizedAdmin.cache.invalidate('assets');
+                        OptimizedAdmin.cache.invalidate('cards');
+                        OptimizedAdmin.cache.invalidate('counts');
+                    }
+
+                    // Reset AppState load guard and pull fresh data.
+                    AppState.isLoaded = false;
+                    AppState.cards = [];
+                    AppState.categories = {};
+
+                    // Reload everything from server
                     await AppState.loadAll();
                 }
             } else {
@@ -1831,10 +2311,16 @@ async function submitOneShotLearning() {
                 loadCardGallery();
                 loadAssetRepository();
             }
+
+            if (data.cnn_retrain_started) {
+                await monitorCnnRetrainProgress(resultDiv, !isReplacement);
+            }
         } else {
             resultDiv.style.background = '#FEE2E2';
             resultDiv.style.color = '#DC2626';
             resultDiv.innerHTML = `❌ ${data.message}`;
+            setAddCardModalLocked(false);
+            clearAddCardUiState();
         }
         
     } catch (error) {
@@ -1843,7 +2329,111 @@ async function submitOneShotLearning() {
         resultDiv.style.background = '#FEE2E2';
         resultDiv.style.color = '#DC2626';
         resultDiv.innerHTML = '❌ Error connecting to server.';
+        setAddCardModalLocked(false);
+        clearAddCardUiState();
     }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = false) {
+    const maxChecks = 120; // ~6 minutes at 3s interval
+    let checks = 0;
+
+    const statusId = 'cnn-retrain-live-status';
+    let statusEl = document.getElementById(statusId);
+    if (!statusEl) {
+        resultDiv.insertAdjacentHTML('beforeend', `<span id="${statusId}" class="result-subline"></span>`);
+        statusEl = document.getElementById(statusId);
+    }
+
+    saveAddCardUiState({
+        modalOpen: true,
+        tabId: 'one-shot',
+        resultHtml: resultDiv.innerHTML,
+        resultBackground: resultDiv.style.background,
+        resultColor: resultDiv.style.color,
+    });
+
+    while (checks < maxChecks) {
+        checks += 1;
+        try {
+            const response = await fetch(`${API_URL}/admin/cnn-training-status`);
+            const data = await response.json();
+            if (data.status !== 'success' || !data.training) {
+                await sleep(3000);
+                continue;
+            }
+
+            const t = data.training;
+            const state = t.state || 'unknown';
+
+            if (state === 'queued' || state === 'running') {
+                resultDiv.style.background = '#FEF3C7';
+                resultDiv.style.color = '#92400E';
+                if (statusEl) statusEl.textContent = `⏳ CNN retraining ${state}...`;
+                saveAddCardUiState({
+                    modalOpen: true,
+                    tabId: 'one-shot',
+                    resultHtml: resultDiv.innerHTML,
+                    resultBackground: resultDiv.style.background,
+                    resultColor: resultDiv.style.color,
+                });
+                await sleep(3000);
+                continue;
+            }
+
+            if (state === 'idle') {
+                resultDiv.style.background = '#FEF3C7';
+                resultDiv.style.color = '#92400E';
+                if (statusEl) {
+                    statusEl.textContent = '⚠️ Retraining is idle (no active job). Please click Add/Update again, then keep this modal open.';
+                }
+                setAddCardModalLocked(false);
+                clearAddCardUiState();
+                return;
+            }
+
+            if (state === 'completed') {
+                resultDiv.style.background = '#DCFCE7';
+                resultDiv.style.color = '#10B981';
+                if (statusEl) statusEl.textContent = '✅ CNN retraining completed. Model updated.';
+                setTimeout(() => {
+                    closeAddCardModal(true);
+                    if (shouldReloadOnSuccess) {
+                        setTimeout(() => smoothReloadPage(), 220);
+                    }
+                }, 1200);
+                clearAddCardUiState();
+                return;
+            }
+
+            if (state === 'failed') {
+                resultDiv.style.background = '#FEE2E2';
+                resultDiv.style.color = '#B91C1C';
+                const err = t.last_error ? String(t.last_error) : 'Unknown training error';
+                if (statusEl) statusEl.textContent = `❌ CNN retraining failed: ${err}`;
+                setAddCardModalLocked(false);
+                clearAddCardUiState();
+                return;
+            }
+
+            await sleep(3000);
+        } catch (error) {
+            console.error('CNN status polling error:', error);
+            await sleep(3000);
+        }
+    }
+
+    resultDiv.style.background = '#FEF3C7';
+    resultDiv.style.color = '#92400E';
+    if (statusEl) {
+        statusEl.textContent = '⚠️ CNN retraining is still running. You can close this modal and check status later.';
+    }
+    setAddCardModalLocked(false);
+    clearAddCardUiState();
 }
 
 // ============================================
@@ -1854,6 +2444,10 @@ const configMetadata = {
     'orb_feature_count': { icon: '🔬', type: 'number', min: 100, max: 2000, step: 100 },
     'knn_k_value': { icon: '🔢', type: 'number', min: 1, max: 5, step: 1 },
     'knn_distance_threshold': { icon: '⚖️', type: 'slider', min: 0.5, max: 0.9, step: 0.05 },
+    'cnn_confidence_threshold': { icon: '🧠', type: 'slider', min: 0.5, max: 0.95, step: 0.01 },
+    'cnn_incremental_confidence_threshold': { icon: '🚀', type: 'slider', min: 0.5, max: 0.99, step: 0.01 },
+    'cnn_focus_roi_scale': { icon: '🎯', type: 'slider', min: 0.5, max: 1.0, step: 0.05 },
+    'hybrid_margin': { icon: '⚗️', type: 'slider', min: 0.02, max: 0.3, step: 0.01 },
     'min_confidence_score': { icon: '🎯', type: 'slider', min: 0.3, max: 0.9, step: 0.05 },
     'session_timeout_minutes': { icon: '⏱️', type: 'number', min: 5, max: 120, step: 5 },
     'webcam_fps': { icon: '📹', type: 'number', min: 15, max: 60, step: 5 },
@@ -2026,7 +2620,22 @@ function updateColorValue(configKey, colorValue) {
 }
 
 function formatConfigKey(key) {
-    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const labels = {
+        orb_feature_count: 'ORB Feature Count',
+        knn_k_value: 'KNN K Value',
+        knn_distance_threshold: 'KNN Distance Threshold',
+        cnn_confidence_threshold: 'CNN Confidence Threshold',
+        cnn_incremental_confidence_threshold: 'CNN Incremental Confidence Threshold',
+        cnn_focus_roi_scale: 'CNN Focus ROI Scale',
+        hybrid_margin: 'Hybrid Override Margin',
+        min_confidence_score: 'Minimum Confidence Score',
+        session_timeout_minutes: 'Session Timeout Minutes',
+        webcam_fps: 'Webcam FPS',
+        roi_box_color: 'ROI Box Color',
+        enable_audio_feedback: 'Enable Audio Feedback',
+        model_version: 'Model Version'
+    };
+    return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
 // Collect all changed configuration values

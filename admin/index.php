@@ -51,6 +51,11 @@ require_once 'check_session.php';
                     </a>
                 </li>
                 <li>
+                    <a href="javascript:void(0)" class="nav-item" onclick="showTab('proficiency-reports')">
+                        📑 Proficiency Reports
+                    </a>
+                </li>
+                <li>
                     <a href="javascript:void(0)" class="nav-item" onclick="showTab('asset-repository')">
                         🗃️ Asset Repository
                     </a>
@@ -213,6 +218,78 @@ require_once 'check_session.php';
                         <div class="lb-podium" id="lb-podium"></div>
                     </div>
 
+                </div>
+            </section>
+
+            <!-- STUDENT PROFICIENCY REPORTS SECTION -->
+            <section id="proficiency-reports" class="section-card scrollable tab-content">
+                <div class="proficiency-report-layout">
+                    <div class="lb-section-header">
+                        <div class="lb-section-header-left">
+                            <p class="lb-subtitle">Track student proficiency from assessment sessions with printable reports.</p>
+                        </div>
+                        <div class="lb-section-header-right">
+                            <button class="btn-add btn-export-report" onclick="exportProficiencyReportPdf()">🖨️ Export PDF</button>
+                            <button class="btn-add btn-export-report" onclick="exportProficiencyReportCsv()">📥 Export CSV</button>
+                            <div class="lb-search-container">
+                                <input type="text"
+                                       class="lb-search-input"
+                                       id="proficiency-search"
+                                       placeholder="🔍 Search nickname..."
+                                       oninput="searchProficiencyReports(this.value)">
+                                <button class="lb-search-clear-btn hidden"
+                                        id="proficiency-search-clear"
+                                        onclick="clearProficiencySearch()">
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="proficiency-summary-grid" id="proficiency-summary-grid">
+                        <div class="proficiency-summary-card">
+                            <span class="label">Students</span>
+                            <strong id="report-total-students">0</strong>
+                        </div>
+                        <div class="proficiency-summary-card">
+                            <span class="label">Assessment Sessions</span>
+                            <strong id="report-total-sessions">0</strong>
+                        </div>
+                        <div class="proficiency-summary-card">
+                            <span class="label">Average Accuracy</span>
+                            <strong id="report-average-accuracy">0%</strong>
+                        </div>
+                        <div class="proficiency-summary-card">
+                            <span class="label">Total Scans</span>
+                            <strong id="report-total-scans">0</strong>
+                        </div>
+                    </div>
+
+                    <div class="lb-table-wrapper" id="proficiency-table-wrapper">
+                        <div class="table-responsive leaderboard-table-container">
+                            <table class="modern-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Nickname</th>
+                                        <th>Sessions</th>
+                                        <th>Total Scans</th>
+                                        <th>Correct</th>
+                                        <th>Avg Accuracy</th>
+                                        <th>Best Accuracy</th>
+                                        <th>Last Session</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="proficiency-report-body">
+                                    <tr>
+                                        <td colspan="8" class="loading-cell">
+                                            <div class="spinner"></div> Loading proficiency reports...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
 

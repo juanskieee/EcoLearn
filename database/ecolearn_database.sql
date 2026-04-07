@@ -172,7 +172,11 @@ INSERT INTO TBL_SYSTEM_CONFIG (config_key, config_value, value_type, description
 ('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
 ('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
 ('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
-('model_version', 'ORB-KNN-v1.0', 'string', 'Current algorithm version identifier', 0),
+('cnn_confidence_threshold', '0.65', 'float', 'Minimum confidence for base CNN fallback prediction', 1),
+('cnn_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental CNN prediction', 1),
+('cnn_focus_roi_scale', '0.80', 'float', 'Center crop scale used before CNN inference (0.5 to 1.0)', 1),
+('hybrid_margin', '0.10', 'float', 'Confidence gap required for CNN/ORB override in hybrid mode', 1),
+('model_version', 'CNN-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
 ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
 ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
 ('webcam_fps', '30', 'integer', 'Target frames per second for video capture', 1),
@@ -222,6 +226,29 @@ BEGIN
         AND (p_mode IS NULL OR session_mode = p_mode)
     GROUP BY student_nickname
     ORDER BY avg_accuracy DESC, avg_speed ASC;
+END //
+DELIMITER ;
+
+-- Procedure: Get Student Proficiency Reports (Objective 1e)
+DELIMITER //
+CREATE PROCEDURE GetStudentProficiencyReports()
+BEGIN
+    SELECT
+        student_nickname,
+        COUNT(*) AS total_sessions,
+        SUM(total_scans) AS total_scans,
+        SUM(correct_scans) AS total_correct,
+        ROUND(AVG(accuracy_percentage), 1) AS avg_accuracy,
+        MAX(accuracy_percentage) AS best_accuracy,
+        COALESCE(MAX(end_time), MAX(start_time)) AS last_session,
+        SUM(CASE WHEN session_status = 'active' THEN 1 ELSE 0 END) AS in_progress_sessions
+    FROM TBL_SESSIONS
+    WHERE session_status IN ('completed', 'active')
+      AND session_mode = 'assessment'
+      AND student_nickname IS NOT NULL
+      AND student_nickname NOT IN ('', 'Guest')
+    GROUP BY student_nickname
+    ORDER BY avg_accuracy DESC, total_scans DESC;
 END //
 DELIMITER ;
 
@@ -291,6 +318,24 @@ SELECT
     MIN(s.accuracy_percentage) as worst_session_accuracy
 FROM TBL_SESSIONS s
 WHERE s.session_status = 'completed'
+GROUP BY s.student_nickname;
+
+-- View: Student Proficiency Reports (Assessment-only, Objective 1e)
+CREATE VIEW vw_student_proficiency_reports AS
+SELECT
+        s.student_nickname,
+        COUNT(*) AS total_sessions,
+        SUM(s.total_scans) AS total_scans,
+        SUM(s.correct_scans) AS total_correct,
+        ROUND(AVG(s.accuracy_percentage), 1) AS avg_accuracy,
+        MAX(s.accuracy_percentage) AS best_accuracy,
+        COALESCE(MAX(s.end_time), MAX(s.start_time)) AS last_session,
+        SUM(CASE WHEN s.session_status = 'active' THEN 1 ELSE 0 END) AS in_progress_sessions
+FROM TBL_SESSIONS s
+WHERE s.session_status IN ('completed', 'active')
+    AND s.session_mode = 'assessment'
+    AND s.student_nickname IS NOT NULL
+    AND s.student_nickname NOT IN ('', 'Guest')
 GROUP BY s.student_nickname;
 
 -- ============================================================
