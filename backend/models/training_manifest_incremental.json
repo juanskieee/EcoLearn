@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-04-07T18:40:29",
+  "generated_at": "2026-04-08T09:12:47",
   "backbone": "MobileNetV2",
   "backbone_weights": "imagenet_download",
   "class_count": 2,
-  "train_samples": 51,
-  "val_samples": 9,
+  "train_samples": 42,
+  "val_samples": 7,
   "preprocessing": "mobilenet_v2.preprocess_input ([-1, 1])",
   "augmentation": [
     "random_flip_lr",
@@ -21,7 +21,7 @@
     },
     {
       "class_index": 1,
-      "card_id": 75,
+      "card_id": 76,
       "card_name": "Cardboard Cup"
     }
   ],
@@ -43,10 +43,10 @@
     "dropout": 0.3,
     "trainer_augment": false,
     "max_samples_per_class": 12,
-    "focus_card_id": 75,
+    "focus_card_id": 76,
     "focus_max_samples": 48,
     "imagenet_weights_path": null,
-    "include_card_ids": "75,1",
+    "include_card_ids": "76,1",
     "log_file": "models\\cnn_retrain_last.log"
   }
 }

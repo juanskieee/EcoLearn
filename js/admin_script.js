@@ -1391,73 +1391,163 @@ function clearProficiencySearch() {
     if (clearBtn) clearBtn.style.display = 'none';
 }
 
-function exportProficiencyReportCsv() {
+function openProficiencyReportPrintPreview() {
     if (!Array.isArray(proficiencyReportData) || proficiencyReportData.length === 0) {
-        showNotification('No proficiency report data to export yet', 'info');
+        showNotification('No proficiency report data available for preview yet', 'info');
         return;
     }
 
-    const headers = ['Rank', 'Nickname', 'Sessions', 'Total Scans', 'Correct', 'Average Accuracy', 'Best Accuracy', 'Last Session'];
-    const csvRows = [headers.join(',')];
-
-    proficiencyReportData.forEach((row) => {
-        const csvRow = [
-            row.rank,
-            `"${String(row.nickname || '').replace(/"/g, '""')}"`,
-            row.sessions,
-            row.total_scans,
-            row.correct,
-            `${row.avg_accuracy}%`,
-            `${row.best_accuracy}%`,
-            row.last_session || 'N/A'
-        ];
-        csvRows.push(csvRow.join(','));
-    });
-
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const stamp = new Date().toISOString().slice(0, 10);
-    link.href = url;
-    link.download = `EcoLearn_Student_Proficiency_Report_${stamp}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-
-    showNotification('📥 Proficiency report exported', 'success');
-}
-
-async function exportProficiencyReportPdf() {
     try {
-        showNotification('🖨️ Generating proficiency PDF...', 'info');
-        const response = await fetch(`${API_URL}/admin/proficiency-reports/pdf`);
-        if (!response.ok) {
-            let msg = `Request failed (${response.status})`;
-            try {
-                const err = await response.json();
-                if (err && err.message) msg = err.message;
-            } catch (_) {
-                // no-op
-            }
-            throw new Error(msg);
+        const jsPdfRef = window.jspdf && window.jspdf.jsPDF;
+        if (!jsPdfRef) {
+            showNotification('Print preview library is unavailable', 'error');
+            return;
         }
 
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        const stamp = new Date().toISOString().slice(0, 10);
-        link.href = url;
-        link.download = `EcoLearn_Student_Proficiency_Report_${stamp}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
+        const tableName = 'Student Proficiency Reports';
+        const printedBy = document.body?.dataset?.adminUsername || 'Admin';
+        const printedAt = new Date().toLocaleString();
 
-        showNotification('✅ Proficiency PDF downloaded', 'success');
+        const summaryStudents = proficiencyReportData.length;
+        const summarySessions = proficiencyReportData.reduce((sum, row) => sum + Number(row.sessions || 0), 0);
+        const summaryScans = proficiencyReportData.reduce((sum, row) => sum + Number(row.total_scans || 0), 0);
+        const summaryAvgAccuracy = summaryStudents > 0
+            ? (proficiencyReportData.reduce((sum, row) => sum + Number(row.avg_accuracy || 0), 0) / summaryStudents)
+            : 0;
+
+        const doc = new jsPdfRef({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const marginX = 10;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text(tableName, marginX, 16);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Table Name: ${tableName}`, marginX, 23);
+        doc.text(`Printed By: ${printedBy}`, marginX, 28);
+        doc.text(`Printed On: ${printedAt}`, marginX, 33);
+
+        doc.setDrawColor(31, 41, 55);
+        doc.setLineWidth(0.5);
+        doc.line(marginX, 36, pageWidth - marginX, 36);
+
+        const summaryY = 40;
+        const summaryGap = 2;
+        const summaryBoxWidth = (pageWidth - (marginX * 2) - (summaryGap * 3)) / 4;
+        const summaryBoxHeight = 14;
+        const summaryItems = [
+            { label: 'Students', value: String(summaryStudents) },
+            { label: 'Assessment Sessions', value: String(summarySessions) },
+            { label: 'Average Accuracy', value: `${summaryAvgAccuracy.toFixed(1)}%` },
+            { label: 'Total Scans', value: String(summaryScans) }
+        ];
+
+        summaryItems.forEach((item, index) => {
+            const x = marginX + index * (summaryBoxWidth + summaryGap);
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(x, summaryY, summaryBoxWidth, summaryBoxHeight, 1.5, 1.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(item.label, x + 2, summaryY + 5);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text(item.value, x + 2, summaryY + 11);
+        });
+
+        const headers = ['#', 'Nickname', 'Sessions', 'Total Scans', 'Correct', 'Avg Accuracy', 'Best Accuracy', 'Last Session'];
+    const widthRatios = [0.55, 2.2, 1.0, 1.35, 1.0, 1.35, 1.45, 1.9];
+    const ratioTotal = widthRatios.reduce((sum, value) => sum + value, 0);
+    const usableTableWidth = pageWidth - (marginX * 2);
+    const colWidths = widthRatios.map((ratio) => (usableTableWidth * ratio) / ratioTotal);
+    const startX = marginX;
+        const rowHeight = 7;
+    const pageBottom = pageHeight - 12;
+
+        const drawTableHeader = (y) => {
+            let x = startX;
+            doc.setFillColor(15, 23, 42);
+            doc.setDrawColor(15, 23, 42);
+            doc.rect(startX, y, usableTableWidth, rowHeight, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setDrawColor(148, 163, 184);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+
+            headers.forEach((header, i) => {
+                doc.rect(x, y, colWidths[i], rowHeight, 'D');
+                doc.text(String(header), x + (colWidths[i] / 2), y + 4.6, { align: 'center' });
+                x += colWidths[i];
+            });
+        };
+
+        let currentY = summaryY + summaryBoxHeight + 5;
+        drawTableHeader(currentY);
+        currentY += rowHeight;
+
+        doc.setTextColor(17, 24, 39);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+
+        proficiencyReportData.forEach((row) => {
+            if (currentY + rowHeight > pageBottom) {
+                doc.addPage();
+                currentY = 15;
+                drawTableHeader(currentY);
+                currentY += rowHeight;
+                doc.setTextColor(17, 24, 39);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+            }
+
+            const rowData = [
+                String(row.rank ?? ''),
+                String(row.nickname ?? ''),
+                String(row.sessions ?? ''),
+                String(row.total_scans ?? ''),
+                String(row.correct ?? ''),
+                `${String(row.avg_accuracy ?? '')}%`,
+                `${String(row.best_accuracy ?? '')}%`,
+                String(row.last_session || 'N/A')
+            ];
+
+            let x = startX;
+            rowData.forEach((cell, i) => {
+                doc.setDrawColor(226, 232, 240);
+                doc.rect(x, currentY, colWidths[i], rowHeight);
+                const maxWidth = colWidths[i] - 2;
+                const text = doc.splitTextToSize(cell, maxWidth);
+                doc.text(text[0] || '', x + 1, currentY + 4.5);
+                x += colWidths[i];
+            });
+
+            currentY += rowHeight;
+        });
+
+        const pdfUrl = doc.output('bloburl');
+        const previewWindow = window.open(pdfUrl, '_blank');
+        if (!previewWindow) {
+            showNotification('Please allow pop-ups to open print preview', 'error');
+            return;
+        }
+
+        showNotification('🖨️ Print preview opened', 'success');
+
+        setTimeout(() => {
+            URL.revokeObjectURL(pdfUrl);
+        }, 120000);
     } catch (error) {
-        console.error('Proficiency PDF export error:', error);
-        showNotification(`❌ ${error.message || 'Unable to export PDF'}`, 'error');
+        console.error('Proficiency print preview error:', error);
+        showNotification('❌ Unable to open print preview', 'error');
     }
 }
 

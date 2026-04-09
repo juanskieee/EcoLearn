@@ -26,7 +26,7 @@ require_once 'check_session.php';
     <!-- jsPDF for actual PDF file generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-<body>
+<body data-admin-username="<?php echo htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', ENT_QUOTES, 'UTF-8'); ?>">
 
     <div class="admin-wrapper">
         <nav class="sidebar">
@@ -229,8 +229,7 @@ require_once 'check_session.php';
                             <p class="lb-subtitle">Track student proficiency from assessment sessions with printable reports.</p>
                         </div>
                         <div class="lb-section-header-right">
-                            <button class="btn-add btn-export-report" onclick="exportProficiencyReportPdf()">🖨️ Export PDF</button>
-                            <button class="btn-add btn-export-report" onclick="exportProficiencyReportCsv()">📥 Export CSV</button>
+                            <button class="btn-add btn-export-report" onclick="openProficiencyReportPrintPreview()">🖨️ Print Preview</button>
                             <div class="lb-search-container">
                                 <input type="text"
                                        class="lb-search-input"
