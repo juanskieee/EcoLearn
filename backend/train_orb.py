@@ -1,7 +1,7 @@
 """
-train_cnn.py
+train_orb.py
 ------------
-Fine-tune an EcoLearn CNN model using MobileNetV2 (ImageNet weights),
+Fine-tune an EcoLearn ORB model using MobileNetV2 (ImageNet weights),
 then export ONNX + label map.
 
 Workflow:
@@ -632,7 +632,7 @@ def main() -> None:
                              "If omitted, weights are downloaded from the internet.")
     parser.add_argument("--include-card-ids", default="",
                         help="Comma-separated card IDs to train on (incremental model mode).")
-    parser.add_argument("--log-file", default=str(Path("models") / "cnn_retrain_last.log"),
+    parser.add_argument("--log-file", default=str(Path("models") / "orb_retrain_last.log"),
                         help="Optional run log file path. Use empty string to disable.")
     args = parser.parse_args()
 
@@ -656,7 +656,7 @@ def main() -> None:
         out_log.parent.mkdir(parents=True, exist_ok=True)
         if sys.stdout.isatty() and sys.stderr.isatty():
             log_handle = open(out_log, 'w', encoding='utf-8')
-            log_handle.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting train_cnn.py\n")
+            log_handle.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting train_orb.py\n")
             log_handle.write(f"command={' '.join(sys.argv)}\n")
             log_handle.flush()
             sys.stdout = TeeStream(sys.__stdout__, log_handle)
@@ -693,7 +693,7 @@ def main() -> None:
     )
 
     print("=" * 72)
-    print("EcoLearn CNN Trainer  —  MobileNetV2 (ImageNet)")
+    print("EcoLearn ORB Trainer  —  MobileNetV2 (ImageNet)")
     print(f"Active cards      : {len(cards)}")
     print(f"Train samples     : {len(bundle.train_paths)}")
     print(f"Validation samples: {len(bundle.val_paths)}")

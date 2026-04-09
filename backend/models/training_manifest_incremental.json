@@ -47,6 +47,6 @@
     "focus_max_samples": 48,
     "imagenet_weights_path": null,
     "include_card_ids": "76,1",
-    "log_file": "models\\cnn_retrain_last.log"
+    "log_file": "models\\orb_retrain_last.log"
   }
 }

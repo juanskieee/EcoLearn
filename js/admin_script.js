@@ -131,7 +131,7 @@ async function restoreAddCardUiStateAfterReload() {
         resultDiv.style.display = 'block';
         resultDiv.style.background = state.resultBackground || '#FEF3C7';
         resultDiv.style.color = state.resultColor || '#92400E';
-        resultDiv.innerHTML = state.resultHtml || '<div class="result-title">⏳ Restored session</div><span class="result-subline">CNN retraining is still running...</span>';
+        resultDiv.innerHTML = state.resultHtml || '<div class="result-title">⏳ Restored session</div><span class="result-subline">ORB retraining is still running...</span>';
     }
 
     modal.style.display = 'flex';
@@ -2345,7 +2345,7 @@ async function submitOneShotLearning() {
                 : '';
 
             const retrainInfo = data.cnn_retrain_message
-                ? `<span class="result-subline">🧠 CNN Retrain: ${data.cnn_retrain_message}</span>`
+                ? `<span class="result-subline">🧠 ORB Retrain: ${data.cnn_retrain_message}</span>`
                 : '';
 
             const pipelineWarning = data.pipeline_warning
@@ -2365,7 +2365,7 @@ async function submitOneShotLearning() {
                 resultColor: resultDiv.style.color,
             });
             
-            // Keep modal open while CNN retraining runs; close only on completion.
+            // Keep modal open while ORB retraining runs; close only on completion.
             if (!data.cnn_retrain_started) {
                 setTimeout(() => {
                     closeAddCardModal(true);
@@ -2463,7 +2463,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
             if (state === 'queued' || state === 'running') {
                 resultDiv.style.background = '#FEF3C7';
                 resultDiv.style.color = '#92400E';
-                if (statusEl) statusEl.textContent = `⏳ CNN retraining ${state}...`;
+                if (statusEl) statusEl.textContent = `⏳ ORB retraining ${state}...`;
                 saveAddCardUiState({
                     modalOpen: true,
                     tabId: 'one-shot',
@@ -2489,7 +2489,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
             if (state === 'completed') {
                 resultDiv.style.background = '#DCFCE7';
                 resultDiv.style.color = '#10B981';
-                if (statusEl) statusEl.textContent = '✅ CNN retraining completed. Model updated.';
+                if (statusEl) statusEl.textContent = '✅ ORB retraining completed. Model updated.';
                 setTimeout(() => {
                     closeAddCardModal(true);
                     if (shouldReloadOnSuccess) {
@@ -2504,7 +2504,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
                 resultDiv.style.background = '#FEE2E2';
                 resultDiv.style.color = '#B91C1C';
                 const err = t.last_error ? String(t.last_error) : 'Unknown training error';
-                if (statusEl) statusEl.textContent = `❌ CNN retraining failed: ${err}`;
+                if (statusEl) statusEl.textContent = `❌ ORB retraining failed: ${err}`;
                 setAddCardModalLocked(false);
                 clearAddCardUiState();
                 return;
@@ -2512,7 +2512,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
 
             await sleep(3000);
         } catch (error) {
-            console.error('CNN status polling error:', error);
+            console.error('ORB status polling error:', error);
             await sleep(3000);
         }
     }
@@ -2520,7 +2520,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
     resultDiv.style.background = '#FEF3C7';
     resultDiv.style.color = '#92400E';
     if (statusEl) {
-        statusEl.textContent = '⚠️ CNN retraining is still running. You can close this modal and check status later.';
+        statusEl.textContent = '⚠️ ORB retraining is still running. You can close this modal and check status later.';
     }
     setAddCardModalLocked(false);
     clearAddCardUiState();
@@ -2714,9 +2714,9 @@ function formatConfigKey(key) {
         orb_feature_count: 'ORB Feature Count',
         knn_k_value: 'KNN K Value',
         knn_distance_threshold: 'KNN Distance Threshold',
-        cnn_confidence_threshold: 'CNN Confidence Threshold',
-        cnn_incremental_confidence_threshold: 'CNN Incremental Confidence Threshold',
-        cnn_focus_roi_scale: 'CNN Focus ROI Scale',
+        cnn_confidence_threshold: 'ORB Confidence Threshold',
+        cnn_incremental_confidence_threshold: 'ORB Incremental Confidence Threshold',
+        cnn_focus_roi_scale: 'ORB Focus ROI Scale',
         hybrid_margin: 'Hybrid Override Margin',
         min_confidence_score: 'Minimum Confidence Score',
         session_timeout_minutes: 'Session Timeout Minutes',

@@ -72,7 +72,7 @@ ROI_BOX_COLOR = '#00FF00'
 ENABLE_AUDIO_FEEDBACK = True
 MODEL_VERSION = 'CNN-KNN-v2.0'
 
-# --- OPTIONAL CNN FALLBACK (for unavoidable blur) ---
+# --- OPTIONAL ORB FALLBACK (for unavoidable blur) ---
 CNN_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
 CNN_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_labels.txt')
 CNN_INCREMENTAL_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental.onnx')
@@ -81,16 +81,16 @@ CNN_INPUT_SIZE = (224, 224)
 CNN_CONFIDENCE_THRESHOLD = 0.65
 CNN_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.85
 CNN_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
-HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs CNN disagreements
+HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs fallback disagreements
 
 SYSTEM_CONFIG_DEFAULTS = [
     ('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
     ('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
     ('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
-    ('cnn_confidence_threshold', '0.65', 'float', 'Minimum confidence for base CNN fallback prediction', 1),
-    ('cnn_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental CNN prediction', 1),
-    ('cnn_focus_roi_scale', '0.80', 'float', 'Center crop scale used before CNN inference (0.5 to 1.0)', 1),
-    ('hybrid_margin', '0.10', 'float', 'Confidence gap required for CNN/ORB override in hybrid mode', 1),
+    ('cnn_confidence_threshold', '0.65', 'float', 'Minimum confidence for base ORB fallback prediction', 1),
+    ('cnn_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental ORB prediction', 1),
+    ('cnn_focus_roi_scale', '0.80', 'float', 'Center crop scale used before ORB inference (0.5 to 1.0)', 1),
+    ('hybrid_margin', '0.10', 'float', 'Confidence gap required for ORB override in hybrid mode', 1),
     ('model_version', 'CNN-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
     ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
     ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
@@ -202,7 +202,7 @@ def decode_uploaded_image_keep_alpha(file_storage):
 
 
 def to_bgr_for_ml(img):
-    """Convert decoded image to BGR for ORB/CNN processing while handling alpha safely."""
+    """Convert decoded image to BGR for ORB/fallback processing while handling alpha safely."""
     if img is None:
         return None
 
@@ -222,7 +222,7 @@ def to_bgr_for_ml(img):
 def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | None):
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(backend_dir)
-    log_path = os.path.join(backend_dir, 'models', 'cnn_retrain_last.log')
+    log_path = os.path.join(backend_dir, 'models', 'orb_retrain_last.log')
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
     _update_training_status(
@@ -246,7 +246,7 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
     else:
         python_exe = sys.executable
 
-    cmd = [python_exe, '-u', 'train_cnn.py']
+    cmd = [python_exe, '-u', 'train_orb.py']
 
     # Fast incremental retraining profile after one-shot add/replace.
     if trigger in {'card_add', 'card_replace'}:
@@ -257,7 +257,7 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
                 ended_at=datetime.now().isoformat(timespec='seconds'),
                 last_error=None,
             )
-            print('ℹ️ No incremental cards found; skipping incremental CNN retrain')
+            print('ℹ️ No incremental cards found; skipping incremental ORB retrain')
             return
 
         training_ids = list(incremental_ids)
@@ -284,7 +284,7 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             cmd.extend(['--focus-card-id', str(card_id)])
     try:
         with open(log_path, 'w', encoding='utf-8') as logf:
-            logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting CNN retrain\n")
+            logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting ORB retrain\n")
             logf.write(f"trigger={trigger} card_id={card_id} card_name={card_name}\n")
             logf.write(f"python_executable={python_exe}\n")
             logf.write(f"command={' '.join(cmd)}\n")
@@ -304,9 +304,9 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             _update_training_status(
                 state='failed',
                 ended_at=datetime.now().isoformat(timespec='seconds'),
-                last_error=f"train_cnn.py exited with code {proc.returncode}",
+                last_error=f"train_orb.py exited with code {proc.returncode}",
             )
-            print(f"❌ CNN retrain failed (code {proc.returncode}). See log: {log_path}")
+            print(f"❌ ORB retrain failed (code {proc.returncode}). See log: {log_path}")
             return
 
         if trigger in {'card_add', 'card_replace'}:
@@ -318,9 +318,9 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             _update_training_status(
                 state='failed',
                 ended_at=datetime.now().isoformat(timespec='seconds'),
-                last_error='Training finished but CNN reload failed',
+                last_error='Training finished but ORB reload failed',
             )
-            print("❌ CNN retrain completed but model reload failed")
+            print("❌ ORB retrain completed but model reload failed")
             return
 
         _update_training_status(
@@ -328,7 +328,7 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             ended_at=datetime.now().isoformat(timespec='seconds'),
             last_error=None,
         )
-        print("✅ CNN retrain completed and model reloaded")
+        print("✅ ORB retrain completed and model reloaded")
     except Exception as e:
         _update_training_status(
             state='failed',
@@ -340,13 +340,13 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
                 logf.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] Exception: {e}\n")
         except Exception:
             pass
-        print(f"❌ CNN retrain exception: {e}")
+        print(f"❌ ORB retrain exception: {e}")
 
 
 def maybe_start_cnn_retrain(trigger: str, card_id: int | None, card_name: str | None) -> tuple[bool, str]:
     snap = get_training_status_snapshot()
     if snap.get('state') == 'running':
-        return False, 'CNN retraining already running'
+        return False, 'ORB retraining already running'
 
     thread = threading.Thread(
         target=_run_cnn_training_job,
@@ -363,7 +363,7 @@ def maybe_start_cnn_retrain(trigger: str, card_id: int | None, card_name: str | 
         last_card_name=card_name,
     )
     thread.start()
-    return True, 'CNN retraining started in background'
+    return True, 'ORB retraining started in background'
 
 
 def rebuild_orb_extractor():
@@ -519,18 +519,18 @@ def load_model():
 
 
 def load_cnn_model():
-    """Loads optional ONNX CNN model and class mappings for hybrid fallback."""
+    """Loads optional ONNX ORB-fallback model and class mappings for hybrid fallback."""
     global cnn_net, cnn_class_to_card_id
 
     cnn_net = None
     cnn_class_to_card_id = {}
 
     if not os.path.exists(CNN_MODEL_PATH):
-        print("ℹ️ CNN fallback disabled: model file not found")
+        print("ℹ️ ORB fallback disabled: model file not found")
         return False
 
     if not os.path.exists(CNN_LABELS_PATH):
-        print("⚠️ CNN fallback disabled: labels file not found")
+        print("⚠️ ORB fallback disabled: labels file not found")
         return False
 
     try:
@@ -556,15 +556,15 @@ def load_cnn_model():
                 class_map[class_index] = card_id
 
         if not class_map:
-            print("⚠️ CNN fallback disabled: empty labels mapping")
+            print("⚠️ ORB fallback disabled: empty labels mapping")
             return False
 
         cnn_net = net
         cnn_class_to_card_id = class_map
-        print(f"✅ CNN fallback loaded: {len(cnn_class_to_card_id)} classes")
+        print(f"✅ ORB fallback loaded: {len(cnn_class_to_card_id)} classes")
         return True
     except Exception as e:
-        print(f"⚠️ CNN fallback disabled: {e}")
+        print(f"⚠️ ORB fallback disabled: {e}")
         cnn_net = None
         cnn_class_to_card_id = {}
         return False
@@ -641,11 +641,11 @@ def load_incremental_cnn_model():
     incremental_allowed_card_ids = set(get_incremental_card_ids())
 
     if not os.path.exists(CNN_INCREMENTAL_MODEL_PATH):
-        print('ℹ️ Incremental CNN disabled: model file not found')
+        print('ℹ️ Incremental ORB disabled: model file not found')
         return False
 
     if not os.path.exists(CNN_INCREMENTAL_LABELS_PATH):
-        print('ℹ️ Incremental CNN disabled: labels file not found')
+        print('ℹ️ Incremental ORB disabled: labels file not found')
         return False
 
     try:
@@ -670,17 +670,17 @@ def load_incremental_cnn_model():
 
         incremental_cnn_net = net
         incremental_cnn_class_to_card_id = class_map
-        print(f"✅ Incremental CNN loaded: {len(incremental_cnn_class_to_card_id)} classes")
+        print(f"✅ Incremental ORB loaded: {len(incremental_cnn_class_to_card_id)} classes")
         return True
     except Exception as e:
-        print(f"⚠️ Incremental CNN disabled: {e}")
+        print(f"⚠️ Incremental ORB disabled: {e}")
         incremental_cnn_net = None
         incremental_cnn_class_to_card_id = {}
         return False
 
 
 def crop_center_roi(image_bgr, scale=0.8):
-    """Returns a centered crop to reduce background noise during CNN inference."""
+    """Returns a centered crop to reduce background noise during ORB fallback inference."""
     if image_bgr is None or image_bgr.size == 0:
         return image_bgr
 
@@ -704,7 +704,7 @@ def crop_center_roi(image_bgr, scale=0.8):
 
 
 def predict_waste_cnn(image_bgr):
-    """Runs CNN fallback inference and returns ORB-compatible response shape."""
+    """Runs ORB fallback inference and returns ORB-compatible response shape."""
     if cnn_net is None or not cnn_class_to_card_id:
         return {"status": "unknown", "reason": "cnn_unavailable"}
 
@@ -794,7 +794,7 @@ def predict_waste_cnn(image_bgr):
 
 
 def predict_waste_incremental_cnn(image_bgr):
-    """Runs incremental CNN first for one-shot classes only."""
+    """Runs incremental ORB first for one-shot classes only."""
     if incremental_cnn_net is None or not incremental_cnn_class_to_card_id:
         return {"status": "unknown", "reason": "incremental_cnn_unavailable"}
 
@@ -1087,7 +1087,7 @@ def get_orb_topk(image_bgr, top_k=3):
 
 
 def predict_waste_top3(image_bgr, top_k=3):
-    """Hybrid top-k ranking using ORB and CNN confidence fusion."""
+    """Hybrid top-k ranking using ORB and fallback confidence fusion."""
     gray_raw = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     blur_score = float(cv2.Laplacian(gray_raw, cv2.CV_64F).var())
     is_blurry = blur_score < 100
@@ -1095,7 +1095,7 @@ def predict_waste_top3(image_bgr, top_k=3):
     orb_candidates = get_orb_topk(image_bgr, top_k=top_k)
     cnn_candidates = get_cnn_topk(image_bgr, top_k=top_k)
 
-    # Weight CNN higher when blurry; ORB higher when not blurry.
+    # Weight fallback higher when blurry; ORB higher when not blurry.
     orb_weight = 0.35 if is_blurry else 0.55
     cnn_weight = 0.65 if is_blurry else 0.45
 
@@ -1277,7 +1277,7 @@ def predict_waste(image_bgr):
                 "classifier": "orb"
             }
 
-    # If image is blurry (or ORB confidence is low), give CNN a chance.
+    # If image is blurry (or ORB confidence is low), give fallback a chance.
     if (is_blurry or orb_success_result is None) and cnn_net is not None:
         cnn_result = predict_waste_cnn(image_bgr)
         if cnn_result.get('status') == 'success':
@@ -1331,7 +1331,7 @@ def predict_waste(image_bgr):
 # --- API ROUTES ---
 @app.route('/classify', methods=['POST'])
 def classify():
-    """Main classification endpoint (CNN-only mode)."""
+    """Main classification endpoint (fallback-only mode)."""
     try:
         start_time = datetime.now()
         file = request.files['image']
@@ -1365,7 +1365,7 @@ def classify():
 
 @app.route('/classify/top3', methods=['POST'])
 def classify_top3():
-    """Returns top-3 CNN-only candidates."""
+    """Returns top-3 fallback-only candidates."""
     try:
         file = request.files['image']
         npimg = np.fromfile(file, np.uint8)
@@ -2633,7 +2633,7 @@ def one_shot_learning():
 
             variants_generated = 0
             retrain_started = False
-            retrain_msg = 'CNN retraining was not started'
+            retrain_msg = 'ORB retraining was not started'
             pipeline_warning = None
             try:
                 variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
@@ -2721,7 +2721,7 @@ def one_shot_learning():
 
             variants_generated = 0
             retrain_started = False
-            retrain_msg = 'CNN retraining was not started'
+            retrain_msg = 'ORB retraining was not started'
             pipeline_warning = None
             try:
                 variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
@@ -2760,7 +2760,7 @@ def one_shot_learning():
 
 @app.route('/admin/cnn-training-status', methods=['GET'])
 def cnn_training_status():
-    """Returns latest CNN retraining job state for Admin UI polling."""
+    """Returns latest ORB retraining job state for Admin UI polling."""
     return jsonify({
         "status": "success",
         "training": get_training_status_snapshot(),
@@ -3050,7 +3050,7 @@ def add_cache_headers(response):
 if __name__ == '__main__':
     print("🚀 Starting EcoLearn Recognition Engine...")
     print("📦 Gzip compression: ENABLED")
-    print("🖼️ Image caching: 1 YEAR")
+    print("🖼️  Image caching: 1 YEAR")
     if load_model():
         load_runtime_config_from_db()
         load_cnn_model()
