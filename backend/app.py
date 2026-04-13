@@ -9,6 +9,7 @@ import pickle
 import base64
 from datetime import datetime
 import hashlib
+import json
 import os
 import io
 import sys
@@ -70,28 +71,105 @@ SESSION_TIMEOUT_MINUTES = 30
 WEBCAM_FPS = 30
 ROI_BOX_COLOR = '#00FF00'
 ENABLE_AUDIO_FEEDBACK = True
-MODEL_VERSION = 'CNN-KNN-v2.0'
+MODEL_VERSION = 'ORB-KNN-v2.0'
 
 # --- OPTIONAL ORB FALLBACK (for unavoidable blur) ---
-CNN_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
-CNN_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_labels.txt')
-CNN_INCREMENTAL_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental.onnx')
-CNN_INCREMENTAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental_labels.txt')
-CNN_INPUT_SIZE = (224, 224)
-CNN_CONFIDENCE_THRESHOLD = 0.65
-CNN_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.85
-CNN_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
+ORB_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
+ORB_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_labels.txt')
+ORB_IMPORT_MARKER_PATH = os.path.join(os.path.dirname(__file__), 'models', '.teachable_import.done.json')
+ORB_INCREMENTAL_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental.onnx')
+ORB_INCREMENTAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental_labels.txt')
+ORB_INPUT_SIZE = (224, 224)
+ORB_CONFIDENCE_THRESHOLD = 0.65
+ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.85
+ORB_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
 HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs fallback disagreements
+
+
+def ensure_default_orb_model_assets() -> bool:
+    """
+    Auto-import Teachable Machine export when ONNX assets are missing.
+    This removes the need to run import_teachable_model.py manually.
+    """
+    if os.path.exists(ORB_MODEL_PATH) and os.path.exists(ORB_LABELS_PATH):
+        if not os.path.exists(ORB_IMPORT_MARKER_PATH):
+            try:
+                marker_payload = {
+                    'imported_at': datetime.now().isoformat(timespec='seconds'),
+                    'source': 'existing_onnx',
+                    'onnx_path': ORB_MODEL_PATH,
+                    'labels_path': ORB_LABELS_PATH,
+                }
+                with open(ORB_IMPORT_MARKER_PATH, 'w', encoding='utf-8') as mf:
+                    json.dump(marker_payload, mf, indent=2)
+            except Exception:
+                pass
+        return True
+
+    backend_dir = os.path.dirname(__file__)
+    converted_dir = os.path.abspath(os.path.join(backend_dir, '..', 'converted_keras'))
+    keras_path = os.path.join(converted_dir, 'keras_model.h5')
+    labels_path = os.path.join(converted_dir, 'labels.txt')
+
+    if not (os.path.exists(keras_path) and os.path.exists(labels_path)):
+        print("ℹ️ Auto-import skipped: converted_keras model/labels not found")
+        return False
+
+    print("ℹ️ ONNX model/labels missing. Auto-importing from converted_keras...")
+    cmd = [
+        sys.executable,
+        'import_teachable_model.py',
+        '--keras-model', os.path.join('..', 'converted_keras', 'keras_model.h5'),
+        '--labels', os.path.join('..', 'converted_keras', 'labels.txt'),
+        '--out-onnx', os.path.join('models', 'waste_mobilenet.onnx'),
+        '--out-labels', os.path.join('models', 'waste_labels.txt'),
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=backend_dir,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        if proc.returncode == 0:
+            try:
+                marker_payload = {
+                    'imported_at': datetime.now().isoformat(timespec='seconds'),
+                    'source': 'converted_keras_auto_import',
+                    'keras_path': keras_path,
+                    'labels_path': labels_path,
+                    'onnx_path': ORB_MODEL_PATH,
+                    'backend_labels_path': ORB_LABELS_PATH,
+                }
+                with open(ORB_IMPORT_MARKER_PATH, 'w', encoding='utf-8') as mf:
+                    json.dump(marker_payload, mf, indent=2)
+            except Exception as marker_err:
+                print(f"⚠️ Could not write import marker: {marker_err}")
+            print("✅ Auto-import complete: ONNX and label map generated")
+            return os.path.exists(ORB_MODEL_PATH) and os.path.exists(ORB_LABELS_PATH)
+
+        print("⚠️ Auto-import failed; startup will continue without fallback model")
+        if proc.stdout:
+            print(proc.stdout.strip())
+        if proc.stderr:
+            print(proc.stderr.strip())
+        return False
+    except Exception as e:
+        print(f"⚠️ Auto-import exception: {e}")
+        return False
 
 SYSTEM_CONFIG_DEFAULTS = [
     ('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
     ('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
     ('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
-    ('cnn_confidence_threshold', '0.65', 'float', 'Minimum confidence for base ORB fallback prediction', 1),
-    ('cnn_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental ORB prediction', 1),
-    ('cnn_focus_roi_scale', '0.80', 'float', 'Center crop scale used before ORB inference (0.5 to 1.0)', 1),
+    ('orb_confidence_threshold', '0.65', 'float', 'Minimum confidence for base ORB fallback prediction', 1),
+    ('orb_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental ORB prediction', 1),
+    ('orb_focus_roi_scale', '0.80', 'float', 'Center crop scale used before ORB inference (0.5 to 1.0)', 1),
     ('hybrid_margin', '0.10', 'float', 'Confidence gap required for ORB override in hybrid mode', 1),
-    ('model_version', 'CNN-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
+    ('model_version', 'ORB-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
     ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
     ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
     ('webcam_fps', '30', 'integer', 'Target frames per second for video capture', 1),
@@ -119,10 +197,10 @@ card_metadata = {}
 category_metadata = {}
 current_session_id = None
 current_session_mode = None
-cnn_net = None
-cnn_class_to_card_id = {}
-incremental_cnn_net = None
-incremental_cnn_class_to_card_id = {}
+orb_fallback_net = None
+orb_fallback_class_to_card_id = {}
+incremental_orb_net = None
+incremental_orb_class_to_card_id = {}
 incremental_allowed_card_ids = set()
 training_status_lock = threading.Lock()
 training_status = {
@@ -167,6 +245,63 @@ def generate_variants_for_card(png_full_path: str, variants_category_dir: str, s
     return written
 
 
+def cleanup_variants_for_card(card_id: int | None, card_name: str | None) -> int:
+    """Remove generated one-shot variants after retraining completes."""
+    if card_id is None:
+        return 0
+
+    conn = None
+    cursor = None
+    deleted = 0
+    try:
+        conn = connect_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT c.category_name
+            FROM TBL_CARD_ASSETS ca
+            JOIN TBL_CATEGORIES c ON c.category_id = ca.category_id
+            WHERE ca.card_id = %s
+            LIMIT 1
+            """,
+            (card_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return 0
+
+        category_name = str(row['category_name'])
+        safe_name = (card_name or '').replace(' ', '_').replace('-', '_')
+        safe_name = ''.join(ch for ch in safe_name if ch.isalnum() or ch == '_')
+        if not safe_name:
+            return 0
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        variants_dir = Path(base_dir) / 'assets_variants' / category_name
+        if not variants_dir.exists():
+            return 0
+
+        for ext in ('png', 'jpg', 'jpeg', 'webp', 'bmp'):
+            for p in variants_dir.glob(f"{safe_name}__*.{ext}"):
+                try:
+                    p.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
+        return deleted
+    except Exception as e:
+        print(f"⚠️ Variant cleanup failed for card_id={card_id}: {e}")
+        return deleted
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+
 def decode_uploaded_image_to_bgr(file_storage):
     """Decode uploaded image and flatten alpha onto white to avoid black backgrounds."""
     raw = file_storage.read()
@@ -189,6 +324,43 @@ def decode_uploaded_image_to_bgr(file_storage):
         return np.clip(flat, 0, 255).astype(np.uint8)
 
     return img[:, :, :3]
+
+
+def validate_roi_card_placement(image_bgr):
+    """Rejects scans when no clear card is present or card touches ROI boundaries."""
+    try:
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape[:2]
+
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blurred, 60, 140)
+        edges = cv2.dilate(edges, np.ones((3, 3), dtype=np.uint8), iterations=1)
+
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return False, 'no_card_detected'
+
+        largest = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest)
+        min_area = max(int(0.08 * w * h), 2500)
+        if area < min_area:
+            return False, 'no_card_detected'
+
+        x, y, bw, bh = cv2.boundingRect(largest)
+        margin = max(6, int(min(w, h) * 0.03))
+        touches_border = (
+            x <= margin
+            or y <= margin
+            or (x + bw) >= (w - margin)
+            or (y + bh) >= (h - margin)
+        )
+        if touches_border:
+            return False, 'partial_placement'
+
+        return True, None
+    except Exception:
+        # Fail open to avoid blocking classification on validation errors.
+        return True, None
 
 
 def decode_uploaded_image_keep_alpha(file_storage):
@@ -219,7 +391,7 @@ def to_bgr_for_ml(img):
     return img[:, :, :3]
 
 
-def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | None):
+def _run_orb_training_job(trigger: str, card_id: int | None, card_name: str | None):
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(backend_dir)
     log_path = os.path.join(backend_dir, 'models', 'orb_retrain_last.log')
@@ -310,10 +482,10 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             return
 
         if trigger in {'card_add', 'card_replace'}:
-            reloaded = load_incremental_cnn_model()
+            reloaded = load_incremental_orb_model()
         else:
-            reloaded = load_cnn_model()
-            load_incremental_cnn_model()
+            reloaded = load_orb_model()
+            load_incremental_orb_model()
         if not reloaded:
             _update_training_status(
                 state='failed',
@@ -322,6 +494,11 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
             )
             print("❌ ORB retrain completed but model reload failed")
             return
+
+        if trigger in {'card_add', 'card_replace'}:
+            removed = cleanup_variants_for_card(card_id, card_name)
+            if removed > 0:
+                print(f"🧹 Cleaned up {removed} generated variant files for card_id={card_id}")
 
         _update_training_status(
             state='completed',
@@ -343,13 +520,13 @@ def _run_cnn_training_job(trigger: str, card_id: int | None, card_name: str | No
         print(f"❌ ORB retrain exception: {e}")
 
 
-def maybe_start_cnn_retrain(trigger: str, card_id: int | None, card_name: str | None) -> tuple[bool, str]:
+def maybe_start_orb_retrain(trigger: str, card_id: int | None, card_name: str | None) -> tuple[bool, str]:
     snap = get_training_status_snapshot()
     if snap.get('state') == 'running':
         return False, 'ORB retraining already running'
 
     thread = threading.Thread(
-        target=_run_cnn_training_job,
+        target=_run_orb_training_job,
         args=(trigger, card_id, card_name),
         daemon=True,
     )
@@ -390,7 +567,7 @@ def apply_config_value(config_key, config_value):
     """Apply one config key/value into runtime globals with safe casting."""
     global ORB_FEATURES, KNN_K, LOWE_RATIO, CONFIDENCE_THRESHOLD
     global SESSION_TIMEOUT_MINUTES, WEBCAM_FPS, ROI_BOX_COLOR, ENABLE_AUDIO_FEEDBACK, MODEL_VERSION
-    global CNN_CONFIDENCE_THRESHOLD, CNN_INCREMENTAL_CONFIDENCE_THRESHOLD, CNN_FOCUS_ROI_SCALE, HYBRID_MARGIN
+    global ORB_CONFIDENCE_THRESHOLD, ORB_INCREMENTAL_CONFIDENCE_THRESHOLD, ORB_FOCUS_ROI_SCALE, HYBRID_MARGIN
 
     if config_key == 'orb_feature_count':
         ORB_FEATURES = max(100, int(config_value))
@@ -400,12 +577,12 @@ def apply_config_value(config_key, config_value):
         KNN_K = max(2, int(config_value))
     elif config_key == 'knn_distance_threshold':
         LOWE_RATIO = max(0.1, min(0.99, float(config_value)))
-    elif config_key == 'cnn_confidence_threshold':
-        CNN_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
-    elif config_key == 'cnn_incremental_confidence_threshold':
-        CNN_INCREMENTAL_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
-    elif config_key == 'cnn_focus_roi_scale':
-        CNN_FOCUS_ROI_SCALE = max(0.3, min(1.0, float(config_value)))
+    elif config_key == 'orb_confidence_threshold':
+        ORB_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
+    elif config_key == 'orb_incremental_confidence_threshold':
+        ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
+    elif config_key == 'orb_focus_roi_scale':
+        ORB_FOCUS_ROI_SCALE = max(0.3, min(1.0, float(config_value)))
     elif config_key == 'hybrid_margin':
         HYBRID_MARGIN = max(0.0, min(0.5, float(config_value)))
     elif config_key == 'min_confidence_score':
@@ -518,26 +695,76 @@ def load_model():
         return False
 
 
-def load_cnn_model():
+def maybe_auto_run_training_if_needed() -> bool:
+    """
+    Auto-run train_database.py on startup when cards exist but no feature sets are loaded.
+    Returns True if training ran successfully, otherwise False.
+    """
+    try:
+        if len(golden_dataset) > 0:
+            print("ℹ️ Auto-train skipped: feature dataset already loaded")
+            return True
+
+        if len(card_metadata) == 0:
+            print("ℹ️ Auto-train skipped: no active cards found")
+            return True
+
+        print("⚙️ Auto-train triggered: no ORB features found; running train_database.py...")
+        backend_dir = os.path.dirname(__file__)
+        cmd = [sys.executable, 'train_database.py']
+        proc = subprocess.run(
+            cmd,
+            cwd=backend_dir,
+            input='yes\n',
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=False,
+        )
+
+        if proc.returncode != 0:
+            print("⚠️ Auto-train failed; startup will continue")
+            if proc.stdout:
+                print(proc.stdout.strip())
+            if proc.stderr:
+                print(proc.stderr.strip())
+            return False
+
+        if proc.stdout:
+            print(proc.stdout.strip())
+
+        reloaded = load_model()
+        if reloaded and len(golden_dataset) > 0:
+            print(f"✅ Auto-train completed: loaded {len(golden_dataset)} feature sets")
+            return True
+
+        print("⚠️ Auto-train finished but no feature sets were loaded")
+        return False
+    except Exception as e:
+        print(f"⚠️ Auto-train exception: {e}")
+        return False
+
+
+def load_orb_model():
     """Loads optional ONNX ORB-fallback model and class mappings for hybrid fallback."""
-    global cnn_net, cnn_class_to_card_id
+    global orb_fallback_net, orb_fallback_class_to_card_id
 
-    cnn_net = None
-    cnn_class_to_card_id = {}
+    orb_fallback_net = None
+    orb_fallback_class_to_card_id = {}
 
-    if not os.path.exists(CNN_MODEL_PATH):
+    if not os.path.exists(ORB_MODEL_PATH):
         print("ℹ️ ORB fallback disabled: model file not found")
         return False
 
-    if not os.path.exists(CNN_LABELS_PATH):
+    if not os.path.exists(ORB_LABELS_PATH):
         print("⚠️ ORB fallback disabled: labels file not found")
         return False
 
     try:
-        net = cv2.dnn.readNetFromONNX(CNN_MODEL_PATH)
+        net = cv2.dnn.readNetFromONNX(ORB_MODEL_PATH)
         class_map = {}
 
-        with open(CNN_LABELS_PATH, 'r', encoding='utf-8') as f:
+        with open(ORB_LABELS_PATH, 'r', encoding='utf-8') as f:
             for line in f:
                 row = line.strip()
                 if not row or row.startswith('#'):
@@ -559,14 +786,14 @@ def load_cnn_model():
             print("⚠️ ORB fallback disabled: empty labels mapping")
             return False
 
-        cnn_net = net
-        cnn_class_to_card_id = class_map
-        print(f"✅ ORB fallback loaded: {len(cnn_class_to_card_id)} classes")
+        orb_fallback_net = net
+        orb_fallback_class_to_card_id = class_map
+        print(f"✅ ORB fallback loaded: {len(orb_fallback_class_to_card_id)} classes")
         return True
     except Exception as e:
         print(f"⚠️ ORB fallback disabled: {e}")
-        cnn_net = None
-        cnn_class_to_card_id = {}
+        orb_fallback_net = None
+        orb_fallback_class_to_card_id = {}
         return False
 
 
@@ -632,27 +859,27 @@ def get_anchor_card_id(exclude_ids: set[int]) -> int | None:
         return None
 
 
-def load_incremental_cnn_model():
+def load_incremental_orb_model():
     """Loads incremental ONNX model trained only on one-shot cards."""
-    global incremental_cnn_net, incremental_cnn_class_to_card_id, incremental_allowed_card_ids
+    global incremental_orb_net, incremental_orb_class_to_card_id, incremental_allowed_card_ids
 
-    incremental_cnn_net = None
-    incremental_cnn_class_to_card_id = {}
+    incremental_orb_net = None
+    incremental_orb_class_to_card_id = {}
     incremental_allowed_card_ids = set(get_incremental_card_ids())
 
-    if not os.path.exists(CNN_INCREMENTAL_MODEL_PATH):
+    if not os.path.exists(ORB_INCREMENTAL_MODEL_PATH):
         print('ℹ️ Incremental ORB disabled: model file not found')
         return False
 
-    if not os.path.exists(CNN_INCREMENTAL_LABELS_PATH):
+    if not os.path.exists(ORB_INCREMENTAL_LABELS_PATH):
         print('ℹ️ Incremental ORB disabled: labels file not found')
         return False
 
     try:
-        net = cv2.dnn.readNetFromONNX(CNN_INCREMENTAL_MODEL_PATH)
+        net = cv2.dnn.readNetFromONNX(ORB_INCREMENTAL_MODEL_PATH)
         class_map = {}
 
-        with open(CNN_INCREMENTAL_LABELS_PATH, 'r', encoding='utf-8') as f:
+        with open(ORB_INCREMENTAL_LABELS_PATH, 'r', encoding='utf-8') as f:
             for line in f:
                 row = line.strip()
                 if not row or row.startswith('#'):
@@ -668,14 +895,14 @@ def load_incremental_cnn_model():
 
                 class_map[class_index] = card_id
 
-        incremental_cnn_net = net
-        incremental_cnn_class_to_card_id = class_map
-        print(f"✅ Incremental ORB loaded: {len(incremental_cnn_class_to_card_id)} classes")
+        incremental_orb_net = net
+        incremental_orb_class_to_card_id = class_map
+        print(f"✅ Incremental ORB loaded: {len(incremental_orb_class_to_card_id)} classes")
         return True
     except Exception as e:
         print(f"⚠️ Incremental ORB disabled: {e}")
-        incremental_cnn_net = None
-        incremental_cnn_class_to_card_id = {}
+        incremental_orb_net = None
+        incremental_orb_class_to_card_id = {}
         return False
 
 
@@ -703,14 +930,14 @@ def crop_center_roi(image_bgr, scale=0.8):
     return image_bgr[start_y:end_y, start_x:end_x]
 
 
-def predict_waste_cnn(image_bgr):
+def predict_waste_orb_fallback(image_bgr):
     """Runs ORB fallback inference and returns ORB-compatible response shape."""
-    if cnn_net is None or not cnn_class_to_card_id:
-        return {"status": "unknown", "reason": "cnn_unavailable"}
+    if orb_fallback_net is None or not orb_fallback_class_to_card_id:
+        return {"status": "unknown", "reason": "orb_unavailable"}
 
     try:
-        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, CNN_INPUT_SIZE)
+        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, ORB_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         # Teachable Machine exports are commonly NHWC and can use different
@@ -726,8 +953,8 @@ def predict_waste_cnn(image_bgr):
         best_conf = -1.0
         for candidate in input_variants:
             try:
-                cnn_net.setInput(candidate)
-                raw = cnn_net.forward().flatten()
+                orb_fallback_net.setInput(candidate)
+                raw = orb_fallback_net.forward().flatten()
                 if raw.size == 0:
                     continue
 
@@ -754,27 +981,27 @@ def predict_waste_cnn(image_bgr):
                 continue
 
         if best_probs is None:
-            return {"status": "unknown", "reason": "cnn_inference_failed"}
+            return {"status": "unknown", "reason": "orb_inference_failed"}
 
         probs = best_probs
 
         top_class = int(np.argmax(probs))
         confidence = float(probs[top_class])
 
-        if confidence < CNN_CONFIDENCE_THRESHOLD:
+        if confidence < ORB_CONFIDENCE_THRESHOLD:
             return {
                 "status": "unknown",
-                "reason": "cnn_low_confidence",
+                "reason": "orb_low_confidence",
                 "confidence": round(confidence, 2)
             }
 
-        if top_class not in cnn_class_to_card_id:
-            return {"status": "unknown", "reason": "cnn_unmapped_class"}
+        if top_class not in orb_fallback_class_to_card_id:
+            return {"status": "unknown", "reason": "orb_unmapped_class"}
 
-        card_id = cnn_class_to_card_id[top_class]
+        card_id = orb_fallback_class_to_card_id[top_class]
         card = card_metadata.get(card_id)
         if not card:
-            return {"status": "unknown", "reason": "cnn_card_not_found"}
+            return {"status": "unknown", "reason": "orb_card_not_found"}
 
         category = category_metadata.get(card['category_id'])
         return {
@@ -787,20 +1014,20 @@ def predict_waste_cnn(image_bgr):
             "matches": 0,
             "confidence": round(confidence, 2),
             "keypoints_detected": 0,
-            "classifier": "cnn"
+            "classifier": "orb_fallback"
         }
     except Exception as e:
-        return {"status": "unknown", "reason": f"cnn_error:{str(e)}"}
+        return {"status": "unknown", "reason": f"orb_fallback_error:{str(e)}"}
 
 
-def predict_waste_incremental_cnn(image_bgr):
+def predict_waste_incremental_orb(image_bgr):
     """Runs incremental ORB first for one-shot classes only."""
-    if incremental_cnn_net is None or not incremental_cnn_class_to_card_id:
-        return {"status": "unknown", "reason": "incremental_cnn_unavailable"}
+    if incremental_orb_net is None or not incremental_orb_class_to_card_id:
+        return {"status": "unknown", "reason": "incremental_orb_unavailable"}
 
     try:
-        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, CNN_INPUT_SIZE)
+        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, ORB_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         input_variants = [
@@ -813,8 +1040,8 @@ def predict_waste_incremental_cnn(image_bgr):
         best_conf = -1.0
         for candidate in input_variants:
             try:
-                incremental_cnn_net.setInput(candidate)
-                raw = incremental_cnn_net.forward().flatten()
+                incremental_orb_net.setInput(candidate)
+                raw = incremental_orb_net.forward().flatten()
                 if raw.size == 0:
                     continue
 
@@ -838,28 +1065,28 @@ def predict_waste_incremental_cnn(image_bgr):
                 continue
 
         if best_probs is None:
-            return {"status": "unknown", "reason": "incremental_cnn_inference_failed"}
+            return {"status": "unknown", "reason": "incremental_orb_inference_failed"}
 
         probs = best_probs
         top_class = int(np.argmax(probs))
         confidence = float(probs[top_class])
 
-        if confidence < CNN_INCREMENTAL_CONFIDENCE_THRESHOLD:
+        if confidence < ORB_INCREMENTAL_CONFIDENCE_THRESHOLD:
             return {
                 "status": "unknown",
-                "reason": "incremental_cnn_low_confidence",
+                "reason": "incremental_orb_low_confidence",
                 "confidence": round(confidence, 2),
             }
 
-        if top_class not in incremental_cnn_class_to_card_id:
-            return {"status": "unknown", "reason": "incremental_cnn_unmapped_class"}
+        if top_class not in incremental_orb_class_to_card_id:
+            return {"status": "unknown", "reason": "incremental_orb_unmapped_class"}
 
-        card_id = incremental_cnn_class_to_card_id[top_class]
+        card_id = incremental_orb_class_to_card_id[top_class]
         if card_id not in incremental_allowed_card_ids:
             return {"status": "unknown", "reason": "incremental_anchor_class"}
         card = card_metadata.get(card_id)
         if not card:
-            return {"status": "unknown", "reason": "incremental_cnn_card_not_found"}
+            return {"status": "unknown", "reason": "incremental_orb_card_not_found"}
 
         category = category_metadata.get(card['category_id'])
         return {
@@ -872,10 +1099,10 @@ def predict_waste_incremental_cnn(image_bgr):
             "matches": 0,
             "confidence": round(confidence, 2),
             "keypoints_detected": 0,
-            "classifier": "incremental_cnn",
+            "classifier": "incremental_orb",
         }
     except Exception as e:
-        return {"status": "unknown", "reason": f"incremental_cnn_error:{str(e)}"}
+        return {"status": "unknown", "reason": f"incremental_orb_error:{str(e)}"}
 
 # --- BLUR DETECTION ---
 def detect_blur(image_gray):
@@ -968,14 +1195,14 @@ rebuild_orb_extractor()
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
 
-def get_cnn_topk(image_bgr, top_k=3):
-    """Returns top-k CNN card candidates as normalized scores in [0,1]."""
-    if cnn_net is None or not cnn_class_to_card_id:
+def get_orb_fallback_topk(image_bgr, top_k=3):
+    """Returns top-k ORB-fallback card candidates as normalized scores in [0,1]."""
+    if orb_fallback_net is None or not orb_fallback_class_to_card_id:
         return []
 
     try:
-        focused = crop_center_roi(image_bgr, scale=CNN_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, CNN_INPUT_SIZE)
+        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
+        resized = cv2.resize(focused, ORB_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         input_variants = [
@@ -988,8 +1215,8 @@ def get_cnn_topk(image_bgr, top_k=3):
         best_conf = -1.0
         for candidate in input_variants:
             try:
-                cnn_net.setInput(candidate)
-                raw = cnn_net.forward().flatten()
+                orb_fallback_net.setInput(candidate)
+                raw = orb_fallback_net.forward().flatten()
                 if raw.size == 0:
                     continue
 
@@ -1023,7 +1250,7 @@ def get_cnn_topk(image_bgr, top_k=3):
         candidates = []
         for idx in top_indices:
             class_index = int(idx)
-            card_id = cnn_class_to_card_id.get(class_index)
+            card_id = orb_fallback_class_to_card_id.get(class_index)
             if card_id is None:
                 continue
             candidates.append({
@@ -1093,11 +1320,11 @@ def predict_waste_top3(image_bgr, top_k=3):
     is_blurry = blur_score < 100
 
     orb_candidates = get_orb_topk(image_bgr, top_k=top_k)
-    cnn_candidates = get_cnn_topk(image_bgr, top_k=top_k)
+    orb_fallback_candidates = get_orb_fallback_topk(image_bgr, top_k=top_k)
 
     # Weight fallback higher when blurry; ORB higher when not blurry.
     orb_weight = 0.35 if is_blurry else 0.55
-    cnn_weight = 0.65 if is_blurry else 0.45
+    orb_fallback_weight = 0.65 if is_blurry else 0.45
 
     merged = {}
 
@@ -1106,28 +1333,28 @@ def predict_waste_top3(image_bgr, top_k=3):
         merged[card_id] = merged.get(card_id, {
             'card_id': card_id,
             'orb_score': 0.0,
-            'cnn_score': 0.0,
+            'orb_fallback_score': 0.0,
             'matches': 0
         })
         merged[card_id]['orb_score'] = float(c['score'])
         merged[card_id]['matches'] = int(c.get('matches', 0))
 
-    for c in cnn_candidates:
+    for c in orb_fallback_candidates:
         card_id = c['card_id']
         merged[card_id] = merged.get(card_id, {
             'card_id': card_id,
             'orb_score': 0.0,
-            'cnn_score': 0.0,
+            'orb_fallback_score': 0.0,
             'matches': 0
         })
-        merged[card_id]['cnn_score'] = float(c['score'])
+        merged[card_id]['orb_fallback_score'] = float(c['score'])
 
     ranked = []
     for card_id, entry in merged.items():
         card = card_metadata.get(card_id)
         if not card:
             continue
-        hybrid_score = entry['orb_score'] * orb_weight + entry['cnn_score'] * cnn_weight
+        hybrid_score = entry['orb_score'] * orb_weight + entry['orb_fallback_score'] * orb_fallback_weight
         ranked.append({
             'card_id': card_id,
             'card_name': card['name'],
@@ -1135,7 +1362,7 @@ def predict_waste_top3(image_bgr, top_k=3):
             'category': category_metadata.get(card['category_id']),
             'hybrid_score': round(float(hybrid_score), 4),
             'orb_score': round(float(entry['orb_score']), 4),
-            'cnn_score': round(float(entry['cnn_score']), 4),
+            'orb_fallback_score': round(float(entry['orb_fallback_score']), 4),
             'matches': int(entry['matches'])
         })
 
@@ -1147,7 +1374,7 @@ def predict_waste_top3(image_bgr, top_k=3):
         'top_candidates': ranked[:top_k],
         'fusion_weights': {
             'orb': orb_weight,
-            'cnn': cnn_weight
+            'orb_fallback': orb_fallback_weight
         }
     }
 
@@ -1246,14 +1473,14 @@ def predict_waste(image_bgr):
             "matches": best_match_count,
             "classifier": "orb"
         }
-        if is_blurry and cnn_net is not None:
-            cnn_result = predict_waste_cnn(image_bgr)
-            if cnn_result.get('status') == 'success':
-                cnn_result['response_time'] = round(response_time, 2)
-                cnn_result['blur_score'] = round(blur_score, 1)
-                cnn_result['is_blurry'] = is_blurry
-                cnn_result['classifier'] = 'cnn_fallback'
-                return cnn_result
+        if is_blurry and orb_fallback_net is not None:
+            orb_fallback_result = predict_waste_orb_fallback(image_bgr)
+            if orb_fallback_result.get('status') == 'success':
+                orb_fallback_result['response_time'] = round(response_time, 2)
+                orb_fallback_result['blur_score'] = round(blur_score, 1)
+                orb_fallback_result['is_blurry'] = is_blurry
+                orb_fallback_result['classifier'] = 'orb_fallback'
+                return orb_fallback_result
         return orb_unknown
 
     best_card_id, confidence, kp_count = best_result
@@ -1278,28 +1505,28 @@ def predict_waste(image_bgr):
             }
 
     # If image is blurry (or ORB confidence is low), give fallback a chance.
-    if (is_blurry or orb_success_result is None) and cnn_net is not None:
-        cnn_result = predict_waste_cnn(image_bgr)
-        if cnn_result.get('status') == 'success':
-            cnn_result['response_time'] = round(response_time, 2)
-            cnn_result['blur_score'] = round(blur_score, 1)
-            cnn_result['is_blurry'] = is_blurry
+    if (is_blurry or orb_success_result is None) and orb_fallback_net is not None:
+        orb_fallback_result = predict_waste_orb_fallback(image_bgr)
+        if orb_fallback_result.get('status') == 'success':
+            orb_fallback_result['response_time'] = round(response_time, 2)
+            orb_fallback_result['blur_score'] = round(blur_score, 1)
+            orb_fallback_result['is_blurry'] = is_blurry
 
             if orb_success_result is None:
-                cnn_result['classifier'] = 'cnn_fallback'
-                return cnn_result
+                orb_fallback_result['classifier'] = 'orb_fallback'
+                return orb_fallback_result
 
-            if orb_success_result['card_id'] == cnn_result['card_id']:
-                merged_conf = round((orb_success_result['confidence'] + cnn_result['confidence']) / 2.0, 2)
+            if orb_success_result['card_id'] == orb_fallback_result['card_id']:
+                merged_conf = round((orb_success_result['confidence'] + orb_fallback_result['confidence']) / 2.0, 2)
                 orb_success_result['confidence'] = merged_conf
                 orb_success_result['classifier'] = 'hybrid_consensus'
                 return orb_success_result
 
-            if cnn_result['confidence'] >= orb_success_result['confidence'] + HYBRID_MARGIN:
-                cnn_result['classifier'] = 'hybrid_cnn_override'
-                return cnn_result
+            if orb_fallback_result['confidence'] >= orb_success_result['confidence'] + HYBRID_MARGIN:
+                orb_fallback_result['classifier'] = 'hybrid_orb_fallback_override'
+                return orb_fallback_result
 
-            if orb_success_result['confidence'] >= cnn_result['confidence'] + HYBRID_MARGIN:
+            if orb_success_result['confidence'] >= orb_fallback_result['confidence'] + HYBRID_MARGIN:
                 orb_success_result['classifier'] = 'hybrid_orb_override'
                 return orb_success_result
 
@@ -1310,8 +1537,8 @@ def predict_waste(image_bgr):
                 "is_blurry": is_blurry,
                 "orb_card_id": orb_success_result['card_id'],
                 "orb_confidence": orb_success_result['confidence'],
-                "cnn_card_id": cnn_result['card_id'],
-                "cnn_confidence": cnn_result['confidence'],
+                "orb_fallback_card_id": orb_fallback_result['card_id'],
+                "orb_fallback_confidence": orb_fallback_result['confidence'],
                 "classifier": "hybrid"
             }
 
@@ -1339,15 +1566,24 @@ def classify():
         
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
+
+        placement_ok, placement_reason = validate_roi_card_placement(img)
+        if not placement_ok:
+            return jsonify({
+                "status": "unknown",
+                "reason": placement_reason,
+                "reject_outcome": placement_reason,
+                "classifier": "placement_guard"
+            })
         
         # Dual-model routing: incremental model first, then base model fallback.
-        result = predict_waste_incremental_cnn(img)
+        result = predict_waste_incremental_orb(img)
         if result.get('status') != 'success':
-            result = predict_waste_cnn(img)
+            result = predict_waste_orb_fallback(img)
 
         response_time = (datetime.now() - start_time).total_seconds() * 1000
         result['response_time'] = round(response_time, 2)
-        result['classifier'] = result.get('classifier', 'cnn_only')
+        result['classifier'] = result.get('classifier', 'orb_fallback_only')
         
         # Don't auto-log in assessment mode - wait for user choice
         if current_session_id and result['status'] == 'success':
@@ -1374,7 +1610,17 @@ def classify_top3():
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
 
-        candidates = get_cnn_topk(img, top_k=3)
+        placement_ok, placement_reason = validate_roi_card_placement(img)
+        if not placement_ok:
+            return jsonify({
+                "status": "unknown",
+                "reason": placement_reason,
+                "reject_outcome": placement_reason,
+                "classifier": "placement_guard",
+                "top_candidates": []
+            })
+
+        candidates = get_orb_fallback_topk(img, top_k=3)
         ranked = []
         for c in candidates:
             card = card_metadata.get(c['card_id'])
@@ -1385,12 +1631,12 @@ def classify_top3():
                 'card_name': card['name'],
                 'category_id': card['category_id'],
                 'category': category_metadata.get(card['category_id']),
-                'cnn_score': round(float(c['score']), 4)
+                'orb_fallback_score': round(float(c['score']), 4)
             })
 
         result = {
             'status': 'success' if ranked else 'unknown',
-            'classifier': 'cnn_only',
+            'classifier': 'orb_fallback_only',
             'top_candidates': ranked
         }
         return jsonify(result)
@@ -1412,6 +1658,13 @@ def submit_assessment():
         correct_category = data.get('correct_category')
         card_id = data.get('card_id')
         confidence = data.get('confidence', 0.0)
+        response_time_raw = data.get('response_time', 0)
+
+        try:
+            response_time = int(round(float(response_time_raw)))
+        except (TypeError, ValueError):
+            response_time = 0
+        response_time = max(0, min(response_time, 600000))
         
         is_correct = selected_category == correct_category
         
@@ -1425,14 +1678,15 @@ def submit_assessment():
                 VALUES (%s, %s, 
                     (SELECT category_id FROM TBL_CATEGORIES WHERE category_name = %s),
                     (SELECT category_id FROM TBL_CATEGORIES WHERE category_name = %s),
-                    %s, 0, NOW())"""
+                    %s, %s, NOW())"""
         
         cursor.execute(sql, (
             current_session_id,
             card_id,
             selected_category,
             correct_category,
-            confidence
+            confidence,
+            response_time
         ))
         
         # Update session stats  
@@ -1450,7 +1704,8 @@ def submit_assessment():
         return jsonify({
             "status": "success",
             "is_correct": is_correct,
-            "correct_category": correct_category
+            "correct_category": correct_category,
+            "response_time": response_time
         })
         
     except Exception as e:
@@ -1825,8 +2080,8 @@ def health_check():
         "status": "healthy",
         "model_version": MODEL_VERSION,
         "model_loaded": len(golden_dataset) > 0,
-        "cnn_loaded": cnn_net is not None,
-        "cnn_classes": len(cnn_class_to_card_id),
+        "orb_fallback_loaded": orb_fallback_net is not None,
+        "orb_fallback_classes": len(orb_fallback_class_to_card_id),
         "cards_loaded": len(card_metadata),
         "categories": len(category_metadata),
         "active_session": current_session_id is not None,
@@ -1948,7 +2203,7 @@ def update_system_config():
     without modifying source code (as per TBL_SYSTEM_CONFIG design)
     """
     global ORB_FEATURES, KNN_K, LOWE_RATIO, MIN_MATCHES, CONFIDENCE_THRESHOLD
-    global CNN_CONFIDENCE_THRESHOLD, CNN_INCREMENTAL_CONFIDENCE_THRESHOLD, CNN_FOCUS_ROI_SCALE, HYBRID_MARGIN
+    global ORB_CONFIDENCE_THRESHOLD, ORB_INCREMENTAL_CONFIDENCE_THRESHOLD, ORB_FOCUS_ROI_SCALE, HYBRID_MARGIN
     
     try:
         ensure_system_config_defaults()
@@ -2638,7 +2893,7 @@ def one_shot_learning():
             try:
                 variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
                 variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
-                retrain_started, retrain_msg = maybe_start_cnn_retrain(
+                retrain_started, retrain_msg = maybe_start_orb_retrain(
                     trigger='card_replace',
                     card_id=card_id,
                     card_name=card_name,
@@ -2657,9 +2912,9 @@ def one_shot_learning():
                 "png_path": png_db_path,
                 "webp_path": webp_db_path,
                 "image_path": webp_db_path,  # For display
-                "cnn_retrain_started": retrain_started,
-                "cnn_retrain_message": retrain_msg,
-                "cnn_retrain_status_url": "/admin/cnn-training-status",
+                "orb_retrain_started": retrain_started,
+                "orb_retrain_message": retrain_msg,
+                "orb_retrain_status_url": "/admin/orb-training-status",
                 "pipeline_warning": pipeline_warning,
             })
             
@@ -2726,7 +2981,7 @@ def one_shot_learning():
             try:
                 variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
                 variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
-                retrain_started, retrain_msg = maybe_start_cnn_retrain(
+                retrain_started, retrain_msg = maybe_start_orb_retrain(
                     trigger='card_add',
                     card_id=new_card_id,
                     card_name=card_name,
@@ -2745,9 +3000,9 @@ def one_shot_learning():
                 "png_path": png_db_path,
                 "webp_path": webp_db_path,
                 "image_path": webp_db_path,  # For display
-                "cnn_retrain_started": retrain_started,
-                "cnn_retrain_message": retrain_msg,
-                "cnn_retrain_status_url": "/admin/cnn-training-status",
+                "orb_retrain_started": retrain_started,
+                "orb_retrain_message": retrain_msg,
+                "orb_retrain_status_url": "/admin/orb-training-status",
                 "pipeline_warning": pipeline_warning,
             })
         
@@ -2758,8 +3013,8 @@ def one_shot_learning():
         return jsonify({"status": "error", "message": str(e)})
 
 
-@app.route('/admin/cnn-training-status', methods=['GET'])
-def cnn_training_status():
+@app.route('/admin/orb-training-status', methods=['GET'])
+def orb_training_status():
     """Returns latest ORB retraining job state for Admin UI polling."""
     return jsonify({
         "status": "success",
@@ -2767,10 +3022,10 @@ def cnn_training_status():
     })
 
 
-@app.route('/admin/cnn-retrain', methods=['POST'])
-def admin_trigger_cnn_retrain():
+@app.route('/admin/orb-retrain', methods=['POST'])
+def admin_trigger_orb_retrain():
     """Manual retrain trigger for Admin tools."""
-    started, msg = maybe_start_cnn_retrain(
+    started, msg = maybe_start_orb_retrain(
         trigger='manual_admin',
         card_id=None,
         card_name=None,
@@ -3053,8 +3308,10 @@ if __name__ == '__main__':
     print("🖼️  Image caching: 1 YEAR")
     if load_model():
         load_runtime_config_from_db()
-        load_cnn_model()
-        load_incremental_cnn_model()
+        maybe_auto_run_training_if_needed()
+        ensure_default_orb_model_assets()
+        load_orb_model()
+        load_incremental_orb_model()
         print("✅ System Ready!")
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:

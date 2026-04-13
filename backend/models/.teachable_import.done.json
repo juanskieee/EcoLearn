@@ -1,0 +1,6 @@
+{
+  "imported_at": "2026-04-13T22:08:40",
+  "source": "existing_onnx",
+  "onnx_path": "C:\\xampp\\htdocs\\backend\\models\\waste_mobilenet.onnx",
+  "labels_path": "C:\\xampp\\htdocs\\backend\\models\\waste_labels.txt"
+}

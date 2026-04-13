@@ -227,9 +227,40 @@ if ($config_result->num_rows > 0) {
     echo '<div class="error">✗ No system configuration found</div>';
 }
 
+// Test 4b: ORB runtime keys
+echo "<h2>✓ Test 4b: ORB Runtime Keys</h2>";
+$required_orb_keys = [
+    'orb_confidence_threshold',
+    'orb_incremental_confidence_threshold',
+    'orb_focus_roi_scale',
+    'model_version'
+];
+
+$orb_key_rows = [];
+$orb_result = $conn->query(
+    "SELECT config_key, config_value FROM TBL_SYSTEM_CONFIG WHERE config_key IN ('orb_confidence_threshold', 'orb_incremental_confidence_threshold', 'orb_focus_roi_scale', 'model_version')"
+);
+while ($row = $orb_result->fetch_assoc()) {
+    $orb_key_rows[$row['config_key']] = $row['config_value'];
+}
+
+$missing_orb_keys = array_diff($required_orb_keys, array_keys($orb_key_rows));
+if (empty($missing_orb_keys)) {
+    echo '<div class="success">✓ ORB configuration keys are present</div>';
+    echo '<table>';
+    echo '<tr><th>ORB Key</th><th>Value</th><th>Status</th></tr>';
+    foreach ($required_orb_keys as $key) {
+        $value = isset($orb_key_rows[$key]) ? $orb_key_rows[$key] : '';
+        echo "<tr><td><code>$key</code></td><td><code>$value</code></td><td>✓ OK</td></tr>";
+    }
+    echo '</table>';
+} else {
+    echo '<div class="error">✗ Missing ORB keys: ' . implode(', ', $missing_orb_keys) . '</div>';
+}
+
 // Test 5: Stored Procedures
 echo "<h2>✓ Test 5: Stored Procedures</h2>";
-$procedures = ['UpdateSessionAccuracy', 'GetProficiencyRanking', 'GetConfusionMatrix'];
+$procedures = ['UpdateSessionAccuracy', 'GetProficiencyRanking', 'GetStudentProficiencyReports', 'GetConfusionMatrix'];
 $proc_result = $conn->query("
     SELECT ROUTINE_NAME 
     FROM information_schema.ROUTINES 
@@ -245,7 +276,7 @@ while ($proc = $proc_result->fetch_assoc()) {
 $missing_procs = array_diff($procedures, $procs_found);
 
 if (empty($missing_procs)) {
-    echo '<div class="success">✓ All 3 stored procedures exist</div>';
+    echo '<div class="success">✓ All ' . count($procedures) . ' stored procedures exist</div>';
     echo '<ul>';
     foreach ($procedures as $proc) {
         echo "<li><code>$proc</code></li>";
@@ -257,7 +288,7 @@ if (empty($missing_procs)) {
 
 // Test 6: Views
 echo "<h2>✓ Test 6: Analytics Views</h2>";
-$views = ['vw_active_sessions', 'vw_card_performance', 'vw_student_proficiency'];
+$views = ['vw_active_sessions', 'vw_card_performance', 'vw_student_proficiency', 'vw_student_proficiency_reports'];
 $view_result = $conn->query("
     SELECT TABLE_NAME 
     FROM information_schema.VIEWS 
@@ -272,7 +303,7 @@ while ($view = $view_result->fetch_assoc()) {
 $missing_views = array_diff($views, $views_found);
 
 if (empty($missing_views)) {
-    echo '<div class="success">✓ All 3 analytics views exist</div>';
+    echo '<div class="success">✓ All ' . count($views) . ' analytics views exist</div>';
     echo '<ul>';
     foreach ($views as $view) {
         echo "<li><code>$view</code></li>";
@@ -280,6 +311,17 @@ if (empty($missing_views)) {
     echo '</ul>';
 } else {
     echo '<div class="error">✗ Missing views: ' . implode(', ', $missing_views) . '</div>';
+}
+
+// Test 7: Training Dataset Readiness
+echo "<h2>✓ Test 7: Training Dataset Readiness</h2>";
+$features_result = $conn->query("SELECT COUNT(*) as cnt FROM TBL_GOLDEN_DATASET");
+$features_count = (int)$features_result->fetch_assoc()['cnt'];
+
+if ($features_count > 0) {
+    echo '<div class="success">✓ ORB feature dataset is populated (' . $features_count . ' feature sets)</div>';
+} else {
+    echo '<div class="warning">⚠️ No ORB feature sets found in <code>TBL_GOLDEN_DATASET</code>. Backend auto-train should run on startup when cards are available.</div>';
 }
 
 // Database Statistics
@@ -306,12 +348,12 @@ echo '<p>Core Tables</p>';
 echo '</div>';
 
 echo '<div class="stat-box">';
-echo '<h3>3</h3>';
+echo '<h3>' . count($procedures) . '</h3>';
 echo '<p>Stored Procedures</p>';
 echo '</div>';
 
 echo '<div class="stat-box">';
-echo '<h3>3</h3>';
+echo '<h3>' . count($views) . '</h3>';
 echo '<p>Analytics Views</p>';
 echo '</div>';
 
@@ -328,7 +370,7 @@ echo '<h3>Next Steps:</h3>';
 echo '<ol>';
 echo '<li>Change the default admin password (username: <code>admin</code>, password: <code>admin123</code>)</li>';
 echo '<li>Populate <code>TBL_CARD_ASSETS</code> with Eco-Card metadata</li>';
-echo '<li>Train the ORB-KNN model and populate <code>TBL_GOLDEN_DATASET</code></li>';
+echo '<li>If feature dataset is empty, start the Flask backend once to auto-run <code>train_database.py</code></li>';
 echo '<li>Configure the Python Flask microservice to connect to this database</li>';
 echo '<li>Test the complete system workflow</li>';
 echo '</ol>';

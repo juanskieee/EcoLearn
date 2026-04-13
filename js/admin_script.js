@@ -4,6 +4,8 @@
 // ============================================
 
 const API_URL = 'http://localhost:5000';
+const adminStartupOverlay = document.getElementById('admin-startup-overlay');
+const adminStartupOverlayText = document.getElementById('admin-startup-overlay-text');
 let allLogs = [];
 let chartInstance = null;
 let categoryChartInstance = null;
@@ -85,7 +87,7 @@ async function restoreAddCardUiStateAfterReload() {
     if (!state || !state.modalOpen) return;
 
     try {
-        const response = await fetch(`${API_URL}/admin/cnn-training-status`);
+        const response = await fetch(`${API_URL}/admin/orb-training-status`);
         const data = await response.json();
         const training = data && data.status === 'success' ? data.training : null;
         const isTrainingActive = training && (training.state === 'queued' || training.state === 'running');
@@ -139,7 +141,7 @@ async function restoreAddCardUiStateAfterReload() {
     setAddCardModalLocked(true);
 
     if (resultDiv) {
-        await monitorCnnRetrainProgress(resultDiv, !isReplacement);
+        await monitorOrbRetrainProgress(resultDiv, !isReplacement);
     }
 }
 
@@ -183,7 +185,9 @@ const showToast = showNotification;
 // INITIALIZATION
 // ============================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await waitForAdminBackendStartup();
+
     // Initialize persistent cache first
     if (typeof OptimizedAdmin !== 'undefined') {
         OptimizedAdmin.cache.init();
@@ -262,6 +266,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 60000);
 });
+
+async function waitForAdminBackendStartup() {
+    if (!adminStartupOverlay) return;
+
+    adminStartupOverlay.classList.remove('hidden');
+    let attempts = 0;
+
+    while (true) {
+        attempts += 1;
+        try {
+            if (adminStartupOverlayText) {
+                adminStartupOverlayText.textContent = attempts <= 5
+                    ? 'Waiting for backend and model initialization.'
+                    : 'Still bootstrapping model assets. Please wait...';
+            }
+
+            const response = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+            if (response.ok) {
+                adminStartupOverlay.classList.add('hidden');
+                return;
+            }
+        } catch (error) {
+            // Keep waiting while backend starts.
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+}
 
 async function loadDashboard() {
     try {
@@ -2344,8 +2376,8 @@ async function submitOneShotLearning() {
                 ? `<span class="result-subline">🧪 Variants generated: ${data.variants_generated}</span>`
                 : '';
 
-            const retrainInfo = data.cnn_retrain_message
-                ? `<span class="result-subline">🧠 ORB Retrain: ${data.cnn_retrain_message}</span>`
+            const retrainInfo = data.orb_retrain_message
+                ? `<span class="result-subline">🧠 ORB Retrain: ${data.orb_retrain_message}</span>`
                 : '';
 
             const pipelineWarning = data.pipeline_warning
@@ -2366,7 +2398,7 @@ async function submitOneShotLearning() {
             });
             
             // Keep modal open while ORB retraining runs; close only on completion.
-            if (!data.cnn_retrain_started) {
+            if (!data.orb_retrain_started) {
                 setTimeout(() => {
                     closeAddCardModal(true);
                     if (!isReplacement) {
@@ -2402,8 +2434,8 @@ async function submitOneShotLearning() {
                 loadAssetRepository();
             }
 
-            if (data.cnn_retrain_started) {
-                await monitorCnnRetrainProgress(resultDiv, !isReplacement);
+            if (data.orb_retrain_started) {
+                await monitorOrbRetrainProgress(resultDiv, !isReplacement);
             }
         } else {
             resultDiv.style.background = '#FEE2E2';
@@ -2428,11 +2460,11 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = false) {
+async function monitorOrbRetrainProgress(resultDiv, shouldReloadOnSuccess = false) {
     const maxChecks = 120; // ~6 minutes at 3s interval
     let checks = 0;
 
-    const statusId = 'cnn-retrain-live-status';
+    const statusId = 'orb-retrain-live-status';
     let statusEl = document.getElementById(statusId);
     if (!statusEl) {
         resultDiv.insertAdjacentHTML('beforeend', `<span id="${statusId}" class="result-subline"></span>`);
@@ -2450,7 +2482,7 @@ async function monitorCnnRetrainProgress(resultDiv, shouldReloadOnSuccess = fals
     while (checks < maxChecks) {
         checks += 1;
         try {
-            const response = await fetch(`${API_URL}/admin/cnn-training-status`);
+            const response = await fetch(`${API_URL}/admin/orb-training-status`);
             const data = await response.json();
             if (data.status !== 'success' || !data.training) {
                 await sleep(3000);
@@ -2534,9 +2566,9 @@ const configMetadata = {
     'orb_feature_count': { icon: '🔬', type: 'number', min: 100, max: 2000, step: 100 },
     'knn_k_value': { icon: '🔢', type: 'number', min: 1, max: 5, step: 1 },
     'knn_distance_threshold': { icon: '⚖️', type: 'slider', min: 0.5, max: 0.9, step: 0.05 },
-    'cnn_confidence_threshold': { icon: '🧠', type: 'slider', min: 0.5, max: 0.95, step: 0.01 },
-    'cnn_incremental_confidence_threshold': { icon: '🚀', type: 'slider', min: 0.5, max: 0.99, step: 0.01 },
-    'cnn_focus_roi_scale': { icon: '🎯', type: 'slider', min: 0.5, max: 1.0, step: 0.05 },
+    'orb_confidence_threshold': { icon: '🧠', type: 'slider', min: 0.5, max: 0.95, step: 0.01 },
+    'orb_incremental_confidence_threshold': { icon: '🚀', type: 'slider', min: 0.5, max: 0.99, step: 0.01 },
+    'orb_focus_roi_scale': { icon: '🎯', type: 'slider', min: 0.5, max: 1.0, step: 0.05 },
     'hybrid_margin': { icon: '⚗️', type: 'slider', min: 0.02, max: 0.3, step: 0.01 },
     'min_confidence_score': { icon: '🎯', type: 'slider', min: 0.3, max: 0.9, step: 0.05 },
     'session_timeout_minutes': { icon: '⏱️', type: 'number', min: 5, max: 120, step: 5 },
@@ -2714,9 +2746,9 @@ function formatConfigKey(key) {
         orb_feature_count: 'ORB Feature Count',
         knn_k_value: 'KNN K Value',
         knn_distance_threshold: 'KNN Distance Threshold',
-        cnn_confidence_threshold: 'ORB Confidence Threshold',
-        cnn_incremental_confidence_threshold: 'ORB Incremental Confidence Threshold',
-        cnn_focus_roi_scale: 'ORB Focus ROI Scale',
+        orb_confidence_threshold: 'ORB Confidence Threshold',
+        orb_incremental_confidence_threshold: 'ORB Incremental Confidence Threshold',
+        orb_focus_roi_scale: 'ORB Focus ROI Scale',
         hybrid_margin: 'Hybrid Override Margin',
         min_confidence_score: 'Minimum Confidence Score',
         session_timeout_minutes: 'Session Timeout Minutes',

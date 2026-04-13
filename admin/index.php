@@ -25,8 +25,48 @@ require_once 'check_session.php';
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- jsPDF for actual PDF file generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        .admin-startup-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(248, 250, 252, 0.96);
+        }
+        .admin-startup-overlay.hidden { display: none; }
+        .admin-startup-card {
+            width: min(92vw, 520px);
+            padding: 24px;
+            border-radius: 20px;
+            background: #ffffff;
+            border: 2px solid #dbeafe;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
+            text-align: center;
+            color: #1f2937;
+        }
+        .admin-startup-loader {
+            width: 42px;
+            height: 42px;
+            border: 4px solid #bfdbfe;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            margin: 0 auto 12px;
+            animation: admin-startup-spin 0.9s linear infinite;
+        }
+        @keyframes admin-startup-spin { to { transform: rotate(360deg); } }
+    </style>
 </head>
 <body data-admin-username="<?php echo htmlspecialchars($_SESSION['admin_username'] ?? 'Admin', ENT_QUOTES, 'UTF-8'); ?>">
+
+    <div id="admin-startup-overlay" class="admin-startup-overlay">
+        <div class="admin-startup-card">
+            <div class="admin-startup-loader"></div>
+            <h3>Preparing Admin Dashboard...</h3>
+            <p id="admin-startup-overlay-text">Waiting for backend and model initialization.</p>
+        </div>
+    </div>
 
     <div class="admin-wrapper">
         <nav class="sidebar">

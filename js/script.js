@@ -20,6 +20,7 @@ let skipSessionPersistOnUnload = false;
 // Assessment Mode State
 let assessmentStep = 'scan'; // 'scan' | 'identify'
 let currentScanResult = null;
+let assessmentPromptStartedAt = 0;
 let feedbackResetTimeout = null;
 let instructionalResetTimeout = null;
 let scanUnlockTimeout = null;
@@ -123,12 +124,15 @@ const scannedCardsListEl = document.getElementById('scanned-cards-list');
 // Audio
 const successSound = document.getElementById('success-sound');
 const errorSound = document.getElementById('error-sound');
+const startupOverlay = document.getElementById('startup-overlay');
+const startupOverlayText = document.getElementById('startup-overlay-text');
 
 // ============================================
 // UI INITIALIZATION
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async function() {
+    await waitForBackendStartup();
     ensureAssessmentTimerUi();
     applyRoiOverlayGeometry();
     initializeWelcomeScreen();
@@ -145,6 +149,36 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadAudioViaFetch();
     loadAudioSettings();
 });
+
+async function waitForBackendStartup() {
+    if (!startupOverlay) return;
+
+    startupOverlay.classList.remove('hidden');
+    let attempts = 0;
+
+    while (true) {
+        attempts += 1;
+        try {
+            if (startupOverlayText) {
+                if (attempts <= 5) {
+                    startupOverlayText.textContent = 'Starting recognition engine for first-time setup.';
+                } else {
+                    startupOverlayText.textContent = 'Still preparing model files. Please wait...';
+                }
+            }
+
+            const response = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+            if (response.ok) {
+                startupOverlay.classList.add('hidden');
+                return;
+            }
+        } catch (error) {
+            // Keep waiting while backend boots.
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+}
 
 function restoreResultsIfNeeded() {
     const raw = sessionStorage.getItem(RESULTS_REDIRECT_KEY);
@@ -1436,6 +1470,13 @@ async function captureAndIdentify() {
 
     // Resume live feed AFTER capture so user sees camera unfreeze
     video.play();
+
+    const placement = evaluateRoiPlacement(canvas);
+    if (!placement.ok) {
+        showErrorFeedback({ reason: placement.reason });
+        scheduleScanUnlock(SCAN_COOLDOWN_MS);
+        return;
+    }
     
     canvas.toBlob(async (blob) => {
         const formData = new FormData();
@@ -1466,6 +1507,63 @@ async function captureAndIdentify() {
     }, 'image/jpeg', 0.95);
 }
 
+function evaluateRoiPlacement(roiCanvas) {
+    try {
+        const ctx = roiCanvas.getContext('2d', { willReadFrequently: true });
+        const w = roiCanvas.width;
+        const h = roiCanvas.height;
+        if (!ctx || !w || !h) {
+            return { ok: false, reason: 'no_card_detected' };
+        }
+
+        const image = ctx.getImageData(0, 0, w, h).data;
+        const stride = 2;
+        const border = Math.max(10, Math.floor(Math.min(w, h) * 0.08));
+
+        let foregroundCount = 0;
+        let borderForegroundCount = 0;
+        let samples = 0;
+
+        for (let y = 0; y < h; y += stride) {
+            for (let x = 0; x < w; x += stride) {
+                const idx = (y * w + x) * 4;
+                const r = image[idx];
+                const g = image[idx + 1];
+                const b = image[idx + 2];
+
+                const maxRGB = Math.max(r, g, b);
+                const minRGB = Math.min(r, g, b);
+                const luma = (0.299 * r) + (0.587 * g) + (0.114 * b);
+                const saturation = maxRGB - minRGB;
+                const isForeground = (luma < 235 && saturation > 18) || luma < 200;
+
+                samples++;
+                if (!isForeground) continue;
+
+                foregroundCount++;
+                const isBorder = x < border || y < border || x >= (w - border) || y >= (h - border);
+                if (isBorder) borderForegroundCount++;
+            }
+        }
+
+        if (samples === 0) return { ok: false, reason: 'no_card_detected' };
+
+        const coverage = foregroundCount / samples;
+        if (coverage < 0.12) {
+            return { ok: false, reason: 'no_card_detected' };
+        }
+
+        const borderRatio = borderForegroundCount / Math.max(1, foregroundCount);
+        if (borderRatio > 0.28) {
+            return { ok: false, reason: 'partial_placement' };
+        }
+
+        return { ok: true, reason: '' };
+    } catch (error) {
+        return { ok: true, reason: '' };
+    }
+}
+
 function handleInstructionalMode(data) {
     if (data.status === 'success') {
         showInstructionalFeedback(data);
@@ -1482,6 +1580,7 @@ function handleAssessmentMode(data) {
             showAssessmentIdentification(data);
             assessmentStep = 'identify';
         } else {
+            assessmentPromptStartedAt = 0;
             showErrorFeedback(data);
             // Re-enable button on error
             scheduleScanUnlock(SCAN_COOLDOWN_MS);
@@ -1635,6 +1734,9 @@ function showAssessmentIdentification(data) {
     
     // Hide the automatic category display
     categoryDisplay.classList.add('hidden');
+
+    // Start latency timer once the student is asked to choose a category.
+    assessmentPromptStartedAt = performance.now();
     
     // Show assessment modal
     showAssessmentModal(data.card_name);
@@ -1678,6 +1780,13 @@ async function selectAssessmentChoice(selectedCategory) {
     
     const correctCategory = currentScanResult.category;
     const isCorrect = selectedCategory === correctCategory;
+    const decisionLatencyMs = assessmentPromptStartedAt > 0
+        ? Math.max(0, Math.round(performance.now() - assessmentPromptStartedAt))
+        : 0;
+    const scanLatencyMs = Number.isFinite(Number(currentScanResult.response_time))
+        ? Math.max(0, Math.round(Number(currentScanResult.response_time)))
+        : 0;
+    const responseLatencyMs = decisionLatencyMs + scanLatencyMs;
     
     // 1. Immediately flash result on modal choices
     const modal = document.getElementById('assessmentModal');
@@ -1716,7 +1825,8 @@ async function selectAssessmentChoice(selectedCategory) {
                 selected_category: selectedCategory,
                 correct_category: correctCategory,
                 card_id: currentScanResult.card_id,
-                confidence: currentScanResult.confidence
+                confidence: currentScanResult.confidence,
+                response_time: responseLatencyMs
             })
         });
         const data = await response.json();
@@ -1749,6 +1859,7 @@ async function selectAssessmentChoice(selectedCategory) {
         // IMMEDIATELY re-enable scanning for next card (kids have short attention spans!)
         assessmentStep = 'scan';
         currentScanResult = null;
+        assessmentPromptStartedAt = 0;
         scheduleScanUnlock(0);
         
         // Keep feedback visible for 20 seconds, then reset UI
@@ -1882,13 +1993,14 @@ function resetAssessmentUI() {
     resultText.innerHTML = '<strong>TEST MODE:</strong><br>Place a card, then YOU choose which bin it belongs to!';
     binbinImg.src = 'assets/binbin_neutral.png';
     binbinImg.style.transform = 'scale(1) rotate(0deg)';
+    assessmentPromptStartedAt = 0;
     
     // Ensure modal is closed
     closeAssessmentModal();
 }
 
 function showErrorFeedback(data) {
-    const reason = data && data.reason ? data.reason : 'unknown';
+    const reason = data && (data.reject_outcome || data.reason) ? (data.reject_outcome || data.reason) : 'unknown';
     const now = Date.now();
     const shouldThrottleAudio = (reason === lastErrorReason) && ((now - lastErrorFeedbackAt) < ERROR_FEEDBACK_COOLDOWN_MS);
 
@@ -1918,6 +2030,10 @@ function showErrorFeedback(data) {
     
     if (reason === 'insufficient_features') {
         message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng yellow box.";
+    } else if (reason === 'no_card_detected') {
+        message = "Wala akong makitang eco-card sa yellow box. I-center ang card bago mag-scan.";
+    } else if (reason === 'partial_placement') {
+        message = "Lumampas ang card sa yellow box. Ilagay nang buo sa loob bago mag-scan.";
     } else if (reason === 'low_confidence') {
         message = "Hmm, hindi ako sigurado dito. Subukan mong ipakita ang mas malinaw na card!";
     } else if (reason === 'ambiguous_match') {
