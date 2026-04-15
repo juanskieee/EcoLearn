@@ -6,7 +6,7 @@ Generate augmented image variants for model training (alpha-safe).
 Improvements over v1:
   • Parallel processing via ProcessPoolExecutor (--workers)
   • New augmentations: cutout, JPEG artifacts, elastic distortion,
-    channel shuffle, channel drop
+        (color-preserving variants only)
   • --variants  → run only a named subset of augmentations
   • --skip-existing → resume interrupted runs without re-writing
   • --workers   → control parallelism
@@ -46,6 +46,150 @@ VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Eco-Card template framing (optional)
+#
+# This mirrors the layout used in js/admin_script.js drawEcoCardToPdfAt():
+#  - 4×5 inch card, white background
+#  - dark border
+#  - light-gray image panel
+#  - footer divider + two lines of text
+#
+# We render to pixels (default 800×1000) so the training data matches
+# the “card framing” users see when scanning printed Eco-Cards.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fit_into_box(image_bgra: np.ndarray, box_w: int, box_h: int) -> np.ndarray:
+    """Resize image to fit within (box_w, box_h) preserving aspect ratio."""
+    h, w = image_bgra.shape[:2]
+    if h <= 0 or w <= 0 or box_w <= 0 or box_h <= 0:
+        return image_bgra
+
+    scale = min(box_w / w, box_h / h)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
+    return cv2.resize(image_bgra, (new_w, new_h), interpolation=interp)
+
+
+def _alpha_paste(dst_bgra: np.ndarray, src_bgra: np.ndarray, x: int, y: int) -> None:
+    """Alpha-composite src onto dst at (x, y). In-place on dst."""
+    if dst_bgra.ndim != 3 or dst_bgra.shape[2] != 4:
+        raise ValueError("dst_bgra must be BGRA")
+    if src_bgra.ndim != 3 or src_bgra.shape[2] != 4:
+        raise ValueError("src_bgra must be BGRA")
+
+    H, W = dst_bgra.shape[:2]
+    h, w = src_bgra.shape[:2]
+    if w <= 0 or h <= 0:
+        return
+
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(W, x + w)
+    y2 = min(H, y + h)
+    if x2 <= x1 or y2 <= y1:
+        return
+
+    sx1 = x1 - x
+    sy1 = y1 - y
+    sx2 = sx1 + (x2 - x1)
+    sy2 = sy1 + (y2 - y1)
+
+    dst_roi = dst_bgra[y1:y2, x1:x2].astype(np.float32)
+    src_roi = src_bgra[sy1:sy2, sx1:sx2].astype(np.float32)
+
+    a = (src_roi[:, :, 3:4] / 255.0)
+    inv_a = 1.0 - a
+    dst_roi[:, :, :3] = src_roi[:, :, :3] * a + dst_roi[:, :, :3] * inv_a
+    dst_roi[:, :, 3:4] = np.clip(src_roi[:, :, 3:4] + dst_roi[:, :, 3:4] * inv_a, 0, 255)
+
+    dst_bgra[y1:y2, x1:x2] = np.clip(dst_roi, 0, 255).astype(np.uint8)
+
+
+def frame_as_ecocard(
+    content_bgra: np.ndarray,
+    title: str = "EcoLearn Eco-Card",
+    subtitle: str = "Scan to identify and sort correctly",
+    out_size: tuple[int, int] = (800, 1000),
+) -> np.ndarray:
+    """Render a full Eco-Card template image with the content inserted."""
+    out_w, out_h = int(out_size[0]), int(out_size[1])
+    out_w = max(128, out_w)
+    out_h = max(160, out_h)
+
+    # Create solid white background (opaque).
+    canvas = np.full((out_h, out_w, 4), (255, 255, 255, 255), dtype=np.uint8)
+
+    # Convert inches → pixels using width as reference (4 inches wide).
+    px_per_in = out_w / 4.0
+    def px(v_in: float) -> int:
+        return int(round(v_in * px_per_in))
+
+    # Card border (approximate rounded rectangles with plain rectangles).
+    border_color = (51, 51, 51, 255)
+    panel_fill = (247, 247, 247, 255)
+    divider_color = (220, 220, 220, 255)
+
+    # Main border rectangle: origin+(0.1,0.1), size (3.8,4.8)
+    bx = px(0.10)
+    by = px(0.10)
+    bw = px(3.80)
+    bh = px(4.80)
+    cv2.rectangle(canvas, (bx, by), (bx + bw, by + bh), border_color, thickness=max(1, px(0.022)))
+
+    # Image panel: origin+(0.35,0.35), size (3.3,3.48)
+    px0 = px(0.35)
+    py0 = px(0.35)
+    pw = px(3.30)
+    ph = px(3.48)
+    cv2.rectangle(canvas, (px0, py0), (px0 + pw, py0 + ph), panel_fill, thickness=-1)
+
+    # Content placement: origin+(0.5,0.5), size (3,3.1)
+    ix = px(0.50)
+    iy = px(0.50)
+    iw = px(3.00)
+    ih = px(3.10)
+
+    placed = _fit_into_box(content_bgra, iw, ih)
+    phh, pww = placed.shape[:2]
+    ox = ix + (iw - pww) // 2
+    oy = iy + (ih - phh) // 2
+    _alpha_paste(canvas, placed, ox, oy)
+
+    # Footer divider line: y=4.28, x 0.45→3.55
+    y_div = px(4.28)
+    x1 = px(0.45)
+    x2 = px(3.55)
+    cv2.line(canvas, (x1, y_div), (x2, y_div), divider_color, thickness=max(1, px(0.01)))
+
+    # Footer text (OpenCV uses BGR; ignore alpha for text rendering)
+    canvas_bgr = np.ascontiguousarray(canvas[:, :, :3])
+    text_color_title = (90, 90, 90)
+    text_color_sub = (145, 145, 145)
+    cx = px(2.00)
+
+    # Heuristic font scaling for the chosen canvas size.
+    # Aim to visually match 9pt/7pt PDF text at ~200 dpi.
+    title_scale = max(0.45, out_w / 1000.0)
+    sub_scale = max(0.38, out_w / 1200.0)
+    title_th = 2
+    sub_th = 1
+
+    def _center_text(text: str, y: int, scale: float, thickness: int, color: tuple[int, int, int]):
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+        tx = max(0, min(out_w - 1, int(cx - tw / 2)))
+        ty = max(th + 2, min(out_h - 2, y))
+        cv2.putText(canvas_bgr, text, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+
+    _center_text(title, px(4.56), title_scale, title_th, text_color_title)
+    _center_text(subtitle, px(4.76), sub_scale, sub_th, text_color_sub)
+
+    canvas[:, :, :3] = canvas_bgr
+    return canvas
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Default augmentation parameters  (overridable via --config)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,9 +201,7 @@ DEFAULT_PARAMS: dict = {
     "persp_med":          {"intensity": 0.12},
     "persp_strong":       {"intensity": 0.22},
     "persp_extreme":      {"intensity": 0.35},
-    "bright_med":         {"alpha": 1.45, "beta":  35},
     "bright_strong":      {"alpha": 1.85, "beta":  70},
-    "bright_extreme":     {"alpha": 2.40, "beta": 110},
     "dark_med":           {"alpha": 0.65, "beta": -40},
     "dark_strong":        {"alpha": 0.40, "beta": -70},
     "dark_extreme":       {"alpha": 0.20, "beta": -110},
@@ -68,13 +210,7 @@ DEFAULT_PARAMS: dict = {
     "contrast_low":       {"factor": 0.4},
     "contrast_flat":      {"factor": 0.15},
     "sat_high":           {"scale": 2.0},
-    "sat_extreme":        {"scale": 4.0},
     "sat_low":            {"scale": 0.35},
-    "grayscale":          {"scale": 0.0},
-    "hue_30":             {"shift": 30},
-    "hue_60":             {"shift": 60},
-    "hue_90":             {"shift": 90},
-    "hue_120":            {"shift": 120},
     "sharpen_med":        {"strength": 1.5},
     "sharpen_strong":     {"strength": 3.5},
     "sharpen_extreme":    {"strength": 7.0},
@@ -108,12 +244,6 @@ DEFAULT_PARAMS: dict = {
     "elastic_soft":       {"alpha": 40,  "sigma": 6},
     "elastic_med":        {"alpha": 80,  "sigma": 6},
     "elastic_strong":     {"alpha": 150, "sigma": 8},
-    "channel_shuffle":    {},
-    "drop_red":           {"channel": 2},
-    "drop_green":         {"channel": 1},
-    "drop_blue":          {"channel": 0},
-    "color_jitter_mild":  {"b_range": (0.85, 1.15), "c_range": (0.85, 1.15), "s_range": (0.85, 1.15)},
-    "color_jitter_strong":{"b_range": (0.60, 1.50), "c_range": (0.60, 1.60), "s_range": (0.50, 1.80)},
 }
 
 
@@ -467,9 +597,7 @@ def build_variants(base_image: np.ndarray,
         "persp_extreme":      perspective_transform(base_image, **_p("persp_extreme")),
 
         # ── Brightness / Exposure ─────────────────────────────────────────────
-        "bright_med":         adjust_brightness(base_image, **_p("bright_med")),
         "bright_strong":      adjust_brightness(base_image, **_p("bright_strong")),
-        "bright_extreme":     adjust_brightness(base_image, **_p("bright_extreme")),
         "dark_med":           adjust_brightness(base_image, **_p("dark_med")),
         "dark_strong":        adjust_brightness(base_image, **_p("dark_strong")),
         "dark_extreme":       adjust_brightness(base_image, **_p("dark_extreme")),
@@ -482,13 +610,7 @@ def build_variants(base_image: np.ndarray,
 
         # ── Colour ────────────────────────────────────────────────────────────
         "sat_high":           adjust_saturation(base_image, **_p("sat_high")),
-        "sat_extreme":        adjust_saturation(base_image, **_p("sat_extreme")),
         "sat_low":            adjust_saturation(base_image, **_p("sat_low")),
-        "grayscale":          adjust_saturation(base_image, **_p("grayscale")),
-        "hue_30":             shift_hue(base_image, **_p("hue_30")),
-        "hue_60":             shift_hue(base_image, **_p("hue_60")),
-        "hue_90":             shift_hue(base_image, **_p("hue_90")),
-        "hue_120":            shift_hue(base_image, **_p("hue_120")),
 
         # ── Sharpening ────────────────────────────────────────────────────────
         "sharpen_med":        sharpen(base_image, **_p("sharpen_med")),
@@ -537,16 +659,6 @@ def build_variants(base_image: np.ndarray,
         "elastic_soft":       elastic_distortion(base_image, **_p("elastic_soft")),
         "elastic_med":        elastic_distortion(base_image, **_p("elastic_med")),
         "elastic_strong":     elastic_distortion(base_image, **_p("elastic_strong")),
-
-        # ── Channel ops ───────────────────────────────────────────────────────
-        "channel_shuffle":    channel_shuffle(base_image),
-        "drop_red":           channel_drop(base_image, **_p("drop_red")),
-        "drop_green":         channel_drop(base_image, **_p("drop_green")),
-        "drop_blue":          channel_drop(base_image, **_p("drop_blue")),
-
-        # ── Color jitter ──────────────────────────────────────────────────────
-        "color_jitter_mild":  color_jitter(base_image, **_p("color_jitter_mild")),
-        "color_jitter_strong":color_jitter(base_image, **_p("color_jitter_strong")),
     }
 
     if selected:
@@ -570,7 +682,7 @@ def _process_one(args_tuple: tuple) -> tuple[bool, str, int]:
     Returns (success, path_str, n_written).
     """
     (image_path_str, input_dir_str, output_dir_str, ext,
-     seed, params, selected, skip_existing) = args_tuple
+     seed, params, selected, skip_existing, frame_ecocard, frame_width, frame_height) = args_tuple
 
     image_path = Path(image_path_str)
     input_dir  = Path(input_dir_str)
@@ -599,6 +711,14 @@ def _process_one(args_tuple: tuple) -> tuple[bool, str, int]:
     image = read_image(image_path)
     if image is None:
         return False, image_path_str, 0
+
+    if frame_ecocard:
+        image = frame_as_ecocard(
+            image,
+            title="EcoLearn Eco-Card",
+            subtitle="Scan to identify and sort correctly",
+            out_size=(int(frame_width), int(frame_height)),
+        )
 
     variants  = build_variants(image, params=params, selected=selected)
     n_written = 0
@@ -635,6 +755,8 @@ def main():
     )
     parser.add_argument("--input-dir",  default=str(Path("..") / "assets_png"),
                         help="Source root folder containing class/category subfolders.")
+    parser.add_argument("--single-image", default=None,
+                        help="Generate variants for just one image (path must be inside --input-dir).")
     parser.add_argument("--output-dir", default=str(Path("..") / "assets_variants"),
                         help="Output root folder where variants will be saved.")
     parser.add_argument("--ext", default=".png",
@@ -651,6 +773,10 @@ def main():
                         help="Skip output files that already exist (resume mode).")
     parser.add_argument("--config", default=None,
                         help="Path to a YAML or JSON file with parameter overrides.")
+    parser.add_argument("--frame-ecocard", action="store_true",
+                        help="Wrap each source image in the Eco-Card template before augmenting.")
+    parser.add_argument("--frame-size", default="800x1000",
+                        help="Output size for Eco-Card framing as WxH pixels (used with --frame-ecocard).")
     parser.add_argument("--list-variants", action="store_true",
                         help="Print all available variant names and exit.")
     args = parser.parse_args()
@@ -682,15 +808,70 @@ def main():
     if not input_dir.exists():
         raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
-    image_paths = list(iter_images(input_dir))
+    if args.single_image:
+        raw_single = Path(args.single_image)
+        candidates: list[Path]
+        if raw_single.is_absolute():
+            candidates = [raw_single]
+        else:
+            # Try common bases so users can pass paths relative to:
+            #  - current working directory
+            #  - --input-dir root
+            #  - backend/ script directory
+            candidates = [
+                Path.cwd() / raw_single,
+                input_dir / raw_single,
+                script_dir / raw_single,
+            ]
+
+        single_path: Path | None = None
+        tried: list[str] = []
+        for c in candidates:
+            try:
+                c_resolved = c.resolve()
+            except Exception:
+                continue
+            tried.append(str(c_resolved))
+            if c_resolved.exists() and c_resolved.is_file():
+                single_path = c_resolved
+                break
+
+        if single_path is None:
+            raise FileNotFoundError(
+                "Single image not found. Tried:\n  - " + "\n  - ".join(tried)
+            )
+        if single_path.suffix.lower() not in VALID_EXTENSIONS:
+            raise ValueError(f"Single image must be one of {sorted(VALID_EXTENSIONS)}: {single_path}")
+        try:
+            single_path.relative_to(input_dir)
+        except Exception:
+            raise ValueError(
+                "--single-image must be inside --input-dir so category folders are preserved. "
+                f"Got: {single_path} (input-dir: {input_dir})"
+            )
+        image_paths = [single_path]
+    else:
+        image_paths = list(iter_images(input_dir))
     if not image_paths:
         print("[warn] No images found in input directory.")
         return
 
+    frame_width = 800
+    frame_height = 1000
+    if args.frame_ecocard:
+        try:
+            raw = str(args.frame_size).lower().replace(" ", "")
+            w_str, h_str = raw.split("x", 1)
+            frame_width = max(128, int(w_str))
+            frame_height = max(160, int(h_str))
+        except Exception:
+            raise ValueError("Invalid --frame-size. Use WxH like 800x1000")
+
     # ── Build worker task list ────────────────────────────────────────────────
     tasks = [
         (str(p), str(input_dir), str(output_dir),
-         args.ext, args.seed, params, selected, args.skip_existing)
+         args.ext, args.seed, params, selected, args.skip_existing,
+         args.frame_ecocard, frame_width, frame_height)
         for p in image_paths
     ]
 

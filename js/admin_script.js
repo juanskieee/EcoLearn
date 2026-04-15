@@ -1591,23 +1591,50 @@ function openProficiencyReportPrintPreview() {
 
 let assetData = null; // Used by PDF generation
 
-// Bond paper (8.5x11in) with a true-size 4x5in EcoCard centered on each page.
-const PDF_PAGE = {
-    width: 8.5,
-    height: 11,
-    cardWidth: 4,
-    cardHeight: 5
+// Eco-Card physical size (inches)
+const PDF_CARD = {
+    width: 4,
+    height: 5
 };
 
-function getCardOrigin() {
+// Single-card download: Bond paper (8.5x11in) with a true-size 4x5in EcoCard centered on each page.
+const PDF_PAGE_SINGLE = {
+    width: 8.5,
+    height: 11
+};
+
+// Download-all layout: A4 page size in inches (portrait)
+const PDF_PAGE_A4 = {
+    width: 8.27,
+    height: 11.69
+};
+
+function getCenteredCardOrigin(pageWidth, pageHeight) {
     return {
-        x: (PDF_PAGE.width - PDF_PAGE.cardWidth) / 2,
-        y: (PDF_PAGE.height - PDF_PAGE.cardHeight) / 2
+        x: (pageWidth - PDF_CARD.width) / 2,
+        y: (pageHeight - PDF_CARD.height) / 2
     };
 }
 
-function drawEcoCardToPdf(pdf, imageData) {
-    const origin = getCardOrigin();
+function computeCardGridLayout(pageWidth, pageHeight, gutterX = 0.1, gutterY = 0.2) {
+    const cols = Math.max(1, Math.floor((pageWidth + gutterX) / (PDF_CARD.width + gutterX)));
+    const rows = Math.max(1, Math.floor((pageHeight + gutterY) / (PDF_CARD.height + gutterY)));
+
+    const totalWidth = cols * PDF_CARD.width + (cols - 1) * gutterX;
+    const totalHeight = rows * PDF_CARD.height + (rows - 1) * gutterY;
+
+    return {
+        cols,
+        rows,
+        slotsPerPage: cols * rows,
+        startX: (pageWidth - totalWidth) / 2,
+        startY: (pageHeight - totalHeight) / 2,
+        gutterX,
+        gutterY
+    };
+}
+
+function drawEcoCardToPdfAt(pdf, imageData, origin) {
 
     // Card base
     pdf.setFillColor(255, 255, 255);
@@ -1640,6 +1667,11 @@ function drawEcoCardToPdf(pdf, imageData) {
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(145, 145, 145);
     pdf.text('Scan to identify and sort correctly', origin.x + 2, origin.y + 4.76, { align: 'center' });
+}
+
+function drawEcoCardToPdf(pdf, imageData) {
+    const origin = getCenteredCardOrigin(PDF_PAGE_SINGLE.width, PDF_PAGE_SINGLE.height);
+    drawEcoCardToPdfAt(pdf, imageData, origin);
 }
 
 function getHighQualityImagePath(imagePath) {
@@ -1681,7 +1713,7 @@ function showDownloadConfirmModal(category, cardId, cardName) {
     const isAllCards = cardId === null;
     const title = isAllCards ? `Download All ${category} Cards` : `Download "${cardName}"`;
     const message = isAllCards 
-        ? `This will generate a printable PDF containing all cards in the ${category} category.`
+        ? `This will generate a printable A4 PDF containing all cards in the ${category} category (auto-packed to fit per page).`
         : `This will generate a printable 4×5 inch PDF card for "${cardName}".`;
     
     // Create modal if it doesn't exist
@@ -1767,21 +1799,31 @@ async function executeDownloadAllPDF(category) {
         
         const cards = data.categories[category].cards;
         const { jsPDF } = window.jspdf;
-        
-        // Create bond-paper PDF and place true-size 4x5in card in the center.
+
+        // Create A4 PDF and pack as many 4x5in Eco-Cards per page as will fit.
         const pdf = new jsPDF({
             orientation: 'portrait',
             unit: 'in',
-            format: [PDF_PAGE.width, PDF_PAGE.height]
+            format: [PDF_PAGE_A4.width, PDF_PAGE_A4.height]
         });
-        
+
+        const layout = computeCardGridLayout(PDF_PAGE_A4.width, PDF_PAGE_A4.height);
+
         // Process each card
         for (let i = 0; i < cards.length; i++) {
             const card = cards[i];
-            
-            if (i > 0) {
-                pdf.addPage([PDF_PAGE.width, PDF_PAGE.height]);
+            const slotIndex = i % layout.slotsPerPage;
+
+            if (i > 0 && slotIndex === 0) {
+                pdf.addPage([PDF_PAGE_A4.width, PDF_PAGE_A4.height]);
             }
+
+            const col = slotIndex % layout.cols;
+            const row = Math.floor(slotIndex / layout.cols);
+            const origin = {
+                x: layout.startX + col * (PDF_CARD.width + layout.gutterX),
+                y: layout.startY + row * (PDF_CARD.height + layout.gutterY)
+            };
 
             let imgData = null;
             // Load and add image
@@ -1792,7 +1834,7 @@ async function executeDownloadAllPDF(category) {
                 console.warn('Image load failed for:', card.card_name);
             }
 
-            drawEcoCardToPdf(pdf, imgData);
+            drawEcoCardToPdfAt(pdf, imgData, origin);
         }
         
         // Download the PDF
@@ -1823,7 +1865,7 @@ async function executeDownloadSinglePDF(cardId, cardName) {
             const pdf = new jsPDF({
                 orientation: 'portrait',
                 unit: 'in',
-                format: [PDF_PAGE.width, PDF_PAGE.height]
+                format: [PDF_PAGE_SINGLE.width, PDF_PAGE_SINGLE.height]
             });
 
             let imgData = null;

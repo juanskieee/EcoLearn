@@ -15,8 +15,19 @@ import io
 import sys
 import subprocess
 import threading
+import random
 from pathlib import Path
 from gtts import gTTS
+
+# Avoid UnicodeEncodeError on some Windows consoles (e.g., cp1252) when printing
+# status markers like ✅/⚠️.
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 # Compatibility shim for loading legacy NumPy pickles across module path changes.
 try:
@@ -197,6 +208,10 @@ card_metadata = {}
 category_metadata = {}
 current_session_id = None
 current_session_mode = None
+current_session_subset_card_ids = set()
+current_session_scanned_card_ids = set()
+session_subset_lock = threading.Lock()
+SESSION_CARD_SUBSET_SIZE = 10
 orb_fallback_net = None
 orb_fallback_class_to_card_id = {}
 incremental_orb_net = None
@@ -223,6 +238,25 @@ def _update_training_status(**kwargs):
 def get_training_status_snapshot():
     with training_status_lock:
         return dict(training_status)
+
+
+def select_random_card_subset(card_ids: list[int], subset_size: int) -> set[int]:
+    """Pick a random subset of active card IDs for a session."""
+    unique_ids: list[int] = []
+    seen: set[int] = set()
+    for cid in card_ids:
+        try:
+            cid_int = int(cid)
+        except (TypeError, ValueError):
+            continue
+        if cid_int in seen:
+            continue
+        seen.add(cid_int)
+        unique_ids.append(cid_int)
+
+    if subset_size <= 0 or len(unique_ids) <= subset_size:
+        return set(unique_ids)
+    return set(random.sample(unique_ids, subset_size))
 
 
 def generate_variants_for_card(png_full_path: str, variants_category_dir: str, stem: str) -> int:
@@ -324,43 +358,6 @@ def decode_uploaded_image_to_bgr(file_storage):
         return np.clip(flat, 0, 255).astype(np.uint8)
 
     return img[:, :, :3]
-
-
-def validate_roi_card_placement(image_bgr):
-    """Rejects scans when no clear card is present or card touches ROI boundaries."""
-    try:
-        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-        h, w = gray.shape[:2]
-
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 60, 140)
-        edges = cv2.dilate(edges, np.ones((3, 3), dtype=np.uint8), iterations=1)
-
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return False, 'no_card_detected'
-
-        largest = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest)
-        min_area = max(int(0.08 * w * h), 2500)
-        if area < min_area:
-            return False, 'no_card_detected'
-
-        x, y, bw, bh = cv2.boundingRect(largest)
-        margin = max(6, int(min(w, h) * 0.03))
-        touches_border = (
-            x <= margin
-            or y <= margin
-            or (x + bw) >= (w - margin)
-            or (y + bh) >= (h - margin)
-        )
-        if touches_border:
-            return False, 'partial_placement'
-
-        return True, None
-    except Exception:
-        # Fail open to avoid blocking classification on validation errors.
-        return True, None
 
 
 def decode_uploaded_image_keep_alpha(file_storage):
@@ -907,22 +904,33 @@ def load_incremental_orb_model():
 
 
 def crop_center_roi(image_bgr, scale=0.8):
-    """Returns a centered crop to reduce background noise during ORB fallback inference."""
+    """Returns a centered *square* crop for ORB fallback inference.
+
+    Teachable Machine's preview commonly center-crops to a square before resizing.
+    Keeping the original aspect ratio (e.g., 16:9) and then resizing to 224x224
+    stretches the object and can significantly reduce CNN accuracy.
+    """
     if image_bgr is None or image_bgr.size == 0:
         return image_bgr
 
+    h, w = image_bgr.shape[:2]
+    if h < 8 or w < 8:
+        return image_bgr
+
     s = max(0.35, min(1.0, float(scale)))
+
+    # Allow callers to explicitly disable extra cropping.
+    # This is useful when the frontend already sends a tight ROI.
     if s >= 0.999:
         return image_bgr
 
-    h, w = image_bgr.shape[:2]
-    crop_w = max(8, int(w * s))
-    crop_h = max(8, int(h * s))
+    side = int(min(h, w) * s)
+    side = max(8, min(side, min(h, w)))
 
-    start_x = max(0, (w - crop_w) // 2)
-    start_y = max(0, (h - crop_h) // 2)
-    end_x = min(w, start_x + crop_w)
-    end_y = min(h, start_y + crop_h)
+    start_x = max(0, (w - side) // 2)
+    start_y = max(0, (h - side) // 2)
+    end_x = min(w, start_x + side)
+    end_y = min(h, start_y + side)
 
     if end_x - start_x < 8 or end_y - start_y < 8:
         return image_bgr
@@ -930,63 +938,88 @@ def crop_center_roi(image_bgr, scale=0.8):
     return image_bgr[start_y:end_y, start_x:end_x]
 
 
-def predict_waste_orb_fallback(image_bgr):
-    """Runs ORB fallback inference and returns ORB-compatible response shape."""
+def predict_waste_orb_fallback(image_bgr, allowed_card_ids: set[int] | None = None):
+    """Runs ORB fallback inference and returns ORB-compatible response shape.
+
+    When allowed_card_ids is provided, the prediction is constrained to those card IDs.
+    """
     if orb_fallback_net is None or not orb_fallback_class_to_card_id:
         return {"status": "unknown", "reason": "orb_unavailable"}
 
     try:
-        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, ORB_INPUT_SIZE)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-        # Teachable Machine exports are commonly NHWC and can use different
-        # normalization schemes depending on embedded preprocessing layers.
-        # Try common variants and keep the highest-confidence prediction.
-        input_variants = [
-            np.expand_dims(rgb, axis=0),
-            np.expand_dims(rgb / 255.0, axis=0),
-            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-        ]
+        # The frontend can already send a tight ROI; applying another crop may over-zoom.
+        # Evaluate both: configured crop, and no extra crop.
+        crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
+        crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
 
         best_probs = None
         best_conf = -1.0
-        for candidate in input_variants:
-            try:
-                orb_fallback_net.setInput(candidate)
-                raw = orb_fallback_net.forward().flatten()
-                if raw.size == 0:
-                    continue
 
-                raw = raw.astype(np.float64)
+        for crop_scale in crop_scales:
+            focused = crop_center_roi(image_bgr, scale=crop_scale)
+            resized = cv2.resize(focused, ORB_INPUT_SIZE)
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-                # Teachable Machine exports may already output probabilities.
-                raw_sum = float(np.sum(raw))
-                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                    probs = raw / raw_sum
-                else:
-                    shifted = raw - np.max(raw)
-                    exp_scores = np.exp(shifted)
-                    denom = float(np.sum(exp_scores))
-                    if denom <= 0.0:
+            # Teachable Machine exports are commonly NHWC and can use different
+            # normalization schemes depending on embedded preprocessing layers.
+            # Try common variants and keep the highest-confidence prediction.
+            input_variants = [
+                np.expand_dims(rgb, axis=0),
+                np.expand_dims(rgb / 255.0, axis=0),
+                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+            ]
+
+            for candidate in input_variants:
+                try:
+                    orb_fallback_net.setInput(candidate)
+                    raw = orb_fallback_net.forward().flatten()
+                    if raw.size == 0:
                         continue
-                    probs = exp_scores / denom
 
-                conf = float(np.max(probs))
+                    raw = raw.astype(np.float64)
 
-                if conf > best_conf:
-                    best_conf = conf
-                    best_probs = probs
-            except Exception:
-                continue
+                    # Teachable Machine exports may already output probabilities.
+                    raw_sum = float(np.sum(raw))
+                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                        probs = raw / raw_sum
+                    else:
+                        shifted = raw - np.max(raw)
+                        exp_scores = np.exp(shifted)
+                        denom = float(np.sum(exp_scores))
+                        if denom <= 0.0:
+                            continue
+                        probs = exp_scores / denom
+
+                    conf = float(np.max(probs))
+
+                    if conf > best_conf:
+                        best_conf = conf
+                        best_probs = probs
+                except Exception:
+                    continue
 
         if best_probs is None:
             return {"status": "unknown", "reason": "orb_inference_failed"}
 
         probs = best_probs
 
-        top_class = int(np.argmax(probs))
-        confidence = float(probs[top_class])
+        if allowed_card_ids:
+            best_class = None
+            best_conf = -1.0
+            for class_idx, conf in enumerate(probs.tolist()):
+                card_id_candidate = orb_fallback_class_to_card_id.get(int(class_idx))
+                if card_id_candidate in allowed_card_ids and float(conf) > best_conf:
+                    best_conf = float(conf)
+                    best_class = int(class_idx)
+
+            if best_class is None:
+                return {"status": "unknown", "reason": "not_in_subset"}
+
+            top_class = best_class
+            confidence = best_conf
+        else:
+            top_class = int(np.argmax(probs))
+            confidence = float(probs[top_class])
 
         if confidence < ORB_CONFIDENCE_THRESHOLD:
             return {
@@ -1020,56 +1053,79 @@ def predict_waste_orb_fallback(image_bgr):
         return {"status": "unknown", "reason": f"orb_fallback_error:{str(e)}"}
 
 
-def predict_waste_incremental_orb(image_bgr):
-    """Runs incremental ORB first for one-shot classes only."""
+def predict_waste_incremental_orb(image_bgr, allowed_card_ids: set[int] | None = None):
+    """Runs incremental ORB first for one-shot classes only.
+
+    When allowed_card_ids is provided, the prediction is constrained to those card IDs.
+    """
     if incremental_orb_net is None or not incremental_orb_class_to_card_id:
         return {"status": "unknown", "reason": "incremental_orb_unavailable"}
 
     try:
-        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, ORB_INPUT_SIZE)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-        input_variants = [
-            np.expand_dims(rgb, axis=0),
-            np.expand_dims(rgb / 255.0, axis=0),
-            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-        ]
+        crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
+        crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
 
         best_probs = None
         best_conf = -1.0
-        for candidate in input_variants:
-            try:
-                incremental_orb_net.setInput(candidate)
-                raw = incremental_orb_net.forward().flatten()
-                if raw.size == 0:
-                    continue
 
-                raw = raw.astype(np.float64)
-                raw_sum = float(np.sum(raw))
-                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                    probs = raw / raw_sum
-                else:
-                    shifted = raw - np.max(raw)
-                    exp_scores = np.exp(shifted)
-                    denom = float(np.sum(exp_scores))
-                    if denom <= 0.0:
+        for crop_scale in crop_scales:
+            focused = crop_center_roi(image_bgr, scale=crop_scale)
+            resized = cv2.resize(focused, ORB_INPUT_SIZE)
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+            input_variants = [
+                np.expand_dims(rgb, axis=0),
+                np.expand_dims(rgb / 255.0, axis=0),
+                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+            ]
+
+            for candidate in input_variants:
+                try:
+                    incremental_orb_net.setInput(candidate)
+                    raw = incremental_orb_net.forward().flatten()
+                    if raw.size == 0:
                         continue
-                    probs = exp_scores / denom
 
-                conf = float(np.max(probs))
-                if conf > best_conf:
-                    best_conf = conf
-                    best_probs = probs
-            except Exception:
-                continue
+                    raw = raw.astype(np.float64)
+                    raw_sum = float(np.sum(raw))
+                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                        probs = raw / raw_sum
+                    else:
+                        shifted = raw - np.max(raw)
+                        exp_scores = np.exp(shifted)
+                        denom = float(np.sum(exp_scores))
+                        if denom <= 0.0:
+                            continue
+                        probs = exp_scores / denom
+
+                    conf = float(np.max(probs))
+                    if conf > best_conf:
+                        best_conf = conf
+                        best_probs = probs
+                except Exception:
+                    continue
 
         if best_probs is None:
             return {"status": "unknown", "reason": "incremental_orb_inference_failed"}
 
         probs = best_probs
-        top_class = int(np.argmax(probs))
-        confidence = float(probs[top_class])
+        if allowed_card_ids:
+            best_class = None
+            best_conf = -1.0
+            for class_idx, conf in enumerate(probs.tolist()):
+                card_id_candidate = incremental_orb_class_to_card_id.get(int(class_idx))
+                if card_id_candidate in allowed_card_ids and float(conf) > best_conf:
+                    best_conf = float(conf)
+                    best_class = int(class_idx)
+
+            if best_class is None:
+                return {"status": "unknown", "reason": "not_in_subset"}
+
+            top_class = best_class
+            confidence = best_conf
+        else:
+            top_class = int(np.argmax(probs))
+            confidence = float(probs[top_class])
 
         if confidence < ORB_INCREMENTAL_CONFIDENCE_THRESHOLD:
             return {
@@ -1201,45 +1257,50 @@ def get_orb_fallback_topk(image_bgr, top_k=3):
         return []
 
     try:
-        focused = crop_center_roi(image_bgr, scale=ORB_FOCUS_ROI_SCALE)
-        resized = cv2.resize(focused, ORB_INPUT_SIZE)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-        input_variants = [
-            np.expand_dims(rgb, axis=0),
-            np.expand_dims(rgb / 255.0, axis=0),
-            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-        ]
+        crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
+        crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
 
         best_probs = None
         best_conf = -1.0
-        for candidate in input_variants:
-            try:
-                orb_fallback_net.setInput(candidate)
-                raw = orb_fallback_net.forward().flatten()
-                if raw.size == 0:
-                    continue
 
-                raw = raw.astype(np.float64)
+        for crop_scale in crop_scales:
+            focused = crop_center_roi(image_bgr, scale=crop_scale)
+            resized = cv2.resize(focused, ORB_INPUT_SIZE)
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-                raw_sum = float(np.sum(raw))
-                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                    probs = raw / raw_sum
-                else:
-                    shifted = raw - np.max(raw)
-                    exp_scores = np.exp(shifted)
-                    denom = float(np.sum(exp_scores))
-                    if denom <= 0.0:
+            input_variants = [
+                np.expand_dims(rgb, axis=0),
+                np.expand_dims(rgb / 255.0, axis=0),
+                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+            ]
+
+            for candidate in input_variants:
+                try:
+                    orb_fallback_net.setInput(candidate)
+                    raw = orb_fallback_net.forward().flatten()
+                    if raw.size == 0:
                         continue
-                    probs = exp_scores / denom
 
-                conf = float(np.max(probs))
+                    raw = raw.astype(np.float64)
 
-                if conf > best_conf:
-                    best_conf = conf
-                    best_probs = probs
-            except Exception:
-                continue
+                    raw_sum = float(np.sum(raw))
+                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                        probs = raw / raw_sum
+                    else:
+                        shifted = raw - np.max(raw)
+                        exp_scores = np.exp(shifted)
+                        denom = float(np.sum(exp_scores))
+                        if denom <= 0.0:
+                            continue
+                        probs = exp_scores / denom
+
+                    conf = float(np.max(probs))
+
+                    if conf > best_conf:
+                        best_conf = conf
+                        best_probs = probs
+                except Exception:
+                    continue
 
         if best_probs is None:
             return []
@@ -1566,17 +1627,11 @@ def classify():
         
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
-
-        placement_ok, placement_reason = validate_roi_card_placement(img)
-        if not placement_ok:
-            return jsonify({
-                "status": "unknown",
-                "reason": placement_reason,
-                "reject_outcome": placement_reason,
-                "classifier": "placement_guard"
-            })
         
         # Dual-model routing: incremental model first, then base model fallback.
+        # NOTE: We do not restrict the model's candidate space here; we enforce the
+        # Learn Mode 10-card subset as a post-check below to avoid suppressing
+        # confidence scores.
         result = predict_waste_incremental_orb(img)
         if result.get('status') != 'success':
             result = predict_waste_orb_fallback(img)
@@ -1590,6 +1645,27 @@ def classify():
             # Auto-log for instructional mode only
             # Assessment mode will call /assessment/submit separately
             if current_session_mode == 'instructional':
+                card_id = result.get('card_id')
+                try:
+                    card_id = int(card_id)
+                except (TypeError, ValueError):
+                    card_id = None
+
+                with session_subset_lock:
+                    scanned = current_session_scanned_card_ids
+
+                    if card_id is not None and card_id in scanned:
+                        return jsonify({
+                            "status": "unknown",
+                            "reason": "already_scanned",
+                            "message": "Card already scanned in this session",
+                            "card_id": card_id,
+                            "card_name": result.get('card_name', ''),
+                        })
+
+                    if card_id is not None:
+                        scanned.add(card_id)
+
                 log_scan_transaction(result)
         
         return jsonify(result)
@@ -1609,16 +1685,6 @@ def classify_top3():
 
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
-
-        placement_ok, placement_reason = validate_roi_card_placement(img)
-        if not placement_ok:
-            return jsonify({
-                "status": "unknown",
-                "reason": placement_reason,
-                "reject_outcome": placement_reason,
-                "classifier": "placement_guard",
-                "top_candidates": []
-            })
 
         candidates = get_orb_fallback_topk(img, top_k=3)
         ranked = []
@@ -1716,6 +1782,7 @@ def submit_assessment():
 def start_session():
     """Start a new student session"""
     global current_session_id, current_session_mode
+    global current_session_subset_card_ids, current_session_scanned_card_ids
     
     try:
         data = request.json
@@ -1734,6 +1801,14 @@ def start_session():
         
         current_session_id = cursor.lastrowid
         current_session_mode = mode
+
+        # Learn Mode protocol: enforce no-repeat scans within the session.
+        with session_subset_lock:
+            if mode == 'instructional':
+                current_session_subset_card_ids = set()
+            else:
+                current_session_subset_card_ids = set()
+            current_session_scanned_card_ids = set()
         
         cursor.close()
         conn.close()
@@ -1752,6 +1827,7 @@ def start_session():
 def end_session():
     """End current session"""
     global current_session_id, current_session_mode
+    global current_session_subset_card_ids, current_session_scanned_card_ids
     
     if not current_session_id:
         return jsonify({"status": "error", "message": "No active session"})
@@ -1782,6 +1858,10 @@ def end_session():
         session_id = current_session_id
         current_session_id = None
         current_session_mode = None
+
+        with session_subset_lock:
+            current_session_subset_card_ids = set()
+            current_session_scanned_card_ids = set()
         
         return jsonify({
             "status": "success",

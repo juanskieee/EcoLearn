@@ -106,7 +106,7 @@
             
             <div class="header-left-score">
                 <div class="score-icon-div">
-                    <img src="assets/scores.png" alt="Scores" class="score-icon">
+                    <img src="assets/cards.png" alt="Scores" class="score-icon">
                 </div>                
                 <div class="score-board">
                     <div class="score-item">
@@ -122,6 +122,11 @@
                     <div class="score-item" id="test-timer-wrap">
                         <span class="score-value" id="test-timer">01:00</span>
                         <span class="score-label">Time Left</span>
+                    </div>
+                    <div class="score-divider" id="learn-card-counter-divider" style="display:none;"></div>
+                    <div class="score-item" id="learn-card-counter-wrap" style="display:none;">
+                        <span class="score-value" id="learn-card-count">0/10</span>
+                        <span class="score-label">Eco-Cards</span>
                     </div>
                 </div>
             </div>
@@ -245,6 +250,7 @@
                 <p class="results-message learn-mode-message" id="learn-results-message">
                     🌱 Great job exploring today! You're learning so much about waste sorting!
                 </p>
+                <p class="results-message learn-mode-message" id="learn-results-count"></p>
                 <div class="learn-results-badge">
                     <span class="learn-badge-icon">🌟</span>
                     <span class="learn-badge-text">Eco Explorer!</span>
@@ -359,6 +365,29 @@
             <div class="quit-modal-actions">
                 <button class="btn-timeup-continue" onclick="confirmTimeUpProceed()">
                     <span>View Results</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Learn Mode: Repeat Scan Modal -->
+    <div id="repeatScanModal" class="quit-modal" onclick="handleRepeatScanModalBackdropClick(event)">
+        <div class="quit-modal-content" onclick="event.stopPropagation()">
+            <img src="assets/leafframe.png" class="quit-frame-overlay" alt="Leaf Frame">
+            <div class="quit-modal-header">
+                <h3>Already scanned!</h3>
+            </div>
+            <div class="quit-modal-body">
+                <p class="quit-modal-main-text">
+                    <strong id="repeat-scan-main-text">You already scanned that card.</strong>
+                </p>
+                <p class="quit-modal-sub-text">
+                    Please pick a different eco-card.
+                </p>
+            </div>
+            <div class="quit-modal-actions">
+                <button class="btn-quit-confirm" onclick="closeRepeatScanModal()">
+                    <span>OK</span>
                 </button>
             </div>
         </div>

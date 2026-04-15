@@ -17,6 +17,10 @@ let assessmentRemainingSeconds = 60;
 let pendingTimeUpStats = null;
 let skipSessionPersistOnUnload = false;
 
+// Learn Mode: 10-card subset counter
+let learnCardsExplored = 0;
+const LEARN_CARD_TARGET = 10;
+
 // Assessment Mode State
 let assessmentStep = 'scan'; // 'scan' | 'identify'
 let currentScanResult = null;
@@ -116,6 +120,9 @@ const scanCountEl = document.getElementById('scan-count');
 const correctCountEl = document.getElementById('correct-count');
 let testTimerEl = document.getElementById('test-timer');
 let testTimerWrap = document.getElementById('test-timer-wrap');
+const learnCardCounterWrap = document.getElementById('learn-card-counter-wrap');
+const learnCardCounterDivider = document.getElementById('learn-card-counter-divider');
+const learnCardCountEl = document.getElementById('learn-card-count');
 const binBadge = document.getElementById('bin-badge');
 const binBadgeLabel = document.getElementById('bin-badge-label');
 const confidenceKidsEl = document.getElementById('confidence-kids');
@@ -296,6 +303,7 @@ function saveSessionToStorage() {
         sessionMode: sessionMode,
         totalScans: totalScans,
         correctScans: correctScans,
+        learnCardsExplored: learnCardsExplored,
         assessmentRemainingSeconds: assessmentRemainingSeconds,
         scannedCardsHistory: scannedCardsHistory,
         timestamp: Date.now()
@@ -319,6 +327,7 @@ function restoreSessionIfExists() {
         sessionMode = sessionData.sessionMode;
         totalScans = sessionData.totalScans || 0;
         correctScans = sessionData.correctScans || 0;
+        learnCardsExplored = Math.max(0, parseInt(sessionData.learnCardsExplored, 10) || 0);
         assessmentRemainingSeconds = Number.isFinite(sessionData.assessmentRemainingSeconds)
             ? sessionData.assessmentRemainingSeconds
             : Math.max(10, parseInt(SYSTEM_CONFIG.assessment_timer_seconds, 10) || 60);
@@ -338,6 +347,8 @@ function restoreSessionIfExists() {
         }
         
         configureGameForMode(sessionMode);
+
+        updateLearnCardCounter();
         
         if (sessionMode === 'instructional') {
             gameScreen.classList.add('learn-mode');
@@ -716,6 +727,8 @@ async function startGame() {
     studentDisplayName.textContent = name;
     scannedCardsHistory = [];
     if (scannedCardsListEl) scannedCardsListEl.innerHTML = '';
+    learnCardsExplored = 0;
+    updateLearnCardCounter();
 
     // Start background music immediately (must be in user-gesture context)
     startBackgroundMusic();
@@ -793,17 +806,47 @@ async function startGame() {
 function configureGameForMode(mode) {
     const headerLeftScore = document.querySelector('.header-left-score');
     ensureAssessmentTimerUi();
+
+    const scanItem = scanCountEl ? scanCountEl.closest('.score-item') : null;
+    const correctItem = correctCountEl ? correctCountEl.closest('.score-item') : null;
+    const scanDivider = scanItem ? scanItem.nextElementSibling : null;
+    const correctDivider = correctItem ? correctItem.nextElementSibling : null;
+    const timerDivider = testTimerWrap ? testTimerWrap.previousElementSibling : null;
     
     if (mode === 'instructional') {
-        // Hide scores in instructional mode
-        if (headerLeftScore) headerLeftScore.style.display = 'none';
+        // Learn Mode: show 10-card counter in the same score-board style
+        if (headerLeftScore) headerLeftScore.style.display = 'flex';
+
+        if (scanItem) scanItem.style.display = 'none';
+        if (scanDivider && scanDivider.classList.contains('score-divider')) scanDivider.style.display = 'none';
+        if (correctItem) correctItem.style.display = 'none';
+        if (correctDivider && correctDivider.classList.contains('score-divider')) correctDivider.style.display = 'none';
+        if (testTimerWrap) testTimerWrap.style.display = 'none';
+        if (timerDivider && timerDivider.classList.contains('score-divider')) timerDivider.style.display = 'none';
+
+        if (learnCardCounterDivider) learnCardCounterDivider.style.display = 'none';
+        if (learnCardCounterWrap) learnCardCounterWrap.style.display = 'block';
+        updateLearnCardCounter();
         stopAssessmentTimer();
     } else {
         // Show scores in assessment mode
         if (headerLeftScore) headerLeftScore.style.display = 'flex';
+        if (scanItem) scanItem.style.display = 'block';
+        if (scanDivider && scanDivider.classList.contains('score-divider')) scanDivider.style.display = 'block';
+        if (correctItem) correctItem.style.display = 'block';
+        if (correctDivider && correctDivider.classList.contains('score-divider')) correctDivider.style.display = 'block';
         if (testTimerWrap) testTimerWrap.style.display = 'block';
+        if (timerDivider && timerDivider.classList.contains('score-divider')) timerDivider.style.display = 'block';
+        if (learnCardCounterDivider) learnCardCounterDivider.style.display = 'none';
+        if (learnCardCounterWrap) learnCardCounterWrap.style.display = 'none';
         updateAssessmentTimerDisplay();
     }
+}
+
+function updateLearnCardCounter() {
+    if (!learnCardCountEl) return;
+    const explored = Math.max(0, Math.min(LEARN_CARD_TARGET, parseInt(learnCardsExplored, 10) || 0));
+    learnCardCountEl.textContent = `${explored}/${LEARN_CARD_TARGET}`;
 }
 
 async function shouldRunTutorialForCurrentPlayer() {
@@ -1117,6 +1160,7 @@ async function forceEndSessionByTimer() {
 }
 
 function showTimeUpModal() {
+    forceDismissStaleTutorialOverlay();
     const modal = document.getElementById('timeUpModal');
     if (modal) modal.classList.add('active');
 }
@@ -1124,6 +1168,103 @@ function showTimeUpModal() {
 function closeTimeUpModal() {
     const modal = document.getElementById('timeUpModal');
     if (modal) modal.classList.remove('active');
+}
+
+function forceDismissStaleTutorialOverlay() {
+    // Safety: if the cinematic tutorial overlay ever gets stuck (e.g., due to an
+    // exception during cleanup), it can sit above everything with a huge z-index
+    // and block modals. When we need a modal, force-clear that state.
+    try {
+        const overlay = document.getElementById('cinematic-tutorial-overlay');
+        if (overlay && overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
+        }
+
+        if (tutorialState && tutorialState.highlightedEl) {
+            tutorialState.highlightedEl.classList.remove('tutorial-spotlight');
+        }
+
+        document.body.classList.remove('tutorial-active');
+        if (tutorialState && tutorialState.active) {
+            tutorialState = null;
+        }
+    } catch (e) {
+        // Swallow all errors; modal display must still proceed.
+    }
+}
+
+function showRepeatScanModal(cardName) {
+    forceDismissStaleTutorialOverlay();
+    let modal = document.getElementById('repeatScanModal');
+    if (!modal) {
+        modal = createRepeatScanModal();
+    }
+    if (!modal) return;
+    if (modal.classList.contains('active')) return;
+
+    const mainTextEl = document.getElementById('repeat-scan-main-text');
+    const friendlyName = (cardName || '').toString().replace(/_/g, ' ').trim();
+    if (mainTextEl) {
+        mainTextEl.textContent = friendlyName
+            ? `You already scanned "${friendlyName}".`
+            : 'You already scanned that card.';
+    }
+
+    modal.classList.add('active');
+}
+
+function createRepeatScanModal() {
+    try {
+        const wrapper = document.createElement('div');
+        wrapper.id = 'repeatScanModal';
+        wrapper.className = 'quit-modal';
+        wrapper.addEventListener('click', handleRepeatScanModalBackdropClick);
+        wrapper.innerHTML = `
+            <div class="quit-modal-content">
+                <img src="assets/leafframe.png" class="quit-frame-overlay" alt="Leaf Frame">
+                <div class="quit-modal-header">
+                    <h3>Already scanned!</h3>
+                </div>
+                <div class="quit-modal-body">
+                    <p class="quit-modal-main-text">
+                        <strong id="repeat-scan-main-text">You already scanned that card.</strong>
+                    </p>
+                    <p class="quit-modal-sub-text">Please pick a different eco-card.</p>
+                </div>
+                <div class="quit-modal-actions">
+                    <button type="button" class="btn-quit-confirm">OK</button>
+                </div>
+            </div>
+        `;
+
+        const content = wrapper.querySelector('.quit-modal-content');
+        if (content) {
+            content.addEventListener('click', function(event) {
+                event.stopPropagation();
+            });
+        }
+
+        const okBtn = wrapper.querySelector('.btn-quit-confirm');
+        if (okBtn) {
+            okBtn.addEventListener('click', closeRepeatScanModal);
+        }
+
+        document.body.appendChild(wrapper);
+        return wrapper;
+    } catch (e) {
+        return null;
+    }
+}
+
+function closeRepeatScanModal() {
+    const modal = document.getElementById('repeatScanModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function handleRepeatScanModalBackdropClick(event) {
+    if (event.target === event.currentTarget) {
+        closeRepeatScanModal();
+    }
 }
 
 function handleTimeUpModalBackdropClick(event) {
@@ -1248,7 +1389,12 @@ function showResults(stats) {
         resultsTitle.textContent = 'Great Exploring!';
         
         const learnMessage = document.getElementById('learn-results-message');
+        const learnCountEl = document.getElementById('learn-results-count');
         const scanCount = stats.total_scans || 0;
+        const exploredCount = Math.max(0, Math.min(LEARN_CARD_TARGET, parseInt(scanCount, 10) || 0));
+        if (learnCountEl) {
+            learnCountEl.textContent = `Eco-cards explored: ${exploredCount}/${LEARN_CARD_TARGET}`;
+        }
         if (scanCount >= 10) {
             learnMessage.textContent = '🌟 Wow! You explored ' + scanCount + ' cards today! You\'re becoming a waste sorting expert!';
         } else if (scanCount >= 5) {
@@ -1416,6 +1562,11 @@ function escapeHtml(text) {
 async function captureAndIdentify() {
     if (isScanning) return;
 
+    const repeatScanModal = document.getElementById('repeatScanModal');
+    if (repeatScanModal && repeatScanModal.classList.contains('active')) {
+        return;
+    }
+
     stopSpeech();
     stopSfx();
     
@@ -1466,17 +1617,17 @@ async function captureAndIdentify() {
     canvas.width = cropW;
     canvas.height = cropH;
     const ctx = canvas.getContext('2d');
+    // The webcam element is mirrored in CSS for a natural UX. Canvas capture does NOT
+    // include CSS transforms, so we mirror here to ensure the model sees what the
+    // user sees (and what Teachable Machine's preview typically trains on).
+    ctx.save();
+    ctx.translate(cropW, 0);
+    ctx.scale(-1, 1);
     ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
+    ctx.restore();
 
     // Resume live feed AFTER capture so user sees camera unfreeze
     video.play();
-
-    const placement = evaluateRoiPlacement(canvas);
-    if (!placement.ok) {
-        showErrorFeedback({ reason: placement.reason });
-        scheduleScanUnlock(SCAN_COOLDOWN_MS);
-        return;
-    }
     
     canvas.toBlob(async (blob) => {
         const formData = new FormData();
@@ -1505,63 +1656,6 @@ async function captureAndIdentify() {
             }
         }
     }, 'image/jpeg', 0.95);
-}
-
-function evaluateRoiPlacement(roiCanvas) {
-    try {
-        const ctx = roiCanvas.getContext('2d', { willReadFrequently: true });
-        const w = roiCanvas.width;
-        const h = roiCanvas.height;
-        if (!ctx || !w || !h) {
-            return { ok: false, reason: 'no_card_detected' };
-        }
-
-        const image = ctx.getImageData(0, 0, w, h).data;
-        const stride = 2;
-        const border = Math.max(10, Math.floor(Math.min(w, h) * 0.08));
-
-        let foregroundCount = 0;
-        let borderForegroundCount = 0;
-        let samples = 0;
-
-        for (let y = 0; y < h; y += stride) {
-            for (let x = 0; x < w; x += stride) {
-                const idx = (y * w + x) * 4;
-                const r = image[idx];
-                const g = image[idx + 1];
-                const b = image[idx + 2];
-
-                const maxRGB = Math.max(r, g, b);
-                const minRGB = Math.min(r, g, b);
-                const luma = (0.299 * r) + (0.587 * g) + (0.114 * b);
-                const saturation = maxRGB - minRGB;
-                const isForeground = (luma < 235 && saturation > 18) || luma < 200;
-
-                samples++;
-                if (!isForeground) continue;
-
-                foregroundCount++;
-                const isBorder = x < border || y < border || x >= (w - border) || y >= (h - border);
-                if (isBorder) borderForegroundCount++;
-            }
-        }
-
-        if (samples === 0) return { ok: false, reason: 'no_card_detected' };
-
-        const coverage = foregroundCount / samples;
-        if (coverage < 0.12) {
-            return { ok: false, reason: 'no_card_detected' };
-        }
-
-        const borderRatio = borderForegroundCount / Math.max(1, foregroundCount);
-        if (borderRatio > 0.28) {
-            return { ok: false, reason: 'partial_placement' };
-        }
-
-        return { ok: true, reason: '' };
-    } catch (error) {
-        return { ok: true, reason: '' };
-    }
 }
 
 function handleInstructionalMode(data) {
@@ -1700,6 +1794,19 @@ function showInstructionalFeedback(data) {
     if (confidenceKidsEl) confidenceKidsEl.classList.add('hidden');
     
     addToScannedCards(data.card_name, config.icon, category, data.image_path);
+
+    // Learn Mode protocol: count explored eco-cards up to 10.
+    const previousLearnCount = Math.max(0, parseInt(learnCardsExplored, 10) || 0);
+    learnCardsExplored = Math.min(LEARN_CARD_TARGET, previousLearnCount + 1);
+    updateLearnCardCounter();
+    saveSessionToStorage();
+
+    // Auto-end the session once the student completes the 10/10 Learn target,
+    // mirroring the Test mode behavior when the timer expires.
+    if (previousLearnCount < LEARN_CARD_TARGET && learnCardsExplored >= LEARN_CARD_TARGET) {
+        forceEndSessionByTimer();
+        return;
+    }
     
     // Speak concise reason-based feedback in Tagalog
     speak('Ang ' + friendlyName + ' ay kabilang sa ' + category + ' dahil ' + reasonTl + '. Very good!');
@@ -2000,9 +2107,14 @@ function resetAssessmentUI() {
 }
 
 function showErrorFeedback(data) {
-    const reason = data && (data.reject_outcome || data.reason) ? (data.reject_outcome || data.reason) : 'unknown';
+    const rawReason = data && data.reason ? data.reason : 'unknown';
+    const reason = String(rawReason).trim().toLowerCase();
     const now = Date.now();
     const shouldThrottleAudio = (reason === lastErrorReason) && ((now - lastErrorFeedbackAt) < ERROR_FEEDBACK_COOLDOWN_MS);
+
+    if (sessionMode === 'instructional' && reason === 'already_scanned') {
+        showRepeatScanModal(data && data.card_name ? data.card_name : '');
+    }
 
     if (!shouldThrottleAudio) {
         stopSfx();
@@ -2029,11 +2141,11 @@ function showErrorFeedback(data) {
     let message = '';
     
     if (reason === 'insufficient_features') {
-        message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng yellow box.";
-    } else if (reason === 'no_card_detected') {
-        message = "Wala akong makitang eco-card sa yellow box. I-center ang card bago mag-scan.";
-    } else if (reason === 'partial_placement') {
-        message = "Lumampas ang card sa yellow box. Ilagay nang buo sa loob bago mag-scan.";
+        message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng box.";
+    } else if (reason === 'already_scanned') {
+        message = "Nascan mo na ang card na iyan! Pumili ng ibang card.";
+    } else if (reason === 'not_in_subset') {
+        message = "Hindi kasama ang card na iyan. Pumili ng ibang eco-card.";
     } else if (reason === 'low_confidence') {
         message = "Hmm, hindi ako sigurado dito. Subukan mong ipakita ang mas malinaw na card!";
     } else if (reason === 'ambiguous_match') {
@@ -2335,6 +2447,12 @@ document.addEventListener('keydown', (e) => {
         const quitModal = document.getElementById('quitModal');
         if (quitModal && quitModal.classList.contains('active')) {
             closeQuitModal();
+            return;
+        }
+
+        const repeatModal = document.getElementById('repeatScanModal');
+        if (repeatModal && repeatModal.classList.contains('active')) {
+            closeRepeatScanModal();
             return;
         }
     }
