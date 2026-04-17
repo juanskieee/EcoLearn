@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-08T09:12:47",
+  "generated_at": "2026-04-17T12:20:13",
   "backbone": "MobileNetV2",
   "backbone_weights": "imagenet_download",
   "class_count": 2,
@@ -21,8 +21,8 @@
     },
     {
       "class_index": 1,
-      "card_id": 76,
-      "card_name": "Cardboard Cup"
+      "card_id": 47,
+      "card_name": "Trash"
     }
   ],
   "args": {
@@ -43,10 +43,10 @@
     "dropout": 0.3,
     "trainer_augment": false,
     "max_samples_per_class": 12,
-    "focus_card_id": 76,
+    "focus_card_id": 47,
     "focus_max_samples": 48,
     "imagenet_weights_path": null,
-    "include_card_ids": "76,1",
+    "include_card_ids": "47,1",
     "log_file": "models\\orb_retrain_last.log"
   }
 }

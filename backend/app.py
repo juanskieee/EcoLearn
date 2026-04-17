@@ -45,10 +45,12 @@ try:
     from generate_variants import build_variants as gv_build_variants
     from generate_variants import read_image as gv_read_image
     from generate_variants import write_image as gv_write_image
+    from generate_variants import frame_as_ecocard as gv_frame_as_ecocard
 except Exception:
     gv_build_variants = None
     gv_read_image = None
     gv_write_image = None
+    gv_frame_as_ecocard = None
 
 # --- CONFIGURATION ---
 DB_CONFIG = {
@@ -268,6 +270,16 @@ def generate_variants_for_card(png_full_path: str, variants_category_dir: str, s
     if image is None:
         raise RuntimeError(f"Failed to read PNG for variant generation: {png_full_path}")
 
+    # IMPORTANT: Keep variant generation bounded in size.
+    # Admin one-shot uploads can be huge (phone camera), which makes heavy augmentations
+    # (esp. elastic distortion) extremely slow and can appear "stuck".
+    if gv_frame_as_ecocard is not None:
+        image = gv_frame_as_ecocard(
+            image,
+            title="EcoLearn Eco-Card",
+            subtitle="Scan to identify and sort correctly",
+            out_size=(800, 1000),
+        )
     variants = gv_build_variants(image)
     os.makedirs(variants_category_dir, exist_ok=True)
 
@@ -388,6 +400,26 @@ def to_bgr_for_ml(img):
     return img[:, :, :3]
 
 
+def downscale_max_dim(image_bgr: np.ndarray, max_dim: int = 1024) -> np.ndarray:
+    """Downscale an image so max(width,height) <= max_dim (keeps aspect ratio)."""
+    try:
+        h, w = image_bgr.shape[:2]
+    except Exception:
+        return image_bgr
+
+    if h <= 0 or w <= 0:
+        return image_bgr
+
+    max_side = max(h, w)
+    if max_side <= max_dim:
+        return image_bgr
+
+    scale = float(max_dim) / float(max_side)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    return cv2.resize(image_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
 def _run_orb_training_job(trigger: str, card_id: int | None, card_name: str | None):
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(backend_dir)
@@ -456,6 +488,58 @@ def _run_orb_training_job(trigger: str, card_id: int | None, card_name: str | No
             logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Starting ORB retrain\n")
             logf.write(f"trigger={trigger} card_id={card_id} card_name={card_name}\n")
             logf.write(f"python_executable={python_exe}\n")
+
+            # For one-shot add/replace, generate variants in THIS background job
+            # (so the HTTP request can return immediately).
+            if trigger in {'card_add', 'card_replace'} and card_id is not None and card_name:
+                try:
+                    conn = None
+                    cursor = None
+                    conn = connect_db()
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute(
+                        """
+                        SELECT c.category_name
+                        FROM TBL_CARD_ASSETS ca
+                        JOIN TBL_CATEGORIES c ON c.category_id = ca.category_id
+                        WHERE ca.card_id = %s
+                        LIMIT 1
+                        """,
+                        (card_id,),
+                    )
+                    row = cursor.fetchone()
+                    category_name = str(row['category_name']) if row and row.get('category_name') else None
+                except Exception as variant_db_err:
+                    category_name = None
+                    logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Variant lookup failed: {variant_db_err}\n")
+                finally:
+                    try:
+                        if cursor:
+                            cursor.close()
+                        if conn:
+                            conn.close()
+                    except Exception:
+                        pass
+
+                if category_name:
+                    safe_name = card_name.replace(' ', '_').replace('-', '_')
+                    safe_name = ''.join(ch for ch in safe_name if ch.isalnum() or ch == '_')
+                    png_full_path = os.path.join(project_root, 'assets_png', category_name, f"{safe_name}.png")
+                    variants_dir = os.path.join(project_root, 'assets_variants', category_name)
+                    if os.path.exists(png_full_path):
+                        logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Generating variants from {png_full_path}\n")
+                        logf.flush()
+                        try:
+                            written = generate_variants_for_card(png_full_path, variants_dir, safe_name)
+                            logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Variants generated: {written}\n")
+                            logf.flush()
+                        except Exception as variant_err:
+                            logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] Variant generation failed: {variant_err}\n")
+                            logf.flush()
+                    else:
+                        logf.write(f"[{datetime.now().isoformat(timespec='seconds')}] PNG not found for variants: {png_full_path}\n")
+                        logf.flush()
+
             logf.write(f"command={' '.join(cmd)}\n")
             logf.flush()
 
@@ -2858,9 +2942,10 @@ def one_shot_learning():
         if img is None or img_saved is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
-        # Extract ORB features from the original HIGH-QUALITY image (PNG quality)
-        # This ensures better keypoints and feature detection for training
-        preprocessed = preprocess_image(img)
+        # Extract ORB features from a bounded-size image.
+        # Uploaded admin photos can be very large; downscale for predictable speed.
+        img_for_orb = downscale_max_dim(img, 1024)
+        preprocessed = preprocess_image(img_for_orb)
         kp, des = orb.detectAndCompute(preprocessed, None)
         
         if des is None or len(kp) < 15:
@@ -2938,7 +3023,7 @@ def one_shot_learning():
             
             # Update feature vector (trained from high-quality PNG)
             feature_blob = pickle.dumps(des)
-            image_hash = hashlib.sha256(img.tobytes()).hexdigest()
+            image_hash = hashlib.sha256(img_for_orb.tobytes()).hexdigest()
             
             cursor.execute("""
                 UPDATE TBL_GOLDEN_DATASET 
@@ -2966,13 +3051,11 @@ def one_shot_learning():
             
             print(f"✅ Card updated: {card_name} | Features: {len(kp)} | PNG: {png_db_path} | WebP: {webp_db_path}")
 
-            variants_generated = 0
+            variants_generated = None
             retrain_started = False
             retrain_msg = 'ORB retraining was not started'
             pipeline_warning = None
             try:
-                variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
-                variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
                 retrain_started, retrain_msg = maybe_start_orb_retrain(
                     trigger='card_replace',
                     card_id=card_id,
@@ -3028,7 +3111,7 @@ def one_shot_learning():
             
             # Store feature vector (trained from high-quality PNG)
             feature_blob = pickle.dumps(des)
-            image_hash = hashlib.sha256(img.tobytes()).hexdigest()
+            image_hash = hashlib.sha256(img_for_orb.tobytes()).hexdigest()
             
             cursor.execute("""
                 INSERT INTO TBL_GOLDEN_DATASET 
@@ -3054,13 +3137,12 @@ def one_shot_learning():
             
             print(f"✅ New card registered: {card_name} | Features: {len(kp)} | PNG: {png_db_path} | WebP: {webp_db_path}")
 
-            variants_generated = 0
+            variants_generated = None
             retrain_started = False
             retrain_msg = 'ORB retraining was not started'
             pipeline_warning = None
             try:
-                variants_dir = os.path.join(base_dir, 'assets_variants', category_folder)
-                variants_generated = generate_variants_for_card(png_full_path, variants_dir, safe_name)
+                variants_generated = None
                 retrain_started, retrain_msg = maybe_start_orb_retrain(
                     trigger='card_add',
                     card_id=new_card_id,

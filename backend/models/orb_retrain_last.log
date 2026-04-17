@@ -1,34 +1,36 @@
-[2026-04-08T09:12:10] Starting CNN retrain
-trigger=card_add card_id=76 card_name=Cardboard Cup
-python_executable=c:\xampp\htdocs\.venv\Scripts\python.exe
-command=c:\xampp\htdocs\.venv\Scripts\python.exe -u train_cnn.py --img-size 224 --batch-size 24 --head-epochs 1 --finetune-epochs 0 --max-samples-per-class 12 --focus-max-samples 48 --include-card-ids 76,1 --out-keras models/waste_incremental_finetuned.h5 --out-onnx models/waste_incremental.onnx --out-labels models/waste_incremental_labels.txt --out-manifest models/training_manifest_incremental.json --focus-card-id 76
-2026-04-08 09:12:13.576084: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
+[2026-04-17T12:19:41] Starting ORB retrain
+trigger=card_add card_id=47 card_name=Trash
+python_executable=C:\xampp\htdocs\.venv\Scripts\python.exe
+[2026-04-17T12:19:41] Generating variants from C:\xampp\htdocs\assets_png\Compostable\Trash.png
+[2026-04-17T12:19:45] Variants generated: 59
+command=C:\xampp\htdocs\.venv\Scripts\python.exe -u train_orb.py --img-size 224 --batch-size 24 --head-epochs 1 --finetune-epochs 0 --max-samples-per-class 12 --focus-max-samples 48 --include-card-ids 47,1 --out-keras models/waste_incremental_finetuned.h5 --out-onnx models/waste_incremental.onnx --out-labels models/waste_incremental_labels.txt --out-manifest models/training_manifest_incremental.json --focus-card-id 47
+2026-04-17 12:19:47.368414: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\losses.py:2976: The name tf.losses.sparse_softmax_cross_entropy is deprecated. Please use tf.compat.v1.losses.sparse_softmax_cross_entropy instead.
 
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\tf2onnx\tf_loader.py:69: The name tf.reset_default_graph is deprecated. Please use tf.compat.v1.reset_default_graph instead.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\tf2onnx\tf_loader.py:69: The name tf.reset_default_graph is deprecated. Please use tf.compat.v1.reset_default_graph instead.
 
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\tf2onnx\tf_loader.py:73: The name tf.train.import_meta_graph is deprecated. Please use tf.compat.v1.train.import_meta_graph instead.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\tf2onnx\tf_loader.py:73: The name tf.train.import_meta_graph is deprecated. Please use tf.compat.v1.train.import_meta_graph instead.
 
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\keras\src\backend.py:873: The name tf.get_default_graph is deprecated. Please use tf.compat.v1.get_default_graph instead.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\backend.py:873: The name tf.get_default_graph is deprecated. Please use tf.compat.v1.get_default_graph instead.
 
-[info] sampled 48 files for card 'Cardboard Cup'
-[info] sampled_out=25 for card 'Cardboard Cup'
+[info] sampled 48 files for card 'Trash'
+[info] sampled_out=11 for card 'Trash'
 ========================================================================
-EcoLearn CNN Trainer  —  MobileNetV2 (ImageNet)
+EcoLearn ORB Trainer  —  MobileNetV2 (ImageNet)
 Active cards      : 2
 Train samples     : 42
 Validation samples: 7
 Num classes       : 2
 Image size        : 224x224
 ========================================================================
-2026-04-08 09:12:29.243145: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+2026-04-17 12:19:56.759661: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
 To enable the following instructions: SSE SSE2 SSE3 SSE4.1 SSE4.2 AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
-WARNING:tensorflow:From c:\xampp\htdocs\backend\train_cnn.py:325: ignore_errors (from tensorflow.python.data.experimental.ops.error_ops) is deprecated and will be removed in a future version.
+WARNING:tensorflow:From C:\xampp\htdocs\backend\train_orb.py:325: ignore_errors (from tensorflow.python.data.experimental.ops.error_ops) is deprecated and will be removed in a future version.
 Instructions for updating:
 Use `tf.data.Dataset.ignore_errors` instead.
 [backbone] Downloading ImageNet weights (requires internet access).
            To run offline, download weights manually and pass --imagenet-weights-path.
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\keras\src\layers\normalization\batch_normalization.py:979: The name tf.nn.fused_batch_norm is deprecated. Please use tf.compat.v1.nn.fused_batch_norm instead.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\layers\normalization\batch_normalization.py:979: The name tf.nn.fused_batch_norm is deprecated. Please use tf.compat.v1.nn.fused_batch_norm instead.
 
 Model: "ecolearn_mobilenetv2"
 _________________________________________________________________
@@ -53,27 +55,27 @@ Non-trainable params: 2257984 (8.61 MB)
 _________________________________________________________________
 
 [phase 1/2] Head-only warm-up (backbone frozen)
-WARNING:tensorflow:From c:\xampp\htdocs\.venv\Lib\site-packages\keras\src\utils\tf_utils.py:492: The name tf.ragged.RaggedTensorValue is deprecated. Please use tf.compat.v1.ragged.RaggedTensorValue instead.
+WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\utils\tf_utils.py:492: The name tf.ragged.RaggedTensorValue is deprecated. Please use tf.compat.v1.ragged.RaggedTensorValue instead.
 
 
-      1/Unknown - 5s 5s/step - loss: 0.6523 - accuracy: 0.7083
-      2/Unknown - 5s 204ms/step - loss: 0.4427 - accuracy: 0.8095
-2/2 [==============================] - 7s 2s/step - loss: 0.4427 - accuracy: 0.8095 - val_loss: 0.1896 - val_accuracy: 1.0000 - lr: 0.0010
+      1/Unknown - 5s 5s/step - loss: 0.8148 - accuracy: 0.5833
+      2/Unknown - 5s 210ms/step - loss: 0.5926 - accuracy: 0.6429
+2/2 [==============================] - 7s 2s/step - loss: 0.5926 - accuracy: 0.6429 - val_loss: 0.3640 - val_accuracy: 0.8571 - lr: 0.0010
 
-Validation loss : 0.1896
-Validation acc  : 1.0000
-c:\xampp\htdocs\.venv\Lib\site-packages\keras\src\engine\training.py:3103: UserWarning: You are saving your model as an HDF5 file via `model.save()`. This file format is considered legacy. We recommend using instead the native Keras format, e.g. `model.save('my_model.keras')`.
+Validation loss : 0.3640
+Validation acc  : 0.8571
+C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\engine\training.py:3103: UserWarning: You are saving your model as an HDF5 file via `model.save()`. This file format is considered legacy. We recommend using instead the native Keras format, e.g. `model.save('my_model.keras')`.
   saving_api.save_model(
 Saved Keras model : C:\xampp\htdocs\backend\models\waste_incremental_finetuned.h5
 Could not search for non-variable resources. Concrete function internal representation may have changed.
-2026-04-08 09:12:40.281453: I tensorflow/core/grappler/devices.cc:75] Number of eligible GPUs (core count >= 8, compute capability >= 0.0): 0 (Note: TensorFlow was not compiled with CUDA or ROCm support)
-2026-04-08 09:12:40.282130: I tensorflow/core/grappler/clusters/single_machine.cc:361] Starting new session
-2026-04-08 09:12:42.768720: I tensorflow/core/grappler/devices.cc:75] Number of eligible GPUs (core count >= 8, compute capability >= 0.0): 0 (Note: TensorFlow was not compiled with CUDA or ROCm support)
-2026-04-08 09:12:42.769410: I tensorflow/core/grappler/clusters/single_machine.cc:361] Starting new session
+2026-04-17 12:20:07.484242: I tensorflow/core/grappler/devices.cc:75] Number of eligible GPUs (core count >= 8, compute capability >= 0.0): 0 (Note: TensorFlow was not compiled with CUDA or ROCm support)
+2026-04-17 12:20:07.484888: I tensorflow/core/grappler/clusters/single_machine.cc:361] Starting new session
+2026-04-17 12:20:09.785002: I tensorflow/core/grappler/devices.cc:75] Number of eligible GPUs (core count >= 8, compute capability >= 0.0): 0 (Note: TensorFlow was not compiled with CUDA or ROCm support)
+2026-04-17 12:20:09.785750: I tensorflow/core/grappler/clusters/single_machine.cc:361] Starting new session
 Saved ONNX model  : C:\xampp\htdocs\backend\models\waste_incremental.onnx
 Saved labels map  : C:\xampp\htdocs\backend\models\waste_incremental_labels.txt
 Saved manifest    : C:\xampp\htdocs\backend\models\training_manifest_incremental.json
 
 Training pipeline complete.
 
-[2026-04-08T09:12:48] Finished with exit_code=0
+[2026-04-17T12:20:14] Finished with exit_code=0

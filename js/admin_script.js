@@ -60,12 +60,39 @@ function clearAddCardUiState() {
 }
 
 function saveAddCardUiState(partial = {}) {
+    const previous = getAddCardUiState() || {};
     const state = {
-        ...(getAddCardUiState() || {}),
+        ...previous,
         ...partial,
         updatedAt: Date.now(),
     };
-    sessionStorage.setItem(ADD_CARD_UI_STATE_KEY, JSON.stringify(state));
+
+    // Never persist previewHtml; it often contains a base64 data URL and exceeds storage quota.
+    if ('previewHtml' in state) delete state.previewHtml;
+
+    try {
+        sessionStorage.setItem(ADD_CARD_UI_STATE_KEY, JSON.stringify(state));
+    } catch (error) {
+        console.warn('Failed to persist add-card UI state (likely storage quota):', error);
+        try {
+            const minimal = {
+                modalOpen: Boolean(state.modalOpen),
+                tabId: state.tabId || 'one-shot',
+                isReplacement: Boolean(state.isReplacement),
+                replaceCardId: state.replaceCardId || '',
+                cardName: state.cardName || '',
+                categoryId: state.categoryId || '',
+                previewHasImage: Boolean(state.previewHasImage),
+                resultHtml: state.resultHtml || '',
+                resultBackground: state.resultBackground || '',
+                resultColor: state.resultColor || '',
+                updatedAt: state.updatedAt,
+            };
+            sessionStorage.setItem(ADD_CARD_UI_STATE_KEY, JSON.stringify(minimal));
+        } catch (secondError) {
+            console.warn('Failed to persist minimal add-card UI state:', secondError);
+        }
+    }
 }
 
 function setActiveNavItemByTab(tabId) {
@@ -119,9 +146,13 @@ async function restoreAddCardUiStateAfterReload() {
     if (nameInput) nameInput.value = state.cardName || '';
     if (categorySelect && state.categoryId) categorySelect.value = String(state.categoryId);
 
-    if (state.previewHtml && preview) {
-        preview.innerHTML = state.previewHtml;
-        preview.classList.toggle('has-image', Boolean(state.previewHasImage));
+    if (preview) {
+        // After a reload, browsers block restoring a chosen file input, so we can't restore the image.
+        // We only restore a safe placeholder.
+        if (state.previewHasImage) {
+            preview.innerHTML = '<div class="image-preview-placeholder">Image was selected before reload. Please re-upload if needed.</div>';
+            preview.classList.remove('has-image');
+        }
     }
 
     const isReplacement = Boolean(state.isReplacement || state.replaceCardId);
@@ -2290,7 +2321,6 @@ function openAddCardModal() {
             replaceCardId: '',
             cardName: '',
             categoryId: document.getElementById('one-shot-category')?.value || '1',
-            previewHtml: document.getElementById('image-preview')?.innerHTML || '',
             previewHasImage: false,
             resultHtml: '',
             resultBackground: '',
@@ -2327,7 +2357,6 @@ function previewCardImage() {
                 categoryId: document.getElementById('one-shot-category')?.value || '1',
                 replaceCardId: document.getElementById('replace-card-id')?.value || '',
                 isReplacement: Boolean(document.getElementById('replace-card-id')?.value),
-                previewHtml: preview.innerHTML,
                 previewHasImage: true,
             });
         };
@@ -2338,7 +2367,6 @@ function previewCardImage() {
         saveAddCardUiState({
             modalOpen: true,
             tabId: 'one-shot',
-            previewHtml: preview.innerHTML,
             previewHasImage: false,
         });
     }
@@ -2383,7 +2411,6 @@ async function submitOneShotLearning() {
         resultHtml: resultDiv.innerHTML,
         resultBackground: resultDiv.style.background,
         resultColor: resultDiv.style.color,
-        previewHtml: document.getElementById('image-preview')?.innerHTML || '',
         previewHasImage: document.getElementById('image-preview')?.classList.contains('has-image') || false,
     });
     
@@ -2397,10 +2424,20 @@ async function submitOneShotLearning() {
             formData.append('replace_card_id', replaceCardId);
         }
         
-        const response = await fetch(`${API_URL}/admin/one-shot-learn`, {
-            method: 'POST',
-            body: formData
-        });
+        const controller = new AbortController();
+        const timeoutMs = 120000; // 2 minutes
+        const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+        let response;
+        try {
+            response = await fetch(`${API_URL}/admin/one-shot-learn`, {
+                method: 'POST',
+                body: formData,
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timeoutHandle);
+        }
         
         const data = await response.json();
         
@@ -2492,7 +2529,11 @@ async function submitOneShotLearning() {
         resultDiv.style.display = 'block';
         resultDiv.style.background = '#FEE2E2';
         resultDiv.style.color = '#DC2626';
-        resultDiv.innerHTML = '❌ Error connecting to server.';
+        if (error && (error.name === 'AbortError' || String(error).includes('AbortError'))) {
+            resultDiv.innerHTML = '❌ Request timed out. The server took too long—please try again.';
+        } else {
+            resultDiv.innerHTML = '❌ Error connecting to server.';
+        }
         setAddCardModalLocked(false);
         clearAddCardUiState();
     }
