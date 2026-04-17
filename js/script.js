@@ -2146,7 +2146,7 @@ function showErrorFeedback(data) {
         message = "Nascan mo na ang card na iyan! Pumili ng ibang card.";
     } else if (reason === 'not_in_subset') {
         message = "Hindi kasama ang card na iyan. Pumili ng ibang eco-card.";
-    } else if (reason === 'low_confidence') {
+    } else if (reason === 'low_confidence' || reason === 'orb_low_confidence' || reason === 'incremental_orb_low_confidence') {
         message = "Hmm, hindi ako sigurado dito. Subukan mong ipakita ang mas malinaw na card!";
     } else if (reason === 'ambiguous_match') {
         message = "Magkahawig ang nakita ko. Pakiharap ang card nang mas diretso para mas malinaw.";

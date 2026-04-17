@@ -93,10 +93,17 @@ ORB_IMPORT_MARKER_PATH = os.path.join(os.path.dirname(__file__), 'models', '.tea
 ORB_INCREMENTAL_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental.onnx')
 ORB_INCREMENTAL_LABELS_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_incremental_labels.txt')
 ORB_INPUT_SIZE = (224, 224)
-ORB_CONFIDENCE_THRESHOLD = 0.65
-ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.85
+ORB_CONFIDENCE_THRESHOLD = 0.72
+ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.90
 ORB_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
-HYBRID_MARGIN = 0.10  # Minimum confidence gap to break ORB vs fallback disagreements
+HYBRID_MARGIN = 0.14  # Minimum confidence gap to break ORB vs fallback disagreements
+CNN_ENSEMBLE_ENABLED = True
+CNN_ENSEMBLE_RUNS = 3
+CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE = 0.90
+CNN_ENSEMBLE_EARLY_EXIT_MARGIN = 0.18
+CNN_ENSEMBLE_MARGIN_THRESHOLD = 0.10
+INCREMENTAL_OVERRIDE_MARGIN = 0.14
+PREFER_BASE_MODEL = True
 
 
 def ensure_default_orb_model_assets() -> bool:
@@ -178,10 +185,17 @@ SYSTEM_CONFIG_DEFAULTS = [
     ('orb_feature_count', '1000', 'integer', 'Number of ORB features to extract per image', 1),
     ('knn_k_value', '2', 'integer', 'K value for KNN classifier (fixed to 2 for Lowe ratio test)', 0),
     ('knn_distance_threshold', '0.65', 'float', 'Lowe ratio test threshold for feature matching', 1),
-    ('orb_confidence_threshold', '0.65', 'float', 'Minimum confidence for base ORB fallback prediction', 1),
-    ('orb_incremental_confidence_threshold', '0.85', 'float', 'Minimum confidence for incremental ORB prediction', 1),
+    ('orb_confidence_threshold', '0.72', 'float', 'Minimum confidence for base ORB fallback prediction', 1),
+    ('orb_incremental_confidence_threshold', '0.90', 'float', 'Minimum confidence for incremental ORB prediction', 1),
     ('orb_focus_roi_scale', '0.80', 'float', 'Center crop scale used before ORB inference (0.5 to 1.0)', 1),
-    ('hybrid_margin', '0.10', 'float', 'Confidence gap required for ORB override in hybrid mode', 1),
+    ('hybrid_margin', '0.14', 'float', 'Confidence gap required for ORB override in hybrid mode', 1),
+    ('cnn_ensemble_enabled', 'true', 'boolean', 'Enable multi-pass CNN inference with probability averaging', 1),
+    ('cnn_ensemble_runs', '3', 'integer', 'Number of CNN passes to average (1-5)', 1),
+    ('cnn_ensemble_early_exit_confidence', '0.90', 'float', 'Skip remaining CNN passes if confidence is already high', 1),
+    ('cnn_ensemble_early_exit_margin', '0.18', 'float', 'Skip remaining CNN passes when class gap is already strong', 1),
+    ('cnn_ensemble_margin_threshold', '0.10', 'float', 'Minimum top1-top2 confidence gap after averaging', 1),
+    ('incremental_override_margin', '0.14', 'float', 'Minimum confidence gap required for incremental model to override base model', 1),
+    ('prefer_base_model', 'true', 'boolean', 'Prefer base model on incremental/base disagreements unless override margin is met', 1),
     ('model_version', 'ORB-KNN-v2.0', 'string', 'Current algorithm version identifier', 0),
     ('session_timeout_minutes', '30', 'integer', 'Auto-abandon sessions after N minutes of inactivity', 1),
     ('min_confidence_score', '0.60', 'float', 'Minimum confidence to accept a classification', 1),
@@ -649,6 +663,9 @@ def apply_config_value(config_key, config_value):
     global ORB_FEATURES, KNN_K, LOWE_RATIO, CONFIDENCE_THRESHOLD
     global SESSION_TIMEOUT_MINUTES, WEBCAM_FPS, ROI_BOX_COLOR, ENABLE_AUDIO_FEEDBACK, MODEL_VERSION
     global ORB_CONFIDENCE_THRESHOLD, ORB_INCREMENTAL_CONFIDENCE_THRESHOLD, ORB_FOCUS_ROI_SCALE, HYBRID_MARGIN
+    global CNN_ENSEMBLE_ENABLED, CNN_ENSEMBLE_RUNS, CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE
+    global CNN_ENSEMBLE_EARLY_EXIT_MARGIN, CNN_ENSEMBLE_MARGIN_THRESHOLD
+    global INCREMENTAL_OVERRIDE_MARGIN, PREFER_BASE_MODEL
 
     if config_key == 'orb_feature_count':
         ORB_FEATURES = max(100, int(config_value))
@@ -666,6 +683,20 @@ def apply_config_value(config_key, config_value):
         ORB_FOCUS_ROI_SCALE = max(0.3, min(1.0, float(config_value)))
     elif config_key == 'hybrid_margin':
         HYBRID_MARGIN = max(0.0, min(0.5, float(config_value)))
+    elif config_key == 'cnn_ensemble_enabled':
+        CNN_ENSEMBLE_ENABLED = _to_bool(config_value)
+    elif config_key == 'cnn_ensemble_runs':
+        CNN_ENSEMBLE_RUNS = max(1, min(5, int(config_value)))
+    elif config_key == 'cnn_ensemble_early_exit_confidence':
+        CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE = max(0.5, min(1.0, float(config_value)))
+    elif config_key == 'cnn_ensemble_early_exit_margin':
+        CNN_ENSEMBLE_EARLY_EXIT_MARGIN = max(0.0, min(0.6, float(config_value)))
+    elif config_key == 'cnn_ensemble_margin_threshold':
+        CNN_ENSEMBLE_MARGIN_THRESHOLD = max(0.0, min(0.6, float(config_value)))
+    elif config_key == 'incremental_override_margin':
+        INCREMENTAL_OVERRIDE_MARGIN = max(0.0, min(0.6, float(config_value)))
+    elif config_key == 'prefer_base_model':
+        PREFER_BASE_MODEL = _to_bool(config_value)
     elif config_key == 'min_confidence_score':
         CONFIDENCE_THRESHOLD = max(0.1, min(1.0, float(config_value)))
     elif config_key == 'session_timeout_minutes':
@@ -1022,6 +1053,130 @@ def crop_center_roi(image_bgr, scale=0.8):
     return image_bgr[start_y:end_y, start_x:end_x]
 
 
+def apply_brightness_shift(image_bgr, beta=0):
+    """Apply a small brightness shift to stabilize CNN decisions on noisy webcam frames."""
+    if beta == 0:
+        return image_bgr
+    return cv2.convertScaleAbs(image_bgr, alpha=1.0, beta=int(beta))
+
+
+def _infer_best_probs_from_net(net, image_bgr):
+    """Run one robust CNN pass and return the best probability vector found."""
+    crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
+    crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
+
+    best_probs = None
+    best_conf = -1.0
+
+    for crop_scale in crop_scales:
+        focused = crop_center_roi(image_bgr, scale=crop_scale)
+        resized = cv2.resize(focused, ORB_INPUT_SIZE)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+        input_variants = [
+            np.expand_dims(rgb, axis=0),
+            np.expand_dims(rgb / 255.0, axis=0),
+            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
+        ]
+
+        for candidate in input_variants:
+            try:
+                net.setInput(candidate)
+                raw = net.forward().flatten()
+                if raw.size == 0:
+                    continue
+
+                raw = raw.astype(np.float64)
+                raw_sum = float(np.sum(raw))
+                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                    probs = raw / raw_sum
+                else:
+                    shifted = raw - np.max(raw)
+                    exp_scores = np.exp(shifted)
+                    denom = float(np.sum(exp_scores))
+                    if denom <= 0.0:
+                        continue
+                    probs = exp_scores / denom
+
+                conf = float(np.max(probs))
+                if conf > best_conf:
+                    best_conf = conf
+                    best_probs = probs
+            except Exception:
+                continue
+
+    return best_probs
+
+
+def _mask_probs_to_allowed_cards(probs, class_to_card_map, allowed_card_ids: set[int] | None):
+    """Keep only classes allowed by session constraints, then renormalize."""
+    if probs is None:
+        return None
+
+    if not allowed_card_ids:
+        return probs
+
+    masked = np.zeros_like(probs, dtype=np.float64)
+    for class_idx, conf in enumerate(probs.tolist()):
+        card_id_candidate = class_to_card_map.get(int(class_idx))
+        if card_id_candidate in allowed_card_ids:
+            masked[int(class_idx)] = float(conf)
+
+    total = float(np.sum(masked))
+    if total <= 0.0:
+        return None
+    return masked / total
+
+
+def _top_confidence_and_margin(probs):
+    """Return top-1 confidence and top1-top2 margin for guard decisions."""
+    if probs is None or probs.size == 0:
+        return 0.0, 0.0, -1
+
+    top_class = int(np.argmax(probs))
+    top_conf = float(probs[top_class])
+    if probs.size == 1:
+        return top_conf, top_conf, top_class
+
+    top_two = np.sort(probs)[-2:]
+    margin = float(top_two[-1] - top_two[-2])
+    return top_conf, margin, top_class
+
+
+def run_cnn_ensemble(net, image_bgr, class_to_card_map, allowed_card_ids: set[int] | None = None):
+    """Run 1-3+ deterministic CNN passes and average class probabilities."""
+    runs = max(1, int(CNN_ENSEMBLE_RUNS)) if CNN_ENSEMBLE_ENABLED else 1
+    brightness_deltas = [0, 10, -10, 16, -16]
+    deltas = brightness_deltas[:runs]
+
+    all_probs = []
+    for idx, delta in enumerate(deltas):
+        variant = apply_brightness_shift(image_bgr, beta=delta)
+        probs = _infer_best_probs_from_net(net, variant)
+        probs = _mask_probs_to_allowed_cards(probs, class_to_card_map, allowed_card_ids)
+        if probs is None:
+            continue
+        all_probs.append(probs)
+
+        if len(all_probs) >= 2 and CNN_ENSEMBLE_ENABLED:
+            mean_so_far = np.mean(np.vstack(all_probs), axis=0)
+            early_conf, early_margin, _ = _top_confidence_and_margin(mean_so_far)
+            if early_conf >= CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE and early_margin >= CNN_ENSEMBLE_EARLY_EXIT_MARGIN:
+                break
+
+    if not all_probs:
+        return None, 0, 0.0
+
+    mean_probs = np.mean(np.vstack(all_probs), axis=0)
+    total = float(np.sum(mean_probs))
+    if total <= 0.0:
+        return None, 0, 0.0
+
+    mean_probs = mean_probs / total
+    top_conf, margin, _ = _top_confidence_and_margin(mean_probs)
+    return mean_probs, len(all_probs), margin
+
+
 def predict_waste_orb_fallback(image_bgr, allowed_card_ids: set[int] | None = None):
     """Runs ORB fallback inference and returns ORB-compatible response shape.
 
@@ -1031,85 +1186,37 @@ def predict_waste_orb_fallback(image_bgr, allowed_card_ids: set[int] | None = No
         return {"status": "unknown", "reason": "orb_unavailable"}
 
     try:
-        # The frontend can already send a tight ROI; applying another crop may over-zoom.
-        # Evaluate both: configured crop, and no extra crop.
-        crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
-        crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
+        probs, used_runs, conf_margin = run_cnn_ensemble(
+            orb_fallback_net,
+            image_bgr,
+            orb_fallback_class_to_card_id,
+            allowed_card_ids=allowed_card_ids,
+        )
 
-        best_probs = None
-        best_conf = -1.0
-
-        for crop_scale in crop_scales:
-            focused = crop_center_roi(image_bgr, scale=crop_scale)
-            resized = cv2.resize(focused, ORB_INPUT_SIZE)
-            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-            # Teachable Machine exports are commonly NHWC and can use different
-            # normalization schemes depending on embedded preprocessing layers.
-            # Try common variants and keep the highest-confidence prediction.
-            input_variants = [
-                np.expand_dims(rgb, axis=0),
-                np.expand_dims(rgb / 255.0, axis=0),
-                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-            ]
-
-            for candidate in input_variants:
-                try:
-                    orb_fallback_net.setInput(candidate)
-                    raw = orb_fallback_net.forward().flatten()
-                    if raw.size == 0:
-                        continue
-
-                    raw = raw.astype(np.float64)
-
-                    # Teachable Machine exports may already output probabilities.
-                    raw_sum = float(np.sum(raw))
-                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                        probs = raw / raw_sum
-                    else:
-                        shifted = raw - np.max(raw)
-                        exp_scores = np.exp(shifted)
-                        denom = float(np.sum(exp_scores))
-                        if denom <= 0.0:
-                            continue
-                        probs = exp_scores / denom
-
-                    conf = float(np.max(probs))
-
-                    if conf > best_conf:
-                        best_conf = conf
-                        best_probs = probs
-                except Exception:
-                    continue
-
-        if best_probs is None:
+        if probs is None:
             return {"status": "unknown", "reason": "orb_inference_failed"}
 
-        probs = best_probs
+        top_conf, margin, top_class = _top_confidence_and_margin(probs)
+        confidence = top_conf
 
-        if allowed_card_ids:
-            best_class = None
-            best_conf = -1.0
-            for class_idx, conf in enumerate(probs.tolist()):
-                card_id_candidate = orb_fallback_class_to_card_id.get(int(class_idx))
-                if card_id_candidate in allowed_card_ids and float(conf) > best_conf:
-                    best_conf = float(conf)
-                    best_class = int(class_idx)
-
-            if best_class is None:
-                return {"status": "unknown", "reason": "not_in_subset"}
-
-            top_class = best_class
-            confidence = best_conf
-        else:
-            top_class = int(np.argmax(probs))
-            confidence = float(probs[top_class])
+        if top_class < 0:
+            return {"status": "unknown", "reason": "orb_inference_failed"}
 
         if confidence < ORB_CONFIDENCE_THRESHOLD:
             return {
                 "status": "unknown",
                 "reason": "orb_low_confidence",
-                "confidence": round(confidence, 2)
+                "confidence": round(confidence, 2),
+                "ensemble_runs": used_runs,
+            }
+
+        if margin < CNN_ENSEMBLE_MARGIN_THRESHOLD:
+            return {
+                "status": "unknown",
+                "reason": "ambiguous_match",
+                "confidence": round(confidence, 2),
+                "confidence_margin": round(margin, 2),
+                "ensemble_runs": used_runs,
             }
 
         if top_class not in orb_fallback_class_to_card_id:
@@ -1131,7 +1238,9 @@ def predict_waste_orb_fallback(image_bgr, allowed_card_ids: set[int] | None = No
             "matches": 0,
             "confidence": round(confidence, 2),
             "keypoints_detected": 0,
-            "classifier": "orb_fallback"
+            "classifier": "orb_fallback",
+            "confidence_margin": round(conf_margin, 2),
+            "ensemble_runs": used_runs,
         }
     except Exception as e:
         return {"status": "unknown", "reason": f"orb_fallback_error:{str(e)}"}
@@ -1146,76 +1255,37 @@ def predict_waste_incremental_orb(image_bgr, allowed_card_ids: set[int] | None =
         return {"status": "unknown", "reason": "incremental_orb_unavailable"}
 
     try:
-        crop_scales = [float(ORB_FOCUS_ROI_SCALE), 1.0]
-        crop_scales = [s for i, s in enumerate(crop_scales) if s not in crop_scales[:i]]
+        probs, used_runs, conf_margin = run_cnn_ensemble(
+            incremental_orb_net,
+            image_bgr,
+            incremental_orb_class_to_card_id,
+            allowed_card_ids=allowed_card_ids,
+        )
 
-        best_probs = None
-        best_conf = -1.0
-
-        for crop_scale in crop_scales:
-            focused = crop_center_roi(image_bgr, scale=crop_scale)
-            resized = cv2.resize(focused, ORB_INPUT_SIZE)
-            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-            input_variants = [
-                np.expand_dims(rgb, axis=0),
-                np.expand_dims(rgb / 255.0, axis=0),
-                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-            ]
-
-            for candidate in input_variants:
-                try:
-                    incremental_orb_net.setInput(candidate)
-                    raw = incremental_orb_net.forward().flatten()
-                    if raw.size == 0:
-                        continue
-
-                    raw = raw.astype(np.float64)
-                    raw_sum = float(np.sum(raw))
-                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                        probs = raw / raw_sum
-                    else:
-                        shifted = raw - np.max(raw)
-                        exp_scores = np.exp(shifted)
-                        denom = float(np.sum(exp_scores))
-                        if denom <= 0.0:
-                            continue
-                        probs = exp_scores / denom
-
-                    conf = float(np.max(probs))
-                    if conf > best_conf:
-                        best_conf = conf
-                        best_probs = probs
-                except Exception:
-                    continue
-
-        if best_probs is None:
+        if probs is None:
             return {"status": "unknown", "reason": "incremental_orb_inference_failed"}
 
-        probs = best_probs
-        if allowed_card_ids:
-            best_class = None
-            best_conf = -1.0
-            for class_idx, conf in enumerate(probs.tolist()):
-                card_id_candidate = incremental_orb_class_to_card_id.get(int(class_idx))
-                if card_id_candidate in allowed_card_ids and float(conf) > best_conf:
-                    best_conf = float(conf)
-                    best_class = int(class_idx)
+        top_conf, margin, top_class = _top_confidence_and_margin(probs)
+        confidence = top_conf
 
-            if best_class is None:
-                return {"status": "unknown", "reason": "not_in_subset"}
-
-            top_class = best_class
-            confidence = best_conf
-        else:
-            top_class = int(np.argmax(probs))
-            confidence = float(probs[top_class])
+        if top_class < 0:
+            return {"status": "unknown", "reason": "incremental_orb_inference_failed"}
 
         if confidence < ORB_INCREMENTAL_CONFIDENCE_THRESHOLD:
             return {
                 "status": "unknown",
                 "reason": "incremental_orb_low_confidence",
                 "confidence": round(confidence, 2),
+                "ensemble_runs": used_runs,
+            }
+
+        if margin < CNN_ENSEMBLE_MARGIN_THRESHOLD:
+            return {
+                "status": "unknown",
+                "reason": "ambiguous_match",
+                "confidence": round(confidence, 2),
+                "confidence_margin": round(margin, 2),
+                "ensemble_runs": used_runs,
             }
 
         if top_class not in incremental_orb_class_to_card_id:
@@ -1240,6 +1310,8 @@ def predict_waste_incremental_orb(image_bgr, allowed_card_ids: set[int] | None =
             "confidence": round(confidence, 2),
             "keypoints_detected": 0,
             "classifier": "incremental_orb",
+            "confidence_margin": round(conf_margin, 2),
+            "ensemble_runs": used_runs,
         }
     except Exception as e:
         return {"status": "unknown", "reason": f"incremental_orb_error:{str(e)}"}
@@ -1712,13 +1784,51 @@ def classify():
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
-        # Dual-model routing: incremental model first, then base model fallback.
-        # NOTE: We do not restrict the model's candidate space here; we enforce the
-        # Learn Mode 10-card subset as a post-check below to avoid suppressing
-        # confidence scores.
-        result = predict_waste_incremental_orb(img)
-        if result.get('status') != 'success':
-            result = predict_waste_orb_fallback(img)
+        # Run both models, then arbitrate with base-preferred logic.
+        # This prevents one-shot incremental classes from overpowering base predictions
+        # when the scene is noisy or ambiguous.
+        incremental_result = predict_waste_incremental_orb(img)
+        base_result = predict_waste_orb_fallback(img)
+
+        inc_ok = incremental_result.get('status') == 'success'
+        base_ok = base_result.get('status') == 'success'
+
+        if base_ok and inc_ok:
+            base_card_id = base_result.get('card_id')
+            inc_card_id = incremental_result.get('card_id')
+            base_conf = float(base_result.get('confidence', 0.0) or 0.0)
+            inc_conf = float(incremental_result.get('confidence', 0.0) or 0.0)
+
+            if base_card_id == inc_card_id:
+                result = dict(base_result)
+                result['confidence'] = round((base_conf + inc_conf) / 2.0, 2)
+                result['classifier'] = 'cnn_consensus'
+            elif PREFER_BASE_MODEL:
+                if inc_conf >= base_conf + INCREMENTAL_OVERRIDE_MARGIN:
+                    result = dict(incremental_result)
+                    result['classifier'] = 'incremental_override'
+                else:
+                    result = dict(base_result)
+                    result['classifier'] = 'base_preferred'
+            else:
+                if base_conf >= inc_conf + INCREMENTAL_OVERRIDE_MARGIN:
+                    result = dict(base_result)
+                    result['classifier'] = 'base_override'
+                else:
+                    result = dict(incremental_result)
+                    result['classifier'] = 'incremental_preferred'
+        elif base_ok:
+            result = dict(base_result)
+            result['classifier'] = result.get('classifier', 'orb_fallback_only')
+        elif inc_ok:
+            result = dict(incremental_result)
+            result['classifier'] = result.get('classifier', 'incremental_orb_only')
+        else:
+            # Surface the more actionable unknown reason if available.
+            if base_result.get('reason') in {'ambiguous_match', 'orb_low_confidence'}:
+                result = dict(base_result)
+            else:
+                result = dict(incremental_result) if incremental_result.get('reason') else dict(base_result)
 
         response_time = (datetime.now() - start_time).total_seconds() * 1000
         result['response_time'] = round(response_time, 2)
@@ -2254,6 +2364,16 @@ def health_check():
             "knn_k_value": KNN_K,
             "knn_distance_threshold": LOWE_RATIO,
             "min_confidence_score": CONFIDENCE_THRESHOLD,
+            "orb_confidence_threshold": ORB_CONFIDENCE_THRESHOLD,
+            "orb_incremental_confidence_threshold": ORB_INCREMENTAL_CONFIDENCE_THRESHOLD,
+            "hybrid_margin": HYBRID_MARGIN,
+            "cnn_ensemble_enabled": CNN_ENSEMBLE_ENABLED,
+            "cnn_ensemble_runs": CNN_ENSEMBLE_RUNS,
+            "cnn_ensemble_early_exit_confidence": CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE,
+            "cnn_ensemble_early_exit_margin": CNN_ENSEMBLE_EARLY_EXIT_MARGIN,
+            "cnn_ensemble_margin_threshold": CNN_ENSEMBLE_MARGIN_THRESHOLD,
+            "incremental_override_margin": INCREMENTAL_OVERRIDE_MARGIN,
+            "prefer_base_model": PREFER_BASE_MODEL,
             "session_timeout_minutes": SESSION_TIMEOUT_MINUTES,
             "webcam_fps": WEBCAM_FPS,
             "roi_box_color": ROI_BOX_COLOR,
