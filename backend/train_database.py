@@ -15,7 +15,7 @@ DB_CONFIG = {
 }
 
 # Point this to your XAMPP htdocs folder
-BASE_DIR = r"C:/xampp/htdocs"
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # Enhanced ORB parameters (must match app_improved.py)
 ORB_FEATURES = 1000

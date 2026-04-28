@@ -98,12 +98,21 @@ ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.90
 ORB_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
 HYBRID_MARGIN = 0.14  # Minimum confidence gap to break ORB vs fallback disagreements
 CNN_ENSEMBLE_ENABLED = True
-CNN_ENSEMBLE_RUNS = 3
+CNN_ENSEMBLE_RUNS = 5
 CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE = 0.90
 CNN_ENSEMBLE_EARLY_EXIT_MARGIN = 0.18
 CNN_ENSEMBLE_MARGIN_THRESHOLD = 0.10
 INCREMENTAL_OVERRIDE_MARGIN = 0.14
 PREFER_BASE_MODEL = True
+INCREMENTAL_MIN_COVERAGE_FRACTION = 0.10  # suppress if covers < 10% of active cards
+ECOCARD_DETECTION_ENABLED = True
+ECOCARD_WHITE_THRESHOLD = 210
+ECOCARD_MIN_AREA_FRACTION = 0.18
+ECOCARD_MAX_AREA_FRACTION = 0.95
+ECOCARD_MIN_RECT_RATIO = 0.70
+ECOCARD_MIN_ASPECT = 0.55
+ECOCARD_MAX_ASPECT = 0.90
+ECOCARD_MIN_CONTENT_FRACTION = 0.03
 
 
 def ensure_default_orb_model_assets() -> bool:
@@ -222,6 +231,7 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year in seconds
 golden_dataset = []
 card_metadata = {}
 category_metadata = {}
+_dataset_lock = threading.RLock()
 current_session_id = None
 current_session_mode = None
 current_session_subset_card_ids = set()
@@ -485,9 +495,9 @@ def _run_orb_training_job(trigger: str, card_id: int | None, card_name: str | No
         cmd.extend([
             '--img-size', '224',
             '--batch-size', '24',
-            '--head-epochs', '1',
+            '--head-epochs', '3',
             '--finetune-epochs', '0',
-            '--max-samples-per-class', '12',
+            '--max-samples-per-class', '40',
             '--focus-max-samples', '48',
             '--include-card-ids', ','.join(str(x) for x in training_ids),
             '--out-keras', 'models/waste_incremental_finetuned.h5',
@@ -791,13 +801,16 @@ def load_model():
         cursor.execute("SELECT card_id, feature_vector FROM TBL_GOLDEN_DATASET")
         rows = cursor.fetchall()
         
-        golden_dataset = []
+        new_golden = []
         for row in rows:
             features = pickle.loads(row['feature_vector'])
-            golden_dataset.append({
+            new_golden.append({
                 'card_id': row['card_id'],
                 'features': features
             })
+
+        with _dataset_lock:
+            golden_dataset = new_golden
             
         print(f"✅ Model Loaded: {len(golden_dataset)} feature sets, {len(card_metadata)} unique cards")
         conn.close()
@@ -1073,37 +1086,32 @@ def _infer_best_probs_from_net(net, image_bgr):
         resized = cv2.resize(focused, ORB_INPUT_SIZE)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-        input_variants = [
-            np.expand_dims(rgb, axis=0),
-            np.expand_dims(rgb / 255.0, axis=0),
-            np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-        ]
-
-        for candidate in input_variants:
-            try:
-                net.setInput(candidate)
-                raw = net.forward().flatten()
-                if raw.size == 0:
-                    continue
-
-                raw = raw.astype(np.float64)
-                raw_sum = float(np.sum(raw))
-                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                    probs = raw / raw_sum
-                else:
-                    shifted = raw - np.max(raw)
-                    exp_scores = np.exp(shifted)
-                    denom = float(np.sum(exp_scores))
-                    if denom <= 0.0:
-                        continue
-                    probs = exp_scores / denom
-
-                conf = float(np.max(probs))
-                if conf > best_conf:
-                    best_conf = conf
-                    best_probs = probs
-            except Exception:
+        # ALWAYS use MobileNetV2 official scaling: [-1, 1]
+        input_tensor = np.expand_dims((rgb / 127.5) - 1.0, axis=0)
+        try:
+            net.setInput(input_tensor)
+            raw = net.forward().flatten()
+            if raw.size == 0:
                 continue
+
+            raw = raw.astype(np.float64)
+            raw_sum = float(np.sum(raw))
+            if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                probs = raw / raw_sum
+            else:
+                shifted = raw - np.max(raw)
+                exp_scores = np.exp(shifted)
+                denom = float(np.sum(exp_scores))
+                if denom <= 0.0:
+                    continue
+                probs = exp_scores / denom
+
+            conf = float(np.max(probs))
+            if conf > best_conf:
+                best_conf = conf
+                best_probs = probs
+        except Exception:
+            continue
 
     return best_probs
 
@@ -1400,6 +1408,106 @@ def mask_white_background(image_bgr):
     result[large_white > 0] = 0
     return result
 
+
+def detect_ecocard_presence(image_bgr) -> tuple[bool, str, tuple | None]:
+    """Heuristic check for a large, card-like white rectangle with content inside.
+
+    Returns (detected: bool, reason: str, card_rect: (x, y, w, h) | None).
+    card_rect is the bounding box of the detected eco-card in image coordinates,
+    or None when detection fails.
+    """
+    if image_bgr is None or image_bgr.size == 0:
+        return False, "no_ecocard_detected", None
+
+    h, w = image_bgr.shape[:2]
+    if h < 64 or w < 64:
+        return False, "no_ecocard_detected", None
+
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, white_mask = cv2.threshold(
+        blurred,
+        int(ECOCARD_WHITE_THRESHOLD),
+        255,
+        cv2.THRESH_BINARY,
+    )
+
+    kernel = np.ones((7, 7), np.uint8)
+    white_mask = cv2.morphologyEx(white_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(white_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return False, "no_ecocard_detected", None
+
+    largest = max(contours, key=cv2.contourArea)
+    cont_area = float(cv2.contourArea(largest))
+    if cont_area <= 0:
+        return False, "no_ecocard_detected", None
+
+    frame_area = float(h * w)
+    area_fraction = cont_area / frame_area
+    if area_fraction < ECOCARD_MIN_AREA_FRACTION:
+        return False, "ecocard_too_far", None
+    if area_fraction > ECOCARD_MAX_AREA_FRACTION:
+        return False, "ecocard_too_close", None
+
+    x, y, bw, bh = cv2.boundingRect(largest)
+    if bw <= 0 or bh <= 0:
+        return False, "no_ecocard_detected", None
+
+    rect_area = float(bw * bh)
+    rect_ratio = cont_area / rect_area
+    if rect_ratio < ECOCARD_MIN_RECT_RATIO:
+        return False, "ecocard_partial", None
+
+    aspect = float(bw) / float(bh)
+    if aspect < ECOCARD_MIN_ASPECT or aspect > ECOCARD_MAX_ASPECT:
+        return False, "ecocard_partial", None
+
+    roi = gray[y:y + bh, x:x + bw]
+    if roi.size == 0:
+        return False, "no_ecocard_detected", None
+
+    white_ratio = float(np.mean(roi > int(ECOCARD_WHITE_THRESHOLD)))
+    content_ratio = 1.0 - white_ratio
+    if content_ratio < ECOCARD_MIN_CONTENT_FRACTION:
+        return False, "ecocard_low_content", None
+
+    return True, "ok", (x, y, bw, bh)
+
+
+def crop_to_ecocard(image_bgr, card_rect: tuple, inward_margin: float = 0.04) -> np.ndarray:
+    """Crop image to the detected eco-card bounding rect, with an inward margin
+    to exclude fingers/thumbs that may be gripping the card edges.
+
+    inward_margin: fraction of card dimension to shave off each side (default 4%).
+    Returns the cropped card region, or the original image if cropping fails.
+    """
+    if card_rect is None:
+        return image_bgr
+
+    h, w = image_bgr.shape[:2]
+    cx, cy, cw, ch = card_rect
+
+    # Shrink the bounding rect inward by the margin fraction
+    margin_x = max(1, int(cw * inward_margin))
+    margin_y = max(1, int(ch * inward_margin))
+
+    x1 = max(0, cx + margin_x)
+    y1 = max(0, cy + margin_y)
+    x2 = min(w, cx + cw - margin_x)
+    y2 = min(h, cy + ch - margin_y)
+
+    if x2 - x1 < 32 or y2 - y1 < 32:
+        # Crop would be too small; fall back to full bounding rect without margin
+        x1, y1 = max(0, cx), max(0, cy)
+        x2, y2 = min(w, cx + cw), min(h, cy + ch)
+
+    cropped = image_bgr[y1:y2, x1:x2]
+    if cropped.size == 0:
+        return image_bgr
+    return cropped
+
 # --- IMPROVED ORB-KNN ALGORITHM ---
 orb = None
 rebuild_orb_extractor()
@@ -1424,39 +1532,34 @@ def get_orb_fallback_topk(image_bgr, top_k=3):
             resized = cv2.resize(focused, ORB_INPUT_SIZE)
             rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-            input_variants = [
-                np.expand_dims(rgb, axis=0),
-                np.expand_dims(rgb / 255.0, axis=0),
-                np.expand_dims((rgb / 127.5) - 1.0, axis=0),
-            ]
-
-            for candidate in input_variants:
-                try:
-                    orb_fallback_net.setInput(candidate)
-                    raw = orb_fallback_net.forward().flatten()
-                    if raw.size == 0:
-                        continue
-
-                    raw = raw.astype(np.float64)
-
-                    raw_sum = float(np.sum(raw))
-                    if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
-                        probs = raw / raw_sum
-                    else:
-                        shifted = raw - np.max(raw)
-                        exp_scores = np.exp(shifted)
-                        denom = float(np.sum(exp_scores))
-                        if denom <= 0.0:
-                            continue
-                        probs = exp_scores / denom
-
-                    conf = float(np.max(probs))
-
-                    if conf > best_conf:
-                        best_conf = conf
-                        best_probs = probs
-                except Exception:
+            # ALWAYS use MobileNetV2 official scaling: [-1, 1]
+            input_tensor = np.expand_dims((rgb / 127.5) - 1.0, axis=0)
+            try:
+                orb_fallback_net.setInput(input_tensor)
+                raw = orb_fallback_net.forward().flatten()
+                if raw.size == 0:
                     continue
+
+                raw = raw.astype(np.float64)
+
+                raw_sum = float(np.sum(raw))
+                if np.all(raw >= 0.0) and 0.98 <= raw_sum <= 1.02:
+                    probs = raw / raw_sum
+                else:
+                    shifted = raw - np.max(raw)
+                    exp_scores = np.exp(shifted)
+                    denom = float(np.sum(exp_scores))
+                    if denom <= 0.0:
+                        continue
+                    probs = exp_scores / denom
+
+                conf = float(np.max(probs))
+
+                if conf > best_conf:
+                    best_conf = conf
+                    best_probs = probs
+            except Exception:
+                continue
 
         if best_probs is None:
             return []
@@ -1496,7 +1599,9 @@ def get_orb_topk(image_bgr, top_k=3):
         return []
 
     votes = {}
-    for data in golden_dataset:
+    with _dataset_lock:
+        snapshot = list(golden_dataset)
+    for data in snapshot:
         card_id = data['card_id']
         train_des = data['features']
         if train_des is None or len(train_des) < 2:
@@ -1641,7 +1746,9 @@ def predict_waste(image_bgr):
                 continue
 
             votes = {}
-            for data in golden_dataset:
+            with _dataset_lock:
+                snapshot = list(golden_dataset)
+            for data in snapshot:
                 card_id = data['card_id']
                 train_des = data['features']
                 if train_des is None or len(train_des) < 2:
@@ -1783,11 +1890,45 @@ def classify():
         
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
-        
+
+        card_rect = None
+        if ECOCARD_DETECTION_ENABLED:
+            ecocard_ok, ecocard_reason, card_rect = detect_ecocard_presence(img)
+            if not ecocard_ok:
+                return jsonify({
+                    "status": "unknown",
+                    "reason": ecocard_reason,
+                    "message": "Ipakita ang Eco-Card bago magscan."
+                })
+
+        # ---------------------------------------------------------------
+        # CARD-ONLY CROP: Once a valid eco-card frame is confirmed, crop
+        # the image tightly to the white card area before running any
+        # classifier.  This excludes the background, table, and fingers /
+        # thumbs that may be gripping the card edges, so the model only
+        # sees the card's white surface and its artwork.
+        # ---------------------------------------------------------------
+        if card_rect is not None:
+            img = crop_to_ecocard(img, card_rect, inward_margin=0.04)
+
         # Run both models, then arbitrate with base-preferred logic.
         # This prevents one-shot incremental classes from overpowering base predictions
         # when the scene is noisy or ambiguous.
-        incremental_result = predict_waste_incremental_orb(img)
+        # Suppress incremental model if it covers too few active cards.
+        # A 2-class model against 46 cards (~4%) will always confidently
+        # output one of its two classes regardless of what is shown.
+        incremental_active = (
+            incremental_orb_net is not None
+            and len(incremental_orb_class_to_card_id) > 0
+            and len(card_metadata) > 0
+            and (len(incremental_orb_class_to_card_id) / len(card_metadata))
+                >= INCREMENTAL_MIN_COVERAGE_FRACTION
+        )
+        incremental_result = (
+            predict_waste_incremental_orb(img)
+            if incremental_active
+            else {"status": "unknown", "reason": "incremental_suppressed_low_coverage"}
+        )
         base_result = predict_waste_orb_fallback(img)
 
         inc_ok = incremental_result.get('status') == 'success'
@@ -1834,33 +1975,50 @@ def classify():
         result['response_time'] = round(response_time, 2)
         result['classifier'] = result.get('classifier', 'orb_fallback_only')
         
-        # Don't auto-log in assessment mode - wait for user choice
-        if current_session_id and result['status'] == 'success':
-            # Auto-log for instructional mode only
-            # Assessment mode will call /assessment/submit separately
-            if current_session_mode == 'instructional':
-                card_id = result.get('card_id')
-                try:
-                    card_id = int(card_id)
-                except (TypeError, ValueError):
-                    card_id = None
+        # Read session from request header/body instead of global — safe for concurrent users
+        req_session_id = request.form.get('session_id') or request.args.get('session_id')
+        req_session_id = int(req_session_id) if req_session_id and req_session_id.isdigit() else None
 
-                with session_subset_lock:
-                    scanned = current_session_scanned_card_ids
-
-                    if card_id is not None and card_id in scanned:
-                        return jsonify({
-                            "status": "unknown",
-                            "reason": "already_scanned",
-                            "message": "Card already scanned in this session",
-                            "card_id": card_id,
-                            "card_name": result.get('card_name', ''),
-                        })
-
+        if req_session_id and result['status'] == 'success':
+            try:
+                conn = connect_db()
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute(
+                    "SELECT session_mode FROM TBL_SESSIONS WHERE session_id = %s AND session_status = 'active'",
+                    (req_session_id,)
+                )
+                sess = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if sess and sess['session_mode'] == 'instructional':
+                    card_id = result.get('card_id')
+                    try:
+                        card_id = int(card_id)
+                    except (TypeError, ValueError):
+                        card_id = None
                     if card_id is not None:
-                        scanned.add(card_id)
-
-                log_scan_transaction(result)
+                        # Use DB to check + record scan atomically
+                        conn2 = connect_db()
+                        cursor2 = conn2.cursor()
+                        cursor2.execute(
+                            "SELECT COUNT(*) FROM TBL_SCAN_TRANSACTIONS WHERE session_id=%s AND card_id=%s",
+                            (req_session_id, card_id)
+                        )
+                        already = cursor2.fetchone()[0]
+                        if already:
+                            cursor2.close(); conn2.close()
+                            return jsonify({
+                                "status": "unknown",
+                                "reason": "already_scanned",
+                                "message": "Card already scanned in this session",
+                                "card_id": card_id,
+                                "card_name": result.get('card_name', ''),
+                            })
+                        cursor2.close(); conn2.close()
+                        result['session_id'] = req_session_id
+                        log_scan_transaction(result, req_session_id)
+            except Exception as sess_err:
+                print(f"⚠️ Session check error: {sess_err}")
         
         return jsonify(result)
         
@@ -1879,6 +2037,15 @@ def classify_top3():
 
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
+
+        if ECOCARD_DETECTION_ENABLED:
+            ecocard_ok, ecocard_reason = detect_ecocard_presence(img)
+            if not ecocard_ok:
+                return jsonify({
+                    "status": "unknown",
+                    "reason": ecocard_reason,
+                    "message": "Ipakita ang Eco-Card bago magscan."
+                })
 
         candidates = get_orb_fallback_topk(img, top_k=3)
         ranked = []
@@ -2115,9 +2282,12 @@ def tutorial_should_show():
         print(f"❌ Tutorial should-show error: {e}")
         return jsonify({"status": "error", "message": str(e), "should_show": False})
 
-def log_scan_transaction(result):
+def log_scan_transaction(result, session_id=None):
     """Log scan to database"""
     try:
+        sid = session_id or current_session_id
+        if not sid:
+            return
         conn = connect_db()
         cursor = conn.cursor()
         
@@ -2127,7 +2297,7 @@ def log_scan_transaction(result):
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())"""
         
         cursor.execute(sql, (
-            current_session_id,
+            sid,
             result['card_id'],
             result['category_id'],
             result['category_id'],  # Assuming correct for now
@@ -2141,7 +2311,7 @@ def log_scan_transaction(result):
             SET total_scans = total_scans + 1,
                 correct_scans = correct_scans + 1
             WHERE session_id = %s
-        """, (current_session_id,))
+        """, (sid,))
         
         conn.commit()
         cursor.close()
@@ -3155,15 +3325,16 @@ def one_shot_learning():
             """, (feature_blob, len(kp), image_hash, card_id))
             
             # Update in-memory dataset
-            for idx, item in enumerate(golden_dataset):
-                if item['card_id'] == card_id:
-                    golden_dataset[idx]['features'] = des
-                    break
-            
-            if card_id in card_metadata:
-                card_metadata[card_id]['name'] = card_name
-                card_metadata[card_id]['category_id'] = int(category_id)
-                card_metadata[card_id]['image_path'] = webp_db_path
+            with _dataset_lock:
+                for idx, item in enumerate(golden_dataset):
+                    if item['card_id'] == card_id:
+                        golden_dataset[idx]['features'] = des
+                        break
+
+                if card_id in card_metadata:
+                    card_metadata[card_id]['name'] = card_name
+                    card_metadata[card_id]['category_id'] = int(category_id)
+                    card_metadata[card_id]['image_path'] = webp_db_path
             
             conn.commit()
             cursor.close()
@@ -3242,15 +3413,16 @@ def one_shot_learning():
             conn.commit()
             
             # Update in-memory dataset
-            golden_dataset.append({
-                'card_id': new_card_id,
-                'features': des
-            })
-            card_metadata[new_card_id] = {
-                'name': card_name,
-                'category_id': int(category_id),
-                'image_path': webp_db_path
-            }
+            with _dataset_lock:
+                golden_dataset.append({
+                    'card_id': new_card_id,
+                    'features': des
+                })
+                card_metadata[new_card_id] = {
+                    'name': card_name,
+                    'category_id': int(category_id),
+                    'image_path': webp_db_path
+                }
             
             cursor.close()
             conn.close()
@@ -3353,9 +3525,10 @@ def delete_card(card_id):
 
         # Remove from in-memory recognition dataset
         global golden_dataset, card_metadata
-        golden_dataset = [item for item in golden_dataset if item['card_id'] != card_id]
-        if card_id in card_metadata:
-            del card_metadata[card_id]
+        with _dataset_lock:
+            golden_dataset = [item for item in golden_dataset if item['card_id'] != card_id]
+            if card_id in card_metadata:
+                del card_metadata[card_id]
 
         # Delete image files
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

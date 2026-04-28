@@ -13,7 +13,7 @@ let totalScans = 0;
 let correctScans = 0;
 let isScanning = false;
 let assessmentTimerHandle = null;
-let assessmentRemainingSeconds = 60;
+let assessmentRemainingSeconds = 300;
 let pendingTimeUpStats = null;
 let skipSessionPersistOnUnload = false;
 
@@ -44,7 +44,7 @@ const SYSTEM_CONFIG = {
     webcam_fps: 30,
     roi_box_color: '#00FF00',
     enable_audio_feedback: true,
-    assessment_timer_seconds: 60
+    assessment_timer_seconds: 300
 };
 
 let inactivityTimeout = null;
@@ -1626,12 +1626,14 @@ async function captureAndIdentify() {
     ctx.drawImage(video, startX, startY, cropW, cropH, 0, 0, cropW, cropH);
     ctx.restore();
 
-    // Resume live feed AFTER capture so user sees camera unfreeze
-    video.play();
+    applySharpenToCanvas(ctx, cropW, cropH);
     
     canvas.toBlob(async (blob) => {
         const formData = new FormData();
         formData.append('image', blob, 'scan.jpg');
+        if (sessionId) {
+            formData.append('session_id', sessionId);
+        }
         
         try {
             const response = await fetch(`${API_URL}/classify`, {
@@ -1651,11 +1653,59 @@ async function captureAndIdentify() {
             showErrorFeedback({ reason: 'connection_error' });
             scheduleScanUnlock(SCAN_COOLDOWN_MS);
         } finally {
+            if (video && video.paused) {
+                video.play().catch(() => {});
+            }
             if (sessionMode === 'instructional') {
                 scheduleScanUnlock(SCAN_COOLDOWN_MS);
             }
         }
     }, 'image/jpeg', 0.95);
+}
+
+function applySharpenToCanvas(ctx, width, height) {
+    if (!ctx || width <= 0 || height <= 0) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const out = new Uint8ClampedArray(data.length);
+    out.set(data);
+
+    const weights = [
+        0, -1, 0,
+        -1, 5, -1,
+        0, -1, 0
+    ];
+
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            let idx = 0;
+
+            for (let ky = -1; ky <= 1; ky++) {
+                const yy = y + ky;
+                const row = yy * width;
+                for (let kx = -1; kx <= 1; kx++) {
+                    const xx = x + kx;
+                    const off = (row + xx) * 4;
+                    const w = weights[idx++];
+                    r += data[off] * w;
+                    g += data[off + 1] * w;
+                    b += data[off + 2] * w;
+                }
+            }
+
+            const dst = (y * width + x) * 4;
+            out[dst] = Math.max(0, Math.min(255, r));
+            out[dst + 1] = Math.max(0, Math.min(255, g));
+            out[dst + 2] = Math.max(0, Math.min(255, b));
+            out[dst + 3] = data[dst + 3];
+        }
+    }
+
+    ctx.putImageData(new ImageData(out, width, height), 0, 0);
 }
 
 function handleInstructionalMode(data) {
@@ -1676,6 +1726,10 @@ function handleAssessmentMode(data) {
         } else {
             assessmentPromptStartedAt = 0;
             showErrorFeedback(data);
+            if (isEcoCardDetectFailure(data)) {
+                assessmentRemainingSeconds += 5;
+                updateAssessmentTimerDisplay();
+            }
             // Re-enable button on error
             scheduleScanUnlock(SCAN_COOLDOWN_MS);
         }
@@ -1684,6 +1738,12 @@ function handleAssessmentMode(data) {
         console.log('Ignoring scan - already in identify mode');
         scheduleScanUnlock(0);
     }
+}
+
+function isEcoCardDetectFailure(data) {
+    const reason = data && data.reason ? String(data.reason).trim().toLowerCase() : '';
+    if (!reason) return false;
+    return reason === 'no_ecocard_detected' || reason.startsWith('ecocard_');
 }
 
 function unlockScanButton() {
@@ -2140,7 +2200,17 @@ function showErrorFeedback(data) {
     // Determine error message
     let message = '';
     
-    if (reason === 'insufficient_features') {
+    if (reason === 'no_ecocard_detected') {
+        message = "Ipakita ang Eco-Card bago magscan.";
+    } else if (reason === 'ecocard_too_close') {
+        message = "Masyadong malapit. Ilayo para makita ang buong Eco-Card.";
+    } else if (reason === 'ecocard_too_far') {
+        message = "Masyadong malayo. Ilapit ang Eco-Card sa box.";
+    } else if (reason === 'ecocard_partial') {
+        message = "Hindi kita ang buong Eco-Card. I-center sa loob ng box.";
+    } else if (reason === 'ecocard_low_content') {
+        message = "Kulay ang card. Pakiharap nang mas malinaw ang Eco-Card.";
+    } else if (reason === 'insufficient_features') {
         message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng box.";
     } else if (reason === 'already_scanned') {
         message = "Nascan mo na ang card na iyan! Pumili ng ibang card.";
