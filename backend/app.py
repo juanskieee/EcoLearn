@@ -1690,7 +1690,7 @@ def predict_waste(image_bgr):
             "matches": best_match_count,
             "classifier": "orb"
         }
-        if is_blurry and orb_fallback_net is not None:
+        if orb_fallback_net is not None:
             orb_fallback_result = predict_waste_orb_fallback(image_bgr)
             if orb_fallback_result.get('status') == 'success':
                 orb_fallback_result['response_time'] = round(response_time, 2)
@@ -1721,8 +1721,8 @@ def predict_waste(image_bgr):
                 "classifier": "orb"
             }
 
-    # If image is blurry (or ORB confidence is low), give fallback a chance.
-    if (is_blurry or orb_success_result is None) and orb_fallback_net is not None:
+    # Always use CNN fallback
+    if orb_fallback_net is not None:
         orb_fallback_result = predict_waste_orb_fallback(image_bgr)
         if orb_fallback_result.get('status') == 'success':
             orb_fallback_result['response_time'] = round(response_time, 2)

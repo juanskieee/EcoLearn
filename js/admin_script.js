@@ -2670,6 +2670,9 @@ const hiddenConfigKeys = new Set([
     'prefer_base_model'
 ]);
 
+const BACKUP_SETTINGS_URL = 'backup_settings.php';
+const BACKUP_TRIGGER_URL = 'backup_db.php?mode=json';
+
 async function loadSystemConfig() {
     const container = document.getElementById('config-container');
     if (!container) return;
@@ -2797,10 +2800,42 @@ async function loadSystemConfig() {
                 `;
             }
         }).join('');
+
+        container.insertAdjacentHTML('beforeend', `
+            <div class="config-card config-backup-card">
+                <div class="config-icon">DB</div>
+                <div class="config-title">Database Backup</div>
+                <p class="config-desc">Save a full SQL backup to database/backups.</p>
+                <div class="config-control config-backup-controls">
+                    <button class="btn-save-all-config btn-backup-now" onclick="runDbBackup()">
+                        <span>Backup Now</span>
+                    </button>
+                    <div id="backup-status" class="backup-status">Ready.</div>
+                </div>
+            </div>
+            <div class="config-card config-backup-card">
+                <div class="config-icon">AUTO</div>
+                <div class="config-title">Auto Backup</div>
+                <p class="config-desc">Create a daily backup when the admin dashboard opens.</p>
+                <div class="config-control">
+                    <label class="toggle-switch">
+                        <input type="checkbox"
+                               id="auto-backup-toggle"
+                               onchange="toggleAutoBackup(this.checked)">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label" id="auto-backup-label">Disabled</span>
+                    </label>
+                    <div id="auto-backup-status" class="backup-status">Not configured.</div>
+                </div>
+            </div>
+        `);
+
+        loadBackupSettings();
         
     } catch (error) {
         console.error('Config load error:', error);
         container.innerHTML = '<div class="empty-state">Error loading configuration.</div>';
+        loadBackupSettings();
     }
 }
 
@@ -2851,6 +2886,122 @@ function formatConfigKey(key) {
         model_version: 'Model Version'
     };
     return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function formatBackupTimestamp(isoString) {
+    if (!isoString) return 'Never';
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+    return date.toLocaleString();
+}
+
+function updateBackupStatus(message, isError = false) {
+    const statusEl = document.getElementById('backup-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.style.color = isError ? '#B91C1C' : '';
+}
+
+function updateAutoBackupStatus(message, isError = false) {
+    const statusEl = document.getElementById('auto-backup-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.style.color = isError ? '#B91C1C' : '';
+}
+
+function setAutoBackupLabel(enabled) {
+    const label = document.getElementById('auto-backup-label');
+    if (label) label.textContent = enabled ? 'Enabled' : 'Disabled';
+}
+
+function shouldRunAutoBackup(lastBackupAt) {
+    if (!lastBackupAt) return true;
+    const last = new Date(lastBackupAt);
+    if (Number.isNaN(last.getTime())) return true;
+    const now = new Date();
+    const diffMs = now.getTime() - last.getTime();
+    return diffMs >= 24 * 60 * 60 * 1000;
+}
+
+async function loadBackupSettings() {
+    const toggle = document.getElementById('auto-backup-toggle');
+    if (!toggle) return;
+
+    try {
+        const response = await fetch(BACKUP_SETTINGS_URL, { cache: 'no-store' });
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            updateAutoBackupStatus('Unable to load backup settings.', true);
+            return;
+        }
+
+        const settings = data.settings || {};
+        const enabled = settings.auto_backup_enabled === true;
+        toggle.checked = enabled;
+        setAutoBackupLabel(enabled);
+
+        const lastBackupAt = settings.last_backup_at || '';
+        const lastBackupFile = settings.last_backup_file || '';
+        if (lastBackupAt) {
+            updateAutoBackupStatus(`Last backup: ${formatBackupTimestamp(lastBackupAt)}${lastBackupFile ? ' (' + lastBackupFile + ')' : ''}`);
+        } else {
+            updateAutoBackupStatus('No backups yet.');
+        }
+
+        if (enabled && shouldRunAutoBackup(lastBackupAt)) {
+            await runDbBackup('auto');
+        }
+    } catch (error) {
+        console.error('Backup settings load error:', error);
+        updateAutoBackupStatus('Unable to load backup settings.', true);
+    }
+}
+
+async function toggleAutoBackup(enabled) {
+    setAutoBackupLabel(enabled);
+    updateAutoBackupStatus('Saving setting...');
+
+    try {
+        const response = await fetch(BACKUP_SETTINGS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auto_backup_enabled: enabled })
+        });
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            updateAutoBackupStatus('Unable to save auto backup setting.', true);
+            return;
+        }
+
+        updateAutoBackupStatus(enabled ? 'Auto backup enabled.' : 'Auto backup disabled.');
+    } catch (error) {
+        console.error('Auto backup toggle error:', error);
+        updateAutoBackupStatus('Unable to save auto backup setting.', true);
+    }
+}
+
+async function runDbBackup(trigger = 'manual') {
+    updateBackupStatus('Running backup...');
+
+    try {
+        const url = `${BACKUP_TRIGGER_URL}&trigger=${encodeURIComponent(trigger)}`;
+        const response = await fetch(url, { cache: 'no-store' });
+        const data = await response.json();
+
+        if (data.status !== 'success') {
+            updateBackupStatus(data.message || 'Backup failed.', true);
+            return;
+        }
+
+        const displayPath = data.backup_path || 'database/backups';
+        updateBackupStatus(`Backup saved: ${displayPath}`);
+        updateAutoBackupStatus(`Last backup: ${formatBackupTimestamp(data.last_backup_at)} (${data.backup_file})`);
+    } catch (error) {
+        console.error('Backup error:', error);
+        updateBackupStatus('Backup failed. See console for details.', true);
+    }
 }
 
 // Collect all changed configuration values
