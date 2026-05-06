@@ -2660,6 +2660,16 @@ const configMetadata = {
     'enable_audio_feedback': { icon: '🔊', type: 'boolean' }
 };
 
+const hiddenConfigKeys = new Set([
+    'card_detection_min_area_fraction',
+    'cnn_ensemble_early_exit_confidence',
+    'cnn_ensemble_early_exit_margin',
+    'cnn_ensemble_enabled',
+    'cnn_ensemble_margin_threshold',
+    'cnn_ensemble_runs',
+    'prefer_base_model'
+]);
+
 async function loadSystemConfig() {
     const container = document.getElementById('config-container');
     if (!container) return;
@@ -2678,7 +2688,7 @@ async function loadSystemConfig() {
         }
         
         // Filter out locked configs
-        const editableConfigs = data.config.filter(cfg => cfg.is_editable);
+        const editableConfigs = data.config.filter(cfg => cfg.is_editable && !hiddenConfigKeys.has(cfg.config_key));
         
         container.innerHTML = editableConfigs.map(cfg => {
             const meta = configMetadata[cfg.config_key] || { icon: '⚙️', type: 'number', min: 0, max: 100, step: 1 };
