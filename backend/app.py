@@ -84,7 +84,7 @@ SESSION_TIMEOUT_MINUTES = 30
 WEBCAM_FPS = 30
 ROI_BOX_COLOR = '#00FF00'
 ENABLE_AUDIO_FEEDBACK = True
-MODEL_VERSION = 'ORB-KNN-v2.0'
+MODEL_VERSION = 'ORB-KNN-v1.0'
 
 # --- OPTIONAL ORB FALLBACK (for unavoidable blur) ---
 ORB_MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models', 'waste_mobilenet.onnx')
@@ -98,7 +98,7 @@ ORB_INCREMENTAL_CONFIDENCE_THRESHOLD = 0.90
 ORB_FOCUS_ROI_SCALE = 0.80  # Secondary center crop to suppress background noise.
 HYBRID_MARGIN = 0.14  # Minimum confidence gap to break ORB vs fallback disagreements
 CNN_ENSEMBLE_ENABLED = True
-CNN_ENSEMBLE_RUNS = 3
+CNN_ENSEMBLE_RUNS = 50 
 CNN_ENSEMBLE_EARLY_EXIT_CONFIDENCE = 0.90
 CNN_ENSEMBLE_EARLY_EXIT_MARGIN = 0.18
 CNN_ENSEMBLE_MARGIN_THRESHOLD = 0.10
@@ -204,6 +204,11 @@ SYSTEM_CONFIG_DEFAULTS = [
     ('enable_audio_feedback', 'true', 'boolean', 'Whether Bin-Bin provides audio responses', 1),
     ('pdf_dpi', '300', 'integer', 'Resolution for generating printable Eco-Cards', 0),
 ]
+
+DEPRECATED_CONFIG_KEYS = {
+    'texture_edge_ratio_threshold',
+    'texture_laplacian_threshold',
+}
 
 app = Flask(__name__)
 CORS(app)
@@ -715,6 +720,13 @@ def ensure_system_config_defaults():
     """Seed missing config keys without overwriting existing admin-tuned values."""
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
+
+    if DEPRECATED_CONFIG_KEYS:
+        placeholders = ','.join(['%s'] * len(DEPRECATED_CONFIG_KEYS))
+        cursor.execute(
+            f"DELETE FROM TBL_SYSTEM_CONFIG WHERE config_key IN ({placeholders})",
+            tuple(DEPRECATED_CONFIG_KEYS),
+        )
 
     cursor.execute("SELECT config_key FROM TBL_SYSTEM_CONFIG")
     existing = {row['config_key'] for row in cursor.fetchall()}
@@ -1595,6 +1607,32 @@ def predict_waste_top3(image_bgr, top_k=3):
         }
     }
 
+def is_eco_card_present(image_bgr):
+    if image_bgr is None or image_bgr.size == 0:
+        return False
+        
+    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    s = hsv[:, :, 1]
+    v = hsv[:, :, 2]
+    
+    # Find the 85th percentile of brightness (this represents the card's paper background)
+    v_85 = np.percentile(v, 85)
+    
+    if v_85 < 70:
+        return False  # The entire frame is too dark, no card present
+        
+    # Create a mask for pixels that are "paper-like":
+    # - Brightness is close to the peak brightness of the image
+    # - Saturation is relatively low (< 110 out of 255) to filter out skin tones and room clutter
+    paper_mask = (v > max(70, v_85 - 60)) & (s < 110)
+    
+    paper_ratio = np.sum(paper_mask) / (image_bgr.shape[0] * image_bgr.shape[1])
+    
+    # INCREASE THIS THRESHOLD: Since the frontend already crops the image to the 50% ROI box,
+    # an actual card should take up a much larger portion of the sent image.
+    # Increased from 0.15 to 0.45 (45%) to prevent false positives from walls/shirts.
+    return bool(paper_ratio > 0.45)
+
 def predict_waste(image_bgr):
     """
     Enhanced ORB-KNN with blur detection, adaptive preprocessing, and multi-scale retry.
@@ -1784,9 +1822,16 @@ def classify():
         if img is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
+        # --- NEW: CHECK FOR CARD PRESENCE ---
+        if not is_eco_card_present(img):
+            return jsonify({
+                "status": "unknown", 
+                "reason": "no_card_detected",
+                "classifier": "pre_check"
+            })
+        # ------------------------------------
+        
         # Run both models, then arbitrate with base-preferred logic.
-        # This prevents one-shot incremental classes from overpowering base predictions
-        # when the scene is noisy or ambiguous.
         incremental_result = predict_waste_incremental_orb(img)
         base_result = predict_waste_orb_fallback(img)
 
@@ -1867,7 +1912,6 @@ def classify():
     except Exception as e:
         print(f"❌ Classification error: {e}")
         return jsonify({"status": "error", "message": str(e)})
-
 
 @app.route('/classify/top3', methods=['POST'])
 def classify_top3():
@@ -3020,18 +3064,12 @@ def export_proficiency_reports_pdf():
         print(f"❌ Proficiency PDF export error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 @app.route('/admin/one-shot-learn', methods=['POST'])
 def one_shot_learning():
     """
     One-Shot Learning - Allows admin to register a new Eco-Card
     or update an existing card by scanning it once, without extensive retraining
-    (As defined in Technical Terms)
-    
-    DUAL IMAGE STORAGE SYSTEM:
-    - PNG saved to assets_png/{category}/ for high-quality training/retraining
-    - WebP saved to assets/{category}/ for fast frontend display
-    - Training uses PNG for better feature extraction (more keypoints/details)
-    - System remains plug-and-play and portable
     """
     try:
         if 'image' not in request.files:
@@ -3062,8 +3100,15 @@ def one_shot_learning():
         if img is None or img_saved is None:
             return jsonify({"status": "error", "message": "Invalid image"})
         
+        # --- NEW: CHECK FOR CARD PRESENCE ---
+        if not is_eco_card_present(img):
+            return jsonify({
+                "status": "error", 
+                "message": "No Eco-Card detected in the frame. Please ensure the card is clearly visible."
+            })
+        # ------------------------------------
+        
         # Extract ORB features from a bounded-size image.
-        # Uploaded admin photos can be very large; downscale for predictable speed.
         img_for_orb = downscale_max_dim(img, 1024)
         preprocessed = preprocess_image(img_for_orb)
         kp, des = orb.detectAndCompute(preprocessed, None)
@@ -3293,7 +3338,6 @@ def one_shot_learning():
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)})
-
 
 @app.route('/admin/orb-training-status', methods=['GET'])
 def orb_training_status():

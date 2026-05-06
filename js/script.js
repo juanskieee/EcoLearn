@@ -2154,8 +2154,11 @@ function showErrorFeedback(data) {
     // Determine error message
     let message = '';
     
-    if (reason === 'insufficient_features') {
+   if (reason === 'insufficient_features') {
         message = "Hindi ko makita nang malinaw ang card. Pakihold ito sa loob ng box.";
+    } else if (reason === 'no_card_detected') {
+        // --- NEW CASE ---
+        message = "Walang eco-card na nakita! Pakitapat nang maayos ang card sa camera.";
     } else if (reason === 'already_scanned') {
         message = "Nascan mo na ang card na iyan! Pumili ng ibang card.";
     } else if (reason === 'not_in_subset') {
@@ -2496,5 +2499,4 @@ fetch(`${API_URL}/health`)
     });
 loadAudioViaFetch();
 loadAudioSettings();
-loadSessionFromStorage();   
-
+// restoreSessionIfExists() is already called inside DOMContentLoaded — removed duplicate stale call

@@ -2667,7 +2667,9 @@ const hiddenConfigKeys = new Set([
     'cnn_ensemble_enabled',
     'cnn_ensemble_margin_threshold',
     'cnn_ensemble_runs',
-    'prefer_base_model'
+    'prefer_base_model',
+    'texture_edge_ratio_threshold',
+    'texture_laplacian_threshold'
 ]);
 
 const BACKUP_SETTINGS_URL = 'backup_settings.php';

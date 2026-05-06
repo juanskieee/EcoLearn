@@ -16,7 +16,7 @@ WARNING:tensorflow:From C:\xampp\htdocs\.venv\Lib\site-packages\keras\src\backen
 [info] sampled 48 files for card 'Trash'
 [info] sampled_out=11 for card 'Trash'
 ========================================================================
-EcoLearn ORB Trainer  —  MobileNetV2 (ImageNet)
+EcoLearn ORB Trainer  ï¿½  MobileNetV2 (ImageNet)
 Active cards      : 2
 Train samples     : 42
 Validation samples: 7
