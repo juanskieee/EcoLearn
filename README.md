@@ -3,11 +3,13 @@
 > A web-based waste classification and environmental education platform that uses ORB-KNN computer vision to identify waste in real time, paired with gamified feedback designed for preschool learners.
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
-![TensorFlow](https://img.shields.io/badge/TensorFlow/Keras-FF6F00?style=flat&logo=tensorflow&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat&logo=opencv&logoColor=white)
+![ORB-KNN](https://img.shields.io/badge/ORB--KNN-FF6F00?style=flat)
 ![PHP](https://img.shields.io/badge/PHP-777BB4?style=flat&logo=php&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat&logo=mysql&logoColor=white)
-![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=flat&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=flat&logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black)
 
 ---
 
@@ -34,7 +36,7 @@ The system also includes a full administrative dashboard for managing users, edu
 
 | Layer | Technology |
 |---|---|
-| ML Model | ORB-KNN (converted to Keras/TensorFlow) |
+| ML Model | ORB-KNN via OpenCV |
 | Backend | PHP (server-side scripting) |
 | Database | MySQL |
 | Frontend | HTML5, CSS3, JavaScript |
@@ -42,7 +44,7 @@ The system also includes a full administrative dashboard for managing users, edu
 
 ### Architecture
 
-- `converted_keras/` — Pre-trained ORB-KNN model converted to Keras format for web integration.
+- `converted_keras/` — ORB-KNN model files and OpenCV classifier used for waste detection.
 - `backend/` — Server-side processing logic and API endpoints.
 - `admin/` — Administrative control panel including authentication (`auth.php`), session checks (`check_session.php`), and database utilities (`backup_db.php`).
 - `css/` — Stylesheet assets.
@@ -55,7 +57,7 @@ The system also includes a full administrative dashboard for managing users, edu
 
 ```
 /
-├── converted_keras/       # ORB-KNN model converted to Keras/TensorFlow
+├── converted_keras/       # ORB-KNN model files and OpenCV classifier
 ├── admin/                 # Admin panel (auth, session, backup utilities)
 ├── backend/               # Server-side PHP logic and API endpoints
 ├── css/                   # Stylesheets
